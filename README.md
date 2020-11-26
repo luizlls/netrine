@@ -6,7 +6,7 @@
 
 ## STATUS
 
-- [ ] Lexer
+- [X] Lexer
 - [ ] Parser
 - [ ] Type Checker?
 - [ ] IR
