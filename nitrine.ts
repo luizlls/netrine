@@ -3,8 +3,8 @@ import { parse } from './src/parser'
 
 
 const source = `
-hello() =
-  print "Hello, World"
+hello(name) =
+  print "Hello, {name}!"
 
 
 fizzbuzz() =

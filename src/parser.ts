@@ -79,9 +79,10 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
       return apply ? parseApply(parser, term) : term
     }
     case 'upper': return parseUpper(parser)
-    case 'number': return parseNumber(parser)
-    case 'string': return parseTemplate(parser)
-    case 'lbrace': return parseRecord(parser)
+    case 'number':  return parseNumber(parser)
+    case 'string':  return parseTemplate(parser)
+    case 'fragment': return parseTemplate(parser)
+    case 'lbrace':   return parseRecord(parser)
     case 'lbracket': return parseSequence(parser)
     case 'lparen': {
       const term = parseParens(parser)
@@ -156,7 +157,41 @@ const parseNumber = (parser: Parser) => {
 }
 
 const parseTemplate = (parser: Parser) => {
-  return parseString(parser, 'string')
+  const start = parser.token.span
+
+  const parts: Expr[] = []
+
+  loop:
+  while (!atEnd(parser)) {
+    switch (parser.token.kind) {
+      case 'string': {
+        parts.push(parseString(parser, 'string'))
+        break loop
+      }
+      case 'fragment': {
+        parts.push(parseString(parser, 'fragment'))
+      }
+        break
+      case 'lbrace': {
+        eat(parser, 'lbrace')
+        parts.push(parseExpr(parser))
+        eat(parser, 'rbrace')
+      }
+        break
+      default:
+        break loop
+    }
+  }
+
+  const elements = parts.filter(part => {
+    if (part.kind === 'String') {
+      return (part.value as string).length > 0
+    } else {
+      return true
+    }
+  })
+
+  return { kind: 'Template', elements, span: complete(parser, start) } as AST.Template
 }
 
 const parseString = (parser: Parser, kind: Kind) => {

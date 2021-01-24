@@ -7,14 +7,21 @@ interface Lexer {
   line: number
   prev: number
   curr: number
+  mode: Mode,
   tokens: Token[]
 }
+
+type Mode =
+  'regular'
+| 'string'
+| 'template'
 
 const lexer = (source: string) => ({
   source,
   line: 1,
   curr: 0,
   prev: 0,
+  mode: 'regular',
   tokens: [],
 }) as Lexer
 
@@ -104,20 +111,6 @@ const number = (lexer: Lexer) => {
   return token(lexer, 'number', slice(lexer))
 }
 
-const string = (lexer: Lexer) => {
-  bump(lexer)
-  while (current(lexer) !== '"') {
-    bump(lexer)
-
-    if (current(lexer) === '\n' || atEnd(lexer)) {
-      return error(lexer, 'Unterminated string')
-    }
-  }
-  bump(lexer)
-
-  return token(lexer, 'string', slice(lexer))
-}
-
 const identifier = (lexer: Lexer) => {
   while (alphanumeric(current(lexer))) {
     bump(lexer)
@@ -159,6 +152,10 @@ const operator = (lexer: Lexer) => {
 const next = (lexer: Lexer) => {
   lexer.prev = lexer.curr
 
+  if (lexer.mode === 'string') {
+    return template(lexer)
+  }
+
   const char = current(lexer)
 
   switch (char) {
@@ -166,15 +163,21 @@ const next = (lexer: Lexer) => {
     case '\t':
     case '\r': return bump(lexer)
     case '\n': return line(lexer)
+    case ',':  return token(bump(lexer), 'comma')
+    case ';':  return token(bump(lexer), 'semi')
     case '(':  return token(bump(lexer), 'lparen')
     case ')':  return token(bump(lexer), 'rparen')
-    case '{':  return token(bump(lexer), 'lbrace')
-    case '}':  return token(bump(lexer), 'rbrace')
     case '[':  return token(bump(lexer), 'lbracket')
     case ']':  return token(bump(lexer), 'rbracket')
-    case ';':  return token(bump(lexer), 'semi')
-    case ',':  return token(bump(lexer), 'comma')
-    case '"':  return string(lexer)
+    case '{':  return token(bump(lexer), 'lbrace')
+    case '}':  {
+      if (lexer.mode === 'template') {
+          lexer.mode = 'string'
+      }
+      return token(bump(lexer), 'rbrace')
+    }
+    case '"':
+      return template(lexer)
     case '/':
       if (peek(lexer) === '/') {
         return comment(lexer)
@@ -193,6 +196,61 @@ const next = (lexer: Lexer) => {
         return error(lexer, `Invalid character '${slice(lexer)}'`)
       }
   }
+}
+
+const template = (lexer) => {
+  lexer.prev = lexer.curr
+
+  while (!atEnd(lexer)) {
+    switch (current(lexer)) {
+      case '"': {
+        if (lexer.mode === 'regular') {
+          bump(lexer)
+          lexer.mode = 'string'
+        } else {
+          bump(lexer)
+          lexer.mode = 'regular'
+          return token(lexer, 'string', slice(lexer))
+        }
+      }
+        break
+      case '{': {
+        if (peek(lexer) === '{') {
+          bump(lexer)
+          bump(lexer)
+        } else {
+          lexer.mode = 'template'
+          return token(lexer, 'fragment', slice(lexer))
+        }
+      }
+        break
+      case '\n':
+        return error(lexer, 'Unterminated string')
+      case '\\': {
+        bump(lexer)
+        switch (current(lexer)) {
+          case 'n': case 'r':
+          case 't': case 'v':
+          case 'a': case 'b':
+          case '"': case '0':
+          case '\\': {
+            bump(lexer)
+          }
+            break
+          case 'u':
+            return error(lexer, 'TODO Validate unicode escape')
+          case 'x':
+            return error(lexer, 'TODO Validate binary escape')
+          default:
+            return error(lexer, `Invalid escape character ${current(lexer)}`)
+        }
+      }
+        break
+      default:
+        bump(lexer)
+    }
+  }
+
 }
 
 export const tokenize = (source: string): Token[] => {
