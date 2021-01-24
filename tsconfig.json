@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+      "lib": ["esnext", "dom"],
+      "target": "es5",
+      "module": "commonjs",
+      "esModuleInterop": true,
+      "outDir": "dist",
+      "noImplicitAny": false,
+      "moduleResolution": "node",
+      "sourceMap": true
+  },
+  "include": [
+      "nitrine.ts",
+      "src/**/*.ts"
+  ],
+  "exclude": [
+      "node_modules",
+      "typings",
+      "node_modules/typescript",
+      "test"
+  ]
+}
