@@ -153,7 +153,7 @@ const next = (lexer: Lexer) => {
   lexer.prev = lexer.curr
 
   if (lexer.mode === 'string') {
-    return template(lexer)
+    return template(lexer, false)
   }
 
   const char = current(lexer)
@@ -177,7 +177,7 @@ const next = (lexer: Lexer) => {
       return token(bump(lexer), 'rbrace')
     }
     case '"':
-      return template(lexer)
+      return template(lexer, true)
     case '/':
       if (peek(lexer) === '/') {
         return comment(lexer)
@@ -198,7 +198,7 @@ const next = (lexer: Lexer) => {
   }
 }
 
-const template = (lexer) => {
+const template = (lexer: Lexer, start: boolean) => {
   lexer.prev = lexer.curr
 
   while (!atEnd(lexer)) {
@@ -208,9 +208,9 @@ const template = (lexer) => {
           bump(lexer)
           lexer.mode = 'string'
         } else {
-          bump(lexer)
           lexer.mode = 'regular'
-          return token(lexer, 'string', slice(lexer))
+          bump(lexer)
+          return token(lexer, 'string finish', slice(lexer))
         }
       }
         break
@@ -219,8 +219,9 @@ const template = (lexer) => {
           bump(lexer)
           bump(lexer)
         } else {
+          const kind = start ? 'string start' : 'string fragment'
           lexer.mode = 'template'
-          return token(lexer, 'fragment', slice(lexer))
+          return token(lexer, kind, slice(lexer))
         }
       }
         break

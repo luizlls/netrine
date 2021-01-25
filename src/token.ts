@@ -62,11 +62,11 @@ export const keywords: { [key: string]: Keywords } = {
 }
 
 export const operators: { [key: string]: Operators } = {
+  '->' : 'arrow',
   ':'  : 'colon',
   '.'  : 'dot',
   '='  : 'equals',
   ':=' : 'warlus',
-  '->' : 'arrow',
   '+'  : 'add',
   '-'  : 'sub',
   '*'  : 'mul',
@@ -93,7 +93,7 @@ export type Kind =
 | Operators
 | Others
 
-type Operators =
+export type Operators =
   'add'
 | 'sub'
 | 'mul'
@@ -125,7 +125,7 @@ type Operators =
 | 'warlus'
 
 
-type Keywords =
+export type Keywords =
   'if'
 | 'then'
 | 'else'
@@ -136,7 +136,7 @@ type Keywords =
 | 'not'
 
 
-type Others =
+export type Others =
   'lparen'
 | 'rparen'
 | 'lbrace'
@@ -147,6 +147,7 @@ type Others =
 | 'lower'
 | 'upper'
 | 'number'
-| 'string'
-| 'fragment'
+| 'string start'
+| 'string finish'
+| 'string fragment'
 | 'eof'

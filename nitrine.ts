@@ -1,5 +1,6 @@
 import { tokenize } from './src/lexer'
 import { parse } from './src/parser'
+import { compile } from './src/compiler'
 
 
 const source = `
@@ -23,8 +24,8 @@ fizzbuzz() =
   |> each print
 
 
-factorial(1) = 1
-factorial(n) = n * factorial (n - 1)
+factorial(n) =
+  if n <= 1 then 1 else n * factorial (n - 1)
 
 
 counter() =
@@ -36,8 +37,12 @@ counter() =
   ]
 `
 
+const source2 = `
+factorial(n) = if n <= 1 then 1 else n * factorial (n - 1)
+`
+
 try {
-  console.log(JSON.stringify(parse(tokenize(source)), null, 2))
+  console.log(compile(parse(tokenize(source2))))
 } catch (e) {
   console.error(e)
 }

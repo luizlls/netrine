@@ -1,3 +1,5 @@
+import { Operators } from "./token";
+
 export interface Span {
   lineno: number
   start:  number
@@ -32,17 +34,17 @@ interface Node {
 
 export interface Name extends Node {
   kind: 'Name'
-  name: string
+  value: string
 }
 
 export interface Operator extends Node {
   kind: 'Operator'
-  name: string
+  operator: Operators
 }
 
 export interface Fun extends Node {
   kind: 'Function'
-  params: Array<Expr>
+  params: Name[]
   value: Expr
 }
 
@@ -61,7 +63,7 @@ export interface Mut extends Node {
 export interface Apply extends Node {
   kind: 'Apply'
   fun: Expr
-  args: Array<Node>
+  args: Expr[]
 }
 
 export interface If extends Node {
@@ -73,12 +75,12 @@ export interface If extends Node {
 
 export interface Tuple extends Node {
   kind: 'Tuple'
-  items: Array<Expr>
+  items: Expr[]
 }
 
 export interface Sequence extends Node {
   kind: 'Sequence'
-  items: Array<Expr>
+  items: Expr[]
 }
 
 export interface Property {
@@ -88,7 +90,7 @@ export interface Property {
 
 export interface Record extends Node {
   kind: 'Record'
-  props: Array<Property>
+  props: Property[]
 }
 
 export interface Member extends Node {
@@ -100,15 +102,16 @@ export interface Member extends Node {
 export interface Literal<T> extends Node {
   kind: 'Float' | 'Integer' | 'String'
   value: T
+  raw: string
 }
 
 export interface Template extends Node {
   kind: 'Template'
-  elements: Array<Expr>
+  elements: Expr[]
 }
 
 export interface Variant extends Node {
   kind: 'Variant'
   name: Name
-  values?: Array<Expr>
+  values?: Expr[]
 }

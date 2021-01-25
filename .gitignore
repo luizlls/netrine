@@ -2,4 +2,5 @@
 /.idea
 /.vscode
 /dist
-*.txt
+output.txt
+output.js

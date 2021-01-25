@@ -4,19 +4,19 @@ import { Token, Kind, operatorInfo, defaultToken } from './token'
 
 export interface Parser {
   tokens: Token[]
-  token?: Token
-  prev? : Token
+  token: Token
+  prev : Token
   index: number
   nodes: AST.Expr[]
 }
 
-const parser = (tokens: Token[]) => ({
+const parser = (tokens: Token[]): Parser => ({
   tokens,
   token: defaultToken(),
   prev : defaultToken(),
   index: 0,
   nodes: [],
-}) as Parser
+})
 
 
 const next = (parser: Parser) => {
@@ -34,10 +34,10 @@ const next = (parser: Parser) => {
 const identifier = (parser: Parser) => {
   const { value: name, span } = eat(parser, 'lower')
 
-  return { kind: 'Name', name, span } as AST.Name
+  return { kind: 'Name', value: name, span } as AST.Name
 }
 
-const definition = (parser: Parser) => {
+const definition = (parser: Parser): AST.Let => {
   const start = parser.token.span
 
   const name = identifier(parser)
@@ -52,16 +52,16 @@ const definition = (parser: Parser) => {
       throw 'TODO allow top level expressions'
   }
 
-  return { kind: 'Let', name, value, span: complete(parser, start) } as AST.Let
+  return { kind: 'Let', name, value, span: complete(parser, start) }
 }
 
-const parseFun = (parser: Parser) => {
+const parseFun = (parser: Parser): AST.Fun => {
   const start  = parser.token.span
-  const params = blockOf(parser, 'lparen', 'rparen', parseExpr)
+  const params = blockOf(parser, 'lparen', 'rparen', identifier)
   eat(parser, 'equals')
   const value = parseExpr(parser)
 
-  return { kind: 'Function', params, value, span: complete(parser, start) } as AST.Fun
+  return { kind: 'Function', params, value, span: complete(parser, start) }
 }
 
 const parseExpr = (parser: Parser): Expr => {
@@ -79,10 +79,9 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
       return apply ? parseApply(parser, term) : term
     }
     case 'upper': return parseUpper(parser)
-    case 'number':  return parseNumber(parser)
-    case 'string':  return parseTemplate(parser)
-    case 'fragment': return parseTemplate(parser)
-    case 'lbrace':   return parseRecord(parser)
+    case 'number': return parseNumber(parser)
+    case 'string start': return parseTemplate(parser)
+    case 'lbrace': return parseRecord(parser)
     case 'lbracket': return parseSequence(parser)
     case 'lparen': {
       const term = parseParens(parser)
@@ -97,14 +96,16 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
   }
 }
 
-const parseUpper = (parser: Parser) => {
+const parseUpper = (parser: Parser): AST.Member | AST.Variant => {
   const { value: name, span } = eat(parser, 'upper')
-
+  if (name == null) {
+    return error(parser, 'Internal Compiler Error: identifier without value')
+  }
   if (matchLines(parser) && matches(parser, 'dot')) {
     eat(parser, 'dot')
-    const qualifier = { kind: 'Name', name, span }
+    const qualifier = { kind: 'Name', value: name, span } as AST.Name
     const property  = identifier(parser)
-    return { kind: 'Member', qualifier, property, span: complete(parser, span) } as AST.Member
+    return { kind: 'Member', qualifier, property, span: complete(parser, span) }
   }
 
   const values = parseArgs(parser)
@@ -112,7 +113,7 @@ const parseUpper = (parser: Parser) => {
   return { kind: 'Variant', values, span: complete(parser, span) } as AST.Variant
 }
 
-const parseArgs = (parser: Parser) => {
+const parseArgs = (parser: Parser): Expr[] => {
   const args: Expr[] = []
 
   loop:
@@ -121,8 +122,7 @@ const parseArgs = (parser: Parser) => {
       case 'lower':
       case 'upper':
       case 'number':
-      case 'string':
-      case 'fragment':
+      case 'string start':
       case 'lparen':
       case 'lbrace':
       case 'lbracket': {
@@ -137,7 +137,7 @@ const parseArgs = (parser: Parser) => {
   return args
 }
 
-const parseApply = (parser: Parser, callee: Expr) => {
+const parseApply = (parser: Parser, callee: Expr): AST.Apply | Expr => {
   const args = parseArgs(parser)
 
   if (args.length === 0) {
@@ -147,16 +147,19 @@ const parseApply = (parser: Parser, callee: Expr) => {
   }
 }
 
-const parseNumber = (parser: Parser) => {
-  const { value, span } = eat(parser, 'number')
-  if (value.includes('.')) {
-    return { kind: 'Float', value: parseFloat(value), span } as AST.Literal<number>
+const parseNumber = (parser: Parser): AST.Literal<number> => {
+  const { value: raw, span } = eat(parser, 'number')
+  if (raw == null) {
+    return error(parser, 'Internal Compiler Error: number without value')
+  }
+  if (raw.includes('.')) {
+    return { kind: 'Float', value: parseFloat(raw), raw, span }
   } else {
-    return { kind: 'Integer', value: parseInt(value), span } as AST.Literal<number>
+    return { kind: 'Integer', value: parseInt(raw), raw, span }
   }
 }
 
-const parseTemplate = (parser: Parser) => {
+const parseTemplate = (parser: Parser): AST.Template => {
   const start = parser.token.span
 
   const parts: Expr[] = []
@@ -164,20 +167,24 @@ const parseTemplate = (parser: Parser) => {
   loop:
   while (!atEnd(parser)) {
     switch (parser.token.kind) {
-      case 'string': {
-        parts.push(parseString(parser, 'string'))
+      case 'string finish': {
+        parts.push(parseString(parser, 'string finish'))
         break loop
       }
-      case 'fragment': {
-        parts.push(parseString(parser, 'fragment'))
-      }
+      case 'string start': {
+        parts.push(parseString(parser, 'string start'))
         break
+      }
+      case 'string fragment': {
+        parts.push(parseString(parser, 'string fragment'))
+        break
+      }
       case 'lbrace': {
         eat(parser, 'lbrace')
         parts.push(parseExpr(parser))
         eat(parser, 'rbrace')
-      }
         break
+      }
       default:
         break loop
     }
@@ -191,37 +198,53 @@ const parseTemplate = (parser: Parser) => {
     }
   })
 
-  return { kind: 'Template', elements, span: complete(parser, start) } as AST.Template
+  return { kind: 'Template', elements, span: complete(parser, start) }
 }
 
-const parseString = (parser: Parser, kind: Kind) => {
-  const { value, span } = eat(parser, kind)
-  return { kind: 'String', value, span } as AST.Literal<string>
+const parseString = (parser: Parser, kind: Kind): AST.Literal<string> => {
+  const { value: raw, span } = eat(parser, kind)
+  if (raw == null) {
+    return error(parser, 'Internal Compiler Error: string without value')
+  }
+  let value: string
+  switch (kind) {
+    case 'string start': {
+      value = raw.slice(1)
+      break
+    }
+    case 'string finish': {
+      value = raw?.slice(0, raw.length - 1)
+      break
+    }
+    default:
+      value = raw
+  }
+  return { kind: 'String', value, raw, span }
 }
 
-const parseParens = (parser: Parser) => {
+const parseParens = (parser: Parser): AST.Tuple | Expr => {
   const start = parser.token.span
   const items = blockOf(parser, 'lparen', 'rparen', parseExpr)
 
   if (items.length === 1) {
-    return items.pop()
+    return items[0]
   } else {
-    return { kind: 'Tuple', items, span: complete(parser, start) } as AST.Tuple
+    return { kind: 'Tuple', items, span: complete(parser, start) }
   }
 }
 
-const parseSequence = (parser: Parser) => {
+const parseSequence = (parser: Parser): AST.Sequence => {
   const start = parser.token.span
   const items = blockOf(parser, 'lbracket', 'rbracket', parseExpr)
 
-  return { kind: 'Sequence', items, span: complete(parser, start) } as AST.Sequence
+  return { kind: 'Sequence', items, span: complete(parser, start) }
 }
 
-const parseRecord = (parser: Parser) => {
+const parseRecord = (parser: Parser): AST.Record => {
   const start = parser.token.span
   const props = blockOf(parser, 'lbrace', 'rbrace', parseProperty)
 
-  return { kind: 'Record', props, span: complete(parser, start) } as AST.Record
+  return { kind: 'Record', props, span: complete(parser, start) }
 }
 
 const parseProperty = (parser: Parser): AST.Property => {
@@ -252,7 +275,7 @@ const parseUnary = (parser: Parser): Expr => {
 
   const operator = {
     kind: 'Operator',
-    name: parser.token.kind,
+    operator: parser.token.kind,
     span: parser.token.span
   } as AST.Operator
 
@@ -268,7 +291,7 @@ const parseUnary = (parser: Parser): Expr => {
   }
 }
 
-const parseBinary = (parser: Parser, minPrecedence: number) => {
+const parseBinary = (parser: Parser, minPrecedence: number): Expr => {
   let lhs = parseTerm(parser)
 
   while (!atEnd(parser)) {
@@ -290,7 +313,7 @@ const parseBinary = (parser: Parser, minPrecedence: number) => {
 
     const operator = {
       kind: 'Operator',
-      name: parser.token.kind,
+      operator: parser.token.kind,
       span: parser.token.span
     } as AST.Operator
 
@@ -314,15 +337,15 @@ const parseBinary = (parser: Parser, minPrecedence: number) => {
   return lhs
 }
 
-const parseFn = (parser: Parser) => {
+const parseFn = (parser: Parser): AST.Fun => {
   const start = parser.token.span
-  const params = blockOf(parser, 'fn', 'arrow', parseExpr)
+  const params = blockOf(parser, 'fn', 'arrow', identifier)
   const value = parseExpr(parser)
 
-  return { kind: 'Function', params, value, span: complete(parser, start) } as AST.Fun
+  return { kind: 'Function', params, value, span: complete(parser, start) }
 }
 
-const parseIf = (parser: Parser) => {
+const parseIf = (parser: Parser): AST.If => {
   const start = parser.token.span
   eat(parser, 'if')
   const test = parseExpr(parser)
@@ -331,14 +354,14 @@ const parseIf = (parser: Parser) => {
   eat(parser, 'else')
   const otherwise = parseExpr(parser)
 
-  return { kind: 'If', test, then, otherwise, span: complete(parser, start) } as AST.If
+  return { kind: 'If', test, then, otherwise, span: complete(parser, start) }
 }
 
 const blockOf = <T extends unknown>(
   parser: Parser,
   open: Kind,
   close: Kind,
-  fn: (pp: Parser) => T) =>
+  fn: (pp: Parser) => T): T[] =>
 {
   const result = Array<T>()
 
@@ -356,9 +379,9 @@ const blockOf = <T extends unknown>(
   return result
 }
 
-const complete = (parser: Parser, start: Span, end?: Span) => {
+const complete = (parser: Parser, start: Span, end?: Span): Span => {
   end = end ?? parser.prev.span
-  return { ...start, offset: end.offset } as Span
+  return { ...start, offset: end.offset }
 }
 
 const matchLines = (parser: Parser) => {
@@ -384,7 +407,7 @@ const eat = (parser: Parser, kind: Kind) => {
 }
 
 const atEnd = (parser: Parser) => {
-  return parser.index >= parser.tokens.length
+  return parser.token.kind === 'eof'
 }
 
 const bump = (parser: Parser) => {
@@ -403,7 +426,7 @@ const error = (parser: Parser, msg?: string) => {
 
 export const parse = (tokens: Token[]): AST.Module => {
   const pp = parser(tokens)
-  bump(pp) // initialize token
+  bump(pp) // initialize
 
   while (!atEnd(pp)) { next(pp) }
 
