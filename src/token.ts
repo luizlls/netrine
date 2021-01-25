@@ -46,7 +46,7 @@ export const operatorInfo: { [key: string]: OperatorInfo } = {
   'pipe':   { associativity: 'left',  precedence: 3, },
   'dot':    { associativity: 'left',  precedence: 2, },
   'equals': { associativity: 'right', precedence: 1, },
-  'warlus': { associativity: 'right', precedence: 1, },
+  'walrus': { associativity: 'right', precedence: 1, },
   'semi':   { associativity: 'right', precedence: 0, },
 }
 
@@ -66,7 +66,7 @@ export const operators: { [key: string]: Operators } = {
   ':'  : 'colon',
   '.'  : 'dot',
   '='  : 'equals',
-  ':=' : 'warlus',
+  ':=' : 'walrus',
   '+'  : 'add',
   '-'  : 'sub',
   '*'  : 'mul',
@@ -122,7 +122,7 @@ export type Operators =
 | 'colon'
 | 'arrow'
 | 'equals'
-| 'warlus'
+| 'walrus'
 
 
 export type Keywords =
@@ -150,4 +150,5 @@ export type Others =
 | 'string start'
 | 'string finish'
 | 'string fragment'
+| 'string'
 | 'eof'

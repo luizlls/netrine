@@ -3,9 +3,9 @@ import * as AST from './syntax'
 const INDENT_SPACES = 4
 
 interface Compiler {
-  buffer: string
-  indent: number
-  newline: boolean
+  buffer: string // will be used for formatting
+  indent: number // will be used for formatting
+  newline: boolean // will be used for formatting
   module: AST.Module
 }
 
@@ -31,12 +31,14 @@ const compileExpr = (compiler: Compiler, expr: AST.Expr): string => {
       return compileMut(compiler, expr)
     case 'Apply':
       return compileApply(compiler, expr)
+    case 'Block':
+      return compileBlock(compiler, expr)
     case 'If':
       return compileIf(compiler, expr)
     case 'Tuple':
       return compileTuple(compiler, expr)
-    case 'Sequence':
-      return compileSequence(compiler, expr)
+    case 'List':
+      return compileList(compiler, expr)
     case 'Record':
       return compileRecord(compiler, expr)
     case 'Member':
@@ -58,7 +60,16 @@ const compileFun = (compiler: Compiler, fun: AST.Fun): string => {
 }
 
 const compileBody = (compiler: Compiler, body: AST.Expr): string => {
-  return `return ${compileExpr(compiler, body)};`
+  let value = compileExpr(compiler, body);
+
+  switch (body.kind) {
+    case 'Let': break
+    case 'Mut': break
+    default:
+      value = `return ${value};`
+  }
+
+  return value
 }
 
 const compileName = (compiler: Compiler, name: AST.Name): string => {
@@ -79,8 +90,15 @@ const compileMut = (compiler: Compiler, mut: AST.Mut): string => {
 
 const compileApply = (compiler: Compiler, app: AST.Apply): string => {
   const args = app.args.map(arg => `(${compileExpr(compiler, arg)})`)
-
   return `${compileExpr(compiler, app.fun)}${args.join('')}`
+}
+
+const compileBlock = (compiler: Compiler, block: AST.Block): string => {
+  const items = block.items.map(item => `${compileExpr(compiler, item)};`)
+  const last  = items[items.length - 1]
+  items[items.length - 1] = `return ${last}`
+
+  return `(function() {${items.join('\n')}})()`
 }
 
 const compileIf = (compiler: Compiler, cond: AST.If): string => {
@@ -97,7 +115,7 @@ const compileVariant = (compiler: Compiler, variant: AST.Variant): string => {
   }
 }
 
-const compileSequence = (compiler: Compiler, seq: AST.Sequence): string => {
+const compileList = (compiler: Compiler, seq: AST.List): string => {
   return `[${seq.items.map(item => compileExpr(compiler, item)).join(', ')}]`
 }
 
@@ -106,7 +124,7 @@ const compileTuple = (compiler: Compiler, tuple: AST.Tuple): string => {
 }
 
 const compileRecord = (compiler: Compiler, record: AST.Record): string => {
-  const props = record.props.map(prop => `${prop.name}: ${prop.value ? compileExpr(compiler, prop.value) : prop.name}`)
+  const props = record.props.map(prop => `${prop.name.value}: ${prop.value ? compileExpr(compiler, prop.value) : prop.name.value}`)
   return `{ ${props.join(', ')} }`
 }
 
@@ -130,7 +148,7 @@ const compileNumber = (compiler: Compiler, literal: AST.Literal<number>): string
 }
 
 const compileString = (compiler: Compiler, literal: AST.Literal<string>): string => {
-  return literal.value
+  return `'${literal.value}'`
 }
 
 const emit = (compiler: Compiler, str: string) => {
@@ -161,10 +179,7 @@ const error = (compiler: Compiler, expr: AST.Expr, msg?: string) => {
 export const compile = (module: AST.Module): string => {
   const cc = compiler(module)
 
-  const buffer = []
-  for (const node of module.nodes) {
-    buffer.push(compileExpr(cc, node))
-  }
+  const nodes = module.nodes.map(node => compileExpr(cc, node))
 
-  return buffer.join('\n')
+  return nodes.join('\n')
 }

@@ -18,9 +18,10 @@ export type Expr =
 | Let
 | Mut
 | Apply
+| Block
 | If
 | Tuple
-| Sequence
+| List
 | Record
 | Member
 | Template
@@ -66,6 +67,11 @@ export interface Apply extends Node {
   args: Expr[]
 }
 
+export interface Block extends Node {
+  kind: 'Block'
+  items: Expr[]
+}
+
 export interface If extends Node {
   kind: 'If'
   test: Expr
@@ -78,8 +84,8 @@ export interface Tuple extends Node {
   items: Expr[]
 }
 
-export interface Sequence extends Node {
-  kind: 'Sequence'
+export interface List extends Node {
+  kind: 'List'
   items: Expr[]
 }
 

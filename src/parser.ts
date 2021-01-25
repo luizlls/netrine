@@ -66,9 +66,12 @@ const parseFun = (parser: Parser): AST.Fun => {
 
 const parseExpr = (parser: Parser): Expr => {
   switch (parser.token.kind) {
-    case 'fn': return parseFn(parser)
-    case 'if': return parseIf(parser)
-    default: return parseBinary(parser, 0)
+    case 'fn':
+      return parseFn(parser)
+    case 'if':
+      return parseIf(parser)
+    default:
+      return parseBinary(parser, 0)
   }
 }
 
@@ -78,11 +81,18 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
       const term = identifier(parser)
       return apply ? parseApply(parser, term) : term
     }
-    case 'upper': return parseUpper(parser)
-    case 'number': return parseNumber(parser)
-    case 'string start': return parseTemplate(parser)
-    case 'lbrace': return parseRecord(parser)
-    case 'lbracket': return parseSequence(parser)
+    case 'upper':
+      return parseUpper(parser)
+    case 'number':
+      return parseNumber(parser)
+    case 'string start':
+      return parseTemplate(parser)
+    case 'string':
+      return parseString(parser, 'string')
+    case 'lbracket':
+      return parseList(parser)
+    case 'lbrace':
+      return parseRecord(parser)
     case 'lparen': {
       const term = parseParens(parser)
       return apply ? parseApply(parser, term) : term
@@ -122,6 +132,7 @@ const parseArgs = (parser: Parser): Expr[] => {
       case 'lower':
       case 'upper':
       case 'number':
+      case 'string':
       case 'string start':
       case 'lparen':
       case 'lbrace':
@@ -208,6 +219,10 @@ const parseString = (parser: Parser, kind: Kind): AST.Literal<string> => {
   }
   let value: string
   switch (kind) {
+    case 'string': {
+      value = raw?.slice(1, raw.length - 1)
+      break
+    }
     case 'string start': {
       value = raw.slice(1)
       break
@@ -233,11 +248,11 @@ const parseParens = (parser: Parser): AST.Tuple | Expr => {
   }
 }
 
-const parseSequence = (parser: Parser): AST.Sequence => {
+const parseList = (parser: Parser): AST.List => {
   const start = parser.token.span
   const items = blockOf(parser, 'lbracket', 'rbracket', parseExpr)
 
-  return { kind: 'Sequence', items, span: complete(parser, start) }
+  return { kind: 'List', items, span: complete(parser, start) }
 }
 
 const parseRecord = (parser: Parser): AST.Record => {

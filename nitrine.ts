@@ -1,5 +1,6 @@
 import { tokenize } from './src/lexer'
 import { parse } from './src/parser'
+import { desugar } from './src/desugar'
 import { compile } from './src/compiler'
 
 
@@ -37,12 +38,9 @@ counter() =
   ]
 `
 
-const source2 = `
-factorial(n) = if n <= 1 then 1 else n * factorial (n - 1)
-`
 
 try {
-  console.log(compile(parse(tokenize(source2))))
+  console.log(compile(desugar(parse(tokenize(source)))))
 } catch (e) {
   console.error(e)
 }

@@ -210,7 +210,8 @@ const template = (lexer: Lexer, start: boolean) => {
         } else {
           lexer.mode = 'regular'
           bump(lexer)
-          return token(lexer, 'string finish', slice(lexer))
+          const kind = start ? 'string' : 'string finish'
+          return token(lexer, kind, slice(lexer))
         }
       }
         break
