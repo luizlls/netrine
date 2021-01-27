@@ -7,10 +7,10 @@
 ## STATUS
 
 - [X] Lexer
-- [ ] Parser
+- [X] Parser
+- [ ] JS Transpiler
 - [ ] Type Checker?
 - [ ] IR
-- [ ] JS Transpiler
 - [ ] WASM Compiler?
 
 

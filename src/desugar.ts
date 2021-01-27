@@ -22,6 +22,8 @@ const desugarExpr = (desugarer: Desugarer, expr: AST.Expr): AST.Expr => {
       return desugarBlock(desugarer, expr)
     case 'If':
       return desugarIf(desugarer, expr)
+    case 'Group':
+      return desugarGroup(desugarer, expr)
     case 'Tuple':
       return desugarTuple(desugarer, expr)
     case 'List':
@@ -142,6 +144,11 @@ const desugarIf = (dd: Desugarer, cond: AST.If): AST.If => {
   return cond
 }
 
+const desugarGroup = (dd: Desugarer, group: AST.Group): AST.Group => {
+  group.inner =  desugarExpr(dd, group.inner)
+  return group
+}
+
 const desugarTuple = (dd: Desugarer, tuple: AST.Tuple): AST.Tuple => {
   tuple.items = tuple.items.map(item => desugarExpr(dd, item))
   return tuple
@@ -163,7 +170,7 @@ const desugarRecord = (dd: Desugarer, record: AST.Record): AST.Record => {
 }
 
 const desugarMember = (dd: Desugarer, member: AST.Member): AST.Member => {
-  member.qualifier = desugarExpr(dd, member.qualifier)
+  member.main = desugarExpr(dd, member.main)
   return member
 }
 

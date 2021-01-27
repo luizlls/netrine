@@ -38,9 +38,14 @@ counter() =
   ]
 `
 
+const source2 = `
+main =
+  print (if True and not False then { a = 1 } else { a = 2 }).a
+`
+
 
 try {
-  console.log(compile(desugar(parse(tokenize(source)))))
+  console.log(compile(desugar(parse(tokenize(source2)))))
 } catch (e) {
   console.error(e)
 }

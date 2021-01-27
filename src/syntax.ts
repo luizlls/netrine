@@ -20,6 +20,7 @@ export type Expr =
 | Apply
 | Block
 | If
+| Group
 | Tuple
 | List
 | Record
@@ -79,6 +80,11 @@ export interface If extends Node {
   otherwise: Expr
 }
 
+export interface Group extends Node {
+  kind: 'Group'
+  inner: Expr
+}
+
 export interface Tuple extends Node {
   kind: 'Tuple'
   items: Expr[]
@@ -101,7 +107,7 @@ export interface Record extends Node {
 
 export interface Member extends Node {
   kind: 'Member'
-  qualifier: Expr
+  main: Expr
   property: Name
 }
 

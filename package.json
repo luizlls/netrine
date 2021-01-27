@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "start": "tsc && node dist/nitrine.js"
+    "start": "tsc && node dist/netrine.js"
   },
   "author": "Luiz Lopes (luizlopedev@gmail.com)",
   "license": "MIT",

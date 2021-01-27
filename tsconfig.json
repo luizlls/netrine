@@ -10,7 +10,7 @@
       "sourceMap": true
   },
   "include": [
-      "nitrine.ts",
+      "netrine.ts",
       "src/**/*.ts"
   ],
   "exclude": [

@@ -35,6 +35,8 @@ const compileExpr = (compiler: Compiler, expr: AST.Expr): string => {
       return compileBlock(compiler, expr)
     case 'If':
       return compileIf(compiler, expr)
+    case 'Group':
+      return compileGroup(compiler, expr)
     case 'Tuple':
       return compileTuple(compiler, expr)
     case 'List':
@@ -115,6 +117,10 @@ const compileVariant = (compiler: Compiler, variant: AST.Variant): string => {
   }
 }
 
+const compileGroup = (compiler: Compiler, group: AST.Group): string => {
+  return `(${compileExpr(compiler, group.inner)})`
+}
+
 const compileList = (compiler: Compiler, seq: AST.List): string => {
   return `[${seq.items.map(item => compileExpr(compiler, item)).join(', ')}]`
 }
@@ -129,7 +135,7 @@ const compileRecord = (compiler: Compiler, record: AST.Record): string => {
 }
 
 const compileMember = (compiler: Compiler, member: AST.Member): string => {
-  return `${compileExpr(compiler, member.qualifier)}.${member.property}`
+  return `${compileExpr(compiler, member.main)}.${member.property.value}`
 }
 
 const compileTemplate = (compiler: Compiler, template: AST.Template): string => {
