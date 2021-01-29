@@ -52,13 +52,13 @@ export interface Fun extends Node {
 
 export interface Let extends Node {
   kind: 'Let'
-  name: Name
+  pattern: Expr
   value: Expr
 }
 
 export interface Mut extends Node {
   kind: 'Mut'
-  name: Name
+  pattern: Expr
   value: Expr
 }
 

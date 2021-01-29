@@ -1,6 +1,6 @@
 import { tokenize } from './src/lexer'
 import { parse } from './src/parser'
-import { desugar } from './src/desugar'
+import { analyze } from './src/analysis'
 import { compile } from './src/compiler'
 
 
@@ -39,13 +39,14 @@ counter() =
 `
 
 const source2 = `
-main =
-  print (if True and not False then { a = 1 } else { a = 2 }).a
+prod = fold (*) 1
+
+total = reduce prod (range 1 10)
 `
 
 
 try {
-  console.log(compile(desugar(parse(tokenize(source2)))))
+  console.log(compile(analyze(parse(tokenize(source2)))))
 } catch (e) {
   console.error(e)
 }

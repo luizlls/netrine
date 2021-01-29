@@ -52,7 +52,7 @@ const definition = (parser: Parser): AST.Let => {
       throw 'TODO allow top level expressions'
   }
 
-  return { kind: 'Let', name, value, span: complete(parser, start) }
+  return { kind: 'Let', pattern: name, value, span: complete(parser, start) }
 }
 
 const parseFun = (parser: Parser): AST.Fun => {
@@ -102,7 +102,7 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
       }
   }
 
-  value = completeDot(parser, value)
+  value = completeTerm(parser, value)
 
   if (apply) {
     return parseApply(parser, value)
@@ -111,10 +111,24 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
   }
 }
 
-const completeDot = (parser: Parser, term: Expr): Expr => {
-  if (matchLines(parser) && maybeEat(parser, 'dot')) {
-    const property = identifier(parser)
-    return { kind: 'Member', main: term, property, span: complete(parser, term.span) }
+const completeTerm = (parser: Parser, term: Expr): Expr => {
+  if (!matchLines(parser)) {
+    return term
+  }
+
+  switch (parser.token.kind) {
+    case 'dot': {
+      bump(parser)
+      const property = identifier(parser)
+      return { kind: 'Member', main: term, property, span: complete(parser, term.span) }
+    }
+    case 'equals':
+    case 'walrus': {
+      const kind = parser.token.kind === 'equals' ? 'Let' : 'Mut'
+      bump(parser)
+      const value = parseExpr(parser)
+      return { kind: kind, pattern: term, value: value, span: complete(parser, term.span) }
+    }
   }
 
   return term
@@ -305,6 +319,11 @@ const parseUnary = (parser: Parser): Expr => {
 
   const operator = { kind: 'Operator', operator: kind, span } as AST.Operator
 
+  if (parser.prev.kind === 'lparen' && peek(parser).kind === 'rparen') {
+    bump(parser)
+    return operator
+  }
+
   bump(parser)
 
   if (matchLines(parser)) {
@@ -441,6 +460,10 @@ const bump = (parser: Parser) => {
 
 const matches = (parser: Parser, kind: Kind) => {
   return parser.token.kind === kind
+}
+
+const peek = (parser: Parser) => {
+  return parser.tokens[parser.index] ?? defaultToken()
 }
 
 const error = (parser: Parser, msg?: string) => {

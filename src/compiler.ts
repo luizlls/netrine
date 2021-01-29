@@ -79,15 +79,21 @@ const compileName = (compiler: Compiler, name: AST.Name): string => {
 }
 
 const compileOperator = (compiler: Compiler, app: AST.Operator): string => {
-  return `core.${app.operator}`
+  return app.operator
 }
 
-const compileLet = (compiler: Compiler, le_: AST.Let): string => {
-  return `var ${le_.name.value} = ${compileExpr(compiler, le_.value)};`
+const compileLet = (compiler: Compiler, decl: AST.Let): string => {
+  if (decl.pattern.kind !== 'Name') {
+    return error(compiler, decl, `'${decl.pattern.kind}' destructuring is not supported for now`)
+  }
+  return `var ${decl.pattern.value} = ${compileExpr(compiler, decl.value)};`
 }
 
-const compileMut = (compiler: Compiler, mut: AST.Mut): string => {
-  return `var ${mut.name.value} = ${compileExpr(compiler, mut.value)};`
+const compileMut = (compiler: Compiler, decl: AST.Mut): string => {
+  if (decl.pattern.kind !== 'Name') {
+    return error(compiler, decl, 'Mutable destructuring is not supported')
+  }
+  return `var ${decl.pattern.value} = ${compileExpr(compiler, decl.value)};`
 }
 
 const compileApply = (compiler: Compiler, app: AST.Apply): string => {
@@ -105,7 +111,7 @@ const compileBlock = (compiler: Compiler, block: AST.Block): string => {
 
 const compileIf = (compiler: Compiler, cond: AST.If): string => {
   const { test, then, otherwise } = cond
-  return `(${compileExpr(compiler, test)}) ? (${compileExpr(compiler, then)}) : (${compileExpr(compiler, otherwise)})`
+  return `(${compileExpr(compiler, test)} ? ${compileExpr(compiler, then)} : ${compileExpr(compiler, otherwise)})`
 }
 
 const compileVariant = (compiler: Compiler, variant: AST.Variant): string => {
@@ -118,7 +124,7 @@ const compileVariant = (compiler: Compiler, variant: AST.Variant): string => {
 }
 
 const compileGroup = (compiler: Compiler, group: AST.Group): string => {
-  return `(${compileExpr(compiler, group.inner)})`
+  return `${compileExpr(compiler, group.inner)}`
 }
 
 const compileList = (compiler: Compiler, seq: AST.List): string => {
