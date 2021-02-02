@@ -30,9 +30,8 @@ const next = (parser: Parser): Expr => {
 }
 
 const identifier = (parser: Parser) => {
-  const { value: name, span } = eat(parser, 'lower')
-
-  return { kind: 'Name', value: name, span } as AST.Name
+  const { value, span } = eat(parser, 'lower')
+  return AST.name(value as string, span)
 }
 
 const definition = (parser: Parser): AST.Let => {
@@ -52,7 +51,7 @@ const definition = (parser: Parser): AST.Let => {
       throw 'TODO allow top level expressions'
   }
 
-  return { kind: 'Let', pattern: name, value, span: complete(parser, start) }
+  return AST.def(name, value, span(parser, start))
 }
 
 const parseFun = (parser: Parser): AST.Fun => {
@@ -61,13 +60,15 @@ const parseFun = (parser: Parser): AST.Fun => {
   eat(parser, 'equals')
   const value = parseExpr(parser)
 
-  return { kind: 'Function', params, value, span: complete(parser, start) }
+  return AST.fn(params, value, span(parser, start))
 }
 
 const parseExpr = (parser: Parser): Expr => {
   switch (parser.token.kind) {
     case 'fn':
       return parseFn(parser)
+    case 'do':
+      return parseDo(parser)
     case 'if':
       return parseIf(parser)
     default:
@@ -102,7 +103,14 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
       }
   }
 
-  value = completeTerm(parser, value)
+  switch (parser.token.kind) {
+    case 'equals':
+      value = parseLet(parser, value); break
+    case 'walrus':
+      value = parseMut(parser, value); break
+    case 'dot':
+      value = parseDot(parser, value); break
+  }
 
   if (apply) {
     return parseApply(parser, value)
@@ -111,44 +119,37 @@ const parseTerm = (parser: Parser, apply = true): Expr => {
   }
 }
 
-const completeTerm = (parser: Parser, term: Expr): Expr => {
-  if (!matchLines(parser)) {
-    return term
-  }
+const parseLet = (parser: Parser, term: Expr): Expr => {
+  bump(parser)
+  return AST.def(term, parseExpr(parser), span(parser, term.span))
+}
 
-  switch (parser.token.kind) {
-    case 'dot': {
-      bump(parser)
-      const property = identifier(parser)
-      return { kind: 'Member', main: term, property, span: complete(parser, term.span) }
-    }
-    case 'equals':
-    case 'walrus': {
-      const kind = parser.token.kind === 'equals' ? 'Let' : 'Mut'
-      bump(parser)
-      const value = parseExpr(parser)
-      return { kind: kind, pattern: term, value: value, span: complete(parser, term.span) }
-    }
-  }
+const parseMut = (parser: Parser, term: Expr): Expr => {
+  bump(parser)
+  return AST.mut(term, parseExpr(parser), span(parser, term.span))
+}
 
+const parseDot = (parser: Parser, term: Expr): Expr => {
+  while (maybeEat(parser, 'dot')) {
+    term = AST.member(term, identifier(parser), span(parser, term.span))
+  }
   return term
 }
 
-const parseUpper = (parser: Parser): AST.Member | AST.Variant => {
-  const { value, span } = eat(parser, 'upper')
+const parseUpper = (parser: Parser): Expr => {
+  const { value, span: start } = eat(parser, 'upper')
+
   if (value == null) {
     return error(parser, 'Internal Compiler Error: identifier without value')
   }
 
-  const name = { kind: 'Name', value, span } as AST.Name
+  const name = AST.name(value, start)
 
-  if (matchLines(parser) && maybeEat(parser, 'dot')) {
-    const property = identifier(parser)
-    return { kind: 'Member', main: name, property, span: complete(parser, span) }
+  if (matchLines(parser) && matches(parser, 'dot')) {
+    return parseDot(parser, name)
   }
 
-  const values = parseArgs(parser)
-  return { kind: 'Variant', name, values, span: complete(parser, span) }
+  return AST.variant(name, parseArgs(parser), span(parser, start))
 }
 
 const parseArgs = (parser: Parser): Expr[] => {
@@ -182,7 +183,7 @@ const parseApply = (parser: Parser, callee: Expr): AST.Apply | Expr => {
   if (args.length === 0) {
     return callee
   } else {
-    return { kind: 'Apply', fun: callee, args, span: complete(parser, callee.span) } as AST.Apply
+    return AST.apply(callee, args, span(parser, callee.span))
   }
 }
 
@@ -192,9 +193,9 @@ const parseNumber = (parser: Parser): AST.Literal<number> => {
     return error(parser, 'Internal Compiler Error: number without value')
   }
   if (raw.includes('.')) {
-    return { kind: 'Float', value: parseFloat(raw), raw, span }
+    return AST.float(parseFloat(raw), raw, span)
   } else {
-    return { kind: 'Integer', value: parseInt(raw), raw, span }
+    return AST.integer(parseInt(raw), raw, span)
   }
 }
 
@@ -204,7 +205,7 @@ const parseTemplate = (parser: Parser): AST.Template => {
   const parts: Expr[] = []
 
   loop:
-  while (!atEnd(parser)) {
+  while (!done(parser)) {
     switch (parser.token.kind) {
       case 'string finish': {
         parts.push(parseString(parser, 'string finish'))
@@ -237,7 +238,7 @@ const parseTemplate = (parser: Parser): AST.Template => {
     }
   })
 
-  return { kind: 'Template', elements, span: complete(parser, start) }
+  return AST.template(elements, span(parser, start))
 }
 
 const parseString = (parser: Parser, kind: Kind): AST.Literal<string> => {
@@ -262,7 +263,7 @@ const parseString = (parser: Parser, kind: Kind): AST.Literal<string> => {
     default:
       value = raw
   }
-  return { kind: 'String', value, raw, span }
+  return AST.string(value, raw, span)
 }
 
 const parseParens = (parser: Parser): AST.Group | AST.Tuple => {
@@ -271,9 +272,9 @@ const parseParens = (parser: Parser): AST.Group | AST.Tuple => {
 
   if (items.length === 1) {
     const inner = items[0]
-    return { kind: 'Group', inner, span: complete(parser, start) }
+    return AST.group(inner, span(parser, start))
   } else {
-    return { kind: 'Tuple', items, span: complete(parser, start) }
+    return AST.tuple(items, span(parser, start))
   }
 }
 
@@ -281,14 +282,14 @@ const parseList = (parser: Parser): AST.List => {
   const start = parser.token.span
   const items = blockOf(parser, 'lbracket', 'rbracket', parseExpr)
 
-  return { kind: 'List', items, span: complete(parser, start) }
+  return AST.list(items, span(parser, start))
 }
 
 const parseRecord = (parser: Parser): AST.Record => {
   const start = parser.token.span
   const props = blockOf(parser, 'lbrace', 'rbrace', parseProperty)
 
-  return { kind: 'Record', props, span: complete(parser, start) }
+  return AST.record(props, span(parser, start))
 }
 
 const parseProperty = (parser: Parser): AST.Property => {
@@ -315,9 +316,7 @@ const parseProperty = (parser: Parser): AST.Property => {
 }
 
 const parseUnary = (parser: Parser): Expr => {
-  const { kind, span } = parser.token
-
-  const operator = { kind: 'Operator', operator: kind, span } as AST.Operator
+  const operator = AST.name(parser.token.kind, parser.token.span)
 
   if (parser.prev.kind === 'lparen' && peek(parser).kind === 'rparen') {
     bump(parser)
@@ -330,7 +329,7 @@ const parseUnary = (parser: Parser): Expr => {
     const args = [
       parseTerm(parser, false)
     ]
-    return { kind: 'Apply', fun: operator, args, span: complete(parser, span) } as AST.Apply
+    return AST.apply(operator, args, span(parser, operator.span))
   } else {
     return operator
   }
@@ -339,7 +338,7 @@ const parseUnary = (parser: Parser): Expr => {
 const parseBinary = (parser: Parser, minPrecedence: number): Expr => {
   let lhs = parseTerm(parser)
 
-  while (!atEnd(parser)) {
+  while (!done(parser)) {
     const info = operatorInfo[parser.token.kind]
 
     if (info == null) {
@@ -356,8 +355,7 @@ const parseBinary = (parser: Parser, minPrecedence: number): Expr => {
         break;
     }
 
-    const { kind, span } = parser.token
-    const operator = { kind: 'Operator', operator: kind, span } as AST.Operator
+    const operator = AST.name(parser.token.kind, parser.token.span)
 
     bump(parser)
 
@@ -371,9 +369,8 @@ const parseBinary = (parser: Parser, minPrecedence: number): Expr => {
     }
 
     const rhs = parseBinary(parser, precedence + fix)
-    const fun = operator
 
-    lhs = { kind: 'Apply', fun, args: [lhs, rhs], span: complete(parser, lhs.span) } as AST.Apply
+    lhs = AST.apply(operator, [lhs, rhs], span(parser, lhs.span))
   }
 
   return lhs
@@ -384,7 +381,24 @@ const parseFn = (parser: Parser): AST.Fun => {
   const params = blockOf(parser, 'fn', 'arrow', identifier)
   const value = parseExpr(parser)
 
-  return { kind: 'Function', params, value, span: complete(parser, start) }
+  return AST.fn(params, value, span(parser, start))
+}
+
+const parseDo = (parser: Parser): AST.Block => {
+  const start = parser.token.span
+  const items = []
+
+  eat(parser, 'do')
+
+  while (!done(parser)) {
+    items.push(parseExpr(parser))
+
+    if (!maybeEat(parser, 'semi')) {
+      break;
+    }
+  }
+
+  return AST.block(items, span(parser, start))
 }
 
 const parseIf = (parser: Parser): AST.If => {
@@ -396,7 +410,7 @@ const parseIf = (parser: Parser): AST.If => {
   eat(parser, 'else')
   const otherwise = parseExpr(parser)
 
-  return { kind: 'If', test, then, otherwise, span: complete(parser, start) }
+  return AST.cond(test, then, otherwise, span(parser, start))
 }
 
 const blockOf = <T extends unknown>(
@@ -421,7 +435,7 @@ const blockOf = <T extends unknown>(
   return result
 }
 
-const complete = (parser: Parser, start: Span, end?: Span): Span => {
+const span = (parser: Parser, start: Span, end?: Span): Span => {
   end = end ?? parser.prev.span
   return { ...start, offset: end.offset }
 }
@@ -448,7 +462,7 @@ const eat = (parser: Parser, kind: Kind) => {
   }
 }
 
-const atEnd = (parser: Parser) => {
+const done = (parser: Parser) => {
   return parser.token.kind === 'eof'
 }
 
@@ -476,7 +490,7 @@ export const parse = (tokens: Token[]): AST.Module => {
 
   const nodes = []
 
-  while (!atEnd(pp)) {
+  while (!done(pp)) {
     nodes.push(next(pp))
   }
 

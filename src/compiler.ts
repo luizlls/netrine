@@ -23,8 +23,6 @@ const compileExpr = (compiler: Compiler, expr: AST.Expr): string => {
       return compileFun(compiler, expr)
     case 'Name':
       return compileName(compiler, expr)
-    case 'Operator':
-      return compileOperator(compiler, expr)
     case 'Let':
       return compileLet(compiler, expr)
     case 'Mut':
@@ -47,13 +45,13 @@ const compileExpr = (compiler: Compiler, expr: AST.Expr): string => {
       return compileMember(compiler, expr)
     case 'Variant':
       return compileVariant(compiler, expr)
-    case 'Template':
-      return compileTemplate(compiler, expr)
     case 'Float':
     case 'Integer':
       return compileNumber(compiler, expr as AST.Literal<number>)
     case 'String':
       return compileString(compiler, expr as AST.Literal<string>)
+    case 'Template':
+      return compileTemplate(compiler, expr)
   }
 }
 
@@ -78,19 +76,15 @@ const compileName = (compiler: Compiler, name: AST.Name): string => {
   return name.value
 }
 
-const compileOperator = (compiler: Compiler, app: AST.Operator): string => {
-  return app.operator
-}
-
 const compileLet = (compiler: Compiler, decl: AST.Let): string => {
-  if (decl.pattern.kind !== 'Name') {
+  if (!(decl.pattern.kind === 'Name')) {
     return error(compiler, decl, `'${decl.pattern.kind}' destructuring is not supported for now`)
   }
   return `var ${decl.pattern.value} = ${compileExpr(compiler, decl.value)};`
 }
 
 const compileMut = (compiler: Compiler, decl: AST.Mut): string => {
-  if (decl.pattern.kind !== 'Name') {
+  if (!(decl.pattern.kind === 'Name')) {
     return error(compiler, decl, 'Mutable destructuring is not supported')
   }
   return `var ${decl.pattern.value} = ${compileExpr(compiler, decl.value)};`
@@ -145,22 +139,22 @@ const compileMember = (compiler: Compiler, member: AST.Member): string => {
 }
 
 const compileTemplate = (compiler: Compiler, template: AST.Template): string => {
-  const parts = template.elements.map(el => {
-    if (el.kind === 'String') {
-      return `'${el.value}'`
+  const parts = template.elements.map(element => {
+    if (element.kind === 'String') {
+      return `'${element.value}'`
     } else {
-      return `(${compileExpr(compiler, el)}).toString()`
+      return `(${compileExpr(compiler, element)}).toString()`
     }
   })
   return `${parts.join(' + ')}`
 }
 
-const compileNumber = (compiler: Compiler, literal: AST.Literal<number>): string => {
-  return literal.value.toString()
-}
-
 const compileString = (compiler: Compiler, literal: AST.Literal<string>): string => {
   return `'${literal.value}'`
+}
+
+const compileNumber = (compiler: Compiler, literal: AST.Literal<number>): string => {
+  return literal.value.toString()
 }
 
 const emit = (compiler: Compiler, str: string) => {

@@ -25,29 +25,30 @@ type OperatorInfo = {
 export const operatorInfo: { [key: string]: OperatorInfo } = {
   'not':    { associativity: 'none' },
   'bitnot': { associativity: 'none' },
-  'mul':    { associativity: 'left',  precedence: 10, },
-  'rem':    { associativity: 'left',  precedence: 10, },
-  'add':    { associativity: 'left',  precedence: 9, },
-  'sub':    { associativity: 'left',  precedence: 9, },
-  'concat': { associativity: 'left',  precedence: 9, },
-  'bitshr': { associativity: 'left',  precedence: 8, },
-  'bitshl': { associativity: 'left',  precedence: 8, },
-  'bitand': { associativity: 'left',  precedence: 7, },
-  'bitxor': { associativity: 'left',  precedence: 6, },
-  'bitor':  { associativity: 'left',  precedence: 5, },
-  'lt':     { associativity: 'left',  precedence: 4, },
-  'le':     { associativity: 'left',  precedence: 4, },
-  'gt':     { associativity: 'left',  precedence: 4, },
-  'ge':     { associativity: 'left',  precedence: 4, },
-  'ne':     { associativity: 'left',  precedence: 4, },
-  'eq':     { associativity: 'left',  precedence: 4, },
-  'and':    { associativity: 'left',  precedence: 3, },
-  'or':     { associativity: 'left',  precedence: 2, },
-  'pipe':   { associativity: 'left',  precedence: 1, },
-  'semi':   { associativity: 'right', precedence: 0, },
+  'mul':    { associativity: 'left',  precedence: 11, },
+  'div':    { associativity: 'left',  precedence: 11, },
+  'rem':    { associativity: 'left',  precedence: 11, },
+  'add':    { associativity: 'left',  precedence: 10, },
+  'sub':    { associativity: 'left',  precedence: 10, },
+  'concat': { associativity: 'left',  precedence: 10, },
+  'bitshr': { associativity: 'left',  precedence: 9,  },
+  'bitshl': { associativity: 'left',  precedence: 9,  },
+  'bitand': { associativity: 'left',  precedence: 8,  },
+  'bitxor': { associativity: 'left',  precedence: 7,  },
+  'bitor':  { associativity: 'left',  precedence: 6,  },
+  'lt':     { associativity: 'left',  precedence: 5,  },
+  'le':     { associativity: 'left',  precedence: 5,  },
+  'gt':     { associativity: 'left',  precedence: 5,  },
+  'ge':     { associativity: 'left',  precedence: 5,  },
+  'ne':     { associativity: 'left',  precedence: 5,  },
+  'eq':     { associativity: 'left',  precedence: 5,  },
+  'and':    { associativity: 'left',  precedence: 4,  },
+  'or':     { associativity: 'left',  precedence: 3,  },
+  'pipe':   { associativity: 'left',  precedence: 2,  },
 }
 
 export const keywords: { [key: string]: Keywords } = {
+  'do': 'do',
   'if': 'if',
   'then': 'then',
   'else': 'else',
@@ -58,7 +59,7 @@ export const keywords: { [key: string]: Keywords } = {
   'not': 'not',
 }
 
-export const operators: { [key: string]: Operators } = {
+export const operators: { [key: string]: Kind } = {
   '->' : 'arrow',
   ':'  : 'colon',
   '.'  : 'dot',
@@ -98,13 +99,13 @@ export type Operators =
 | 'rem'
 | 'and'
 | 'or'
+| 'not'
+| 'concat'
 | 'bitand'
 | 'bitor'
 | 'bitxor'
 | 'bitshr'
 | 'bitshl'
-| 'concat'
-| 'not'
 | 'bitnot'
 | 'is'
 | 'eq'
@@ -116,14 +117,13 @@ export type Operators =
 | 'pipe'
 | 'dot'
 | 'semi'
-| 'colon'
-| 'arrow'
 | 'equals'
 | 'walrus'
 
 
 export type Keywords =
-  'if'
+  'do'
+| 'if'
 | 'then'
 | 'else'
 | 'fn'
@@ -140,6 +140,8 @@ export type Others =
 | 'rbrace'
 | 'lbracket'
 | 'rbracket'
+| 'arrow'
+| 'colon'
 | 'comma'
 | 'lower'
 | 'upper'

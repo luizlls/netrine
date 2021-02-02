@@ -29,24 +29,21 @@ factorial(n) =
   if n <= 1 then 1 else n * factorial (n - 1)
 
 
-counter() =
-  count := 0;
+counter() = do
+  counter := 0;
   div [
     button "+" { click() = count := count + 1 },
     p ["total ", strong "{count}"],
     button "-" { click() = count := count - 1 },
   ]
-`
 
-const source2 = `
+sum  = fold (+) 0
+
 prod = fold (*) 1
-
-total = reduce prod (range 1 10)
 `
-
 
 try {
-  console.log(compile(analyze(parse(tokenize(source2)))))
+  console.log(compile(analyze(parse(tokenize(source)))))
 } catch (e) {
   console.error(e)
 }
