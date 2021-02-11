@@ -1,28 +1,8 @@
-export interface Token {
-  kind: Kind
-  value?: string
-  span: {
-    lineno: number
-    start: number
-    offset: number
-  }
-}
+exports.defaultToken = () => ({
+  kind: 'eof', span: { lineno: 0, start: 0, offset: 0 }
+})
 
-export const defaultToken = (): Token => {
-  return { kind: 'eof', span: { lineno: 0, start: 0, offset: 0 } } as Token
-}
-
-type Associativity =
-  'left'
-| 'right'
-| 'none'
-
-type OperatorInfo = {
-  precedence?: number
-  associativity: Associativity
-}
-
-export const operatorInfo: { [key: string]: OperatorInfo } = {
+exports.operatorInfo = {
   'not':    { associativity: 'none' },
   'bitnot': { associativity: 'none' },
   'mul':    { associativity: 'left',  precedence: 11, },
@@ -47,7 +27,7 @@ export const operatorInfo: { [key: string]: OperatorInfo } = {
   'pipe':   { associativity: 'left',  precedence: 2,  },
 }
 
-export const keywords: { [key: string]: Keywords } = {
+exports.keywords = {
   'do': 'do',
   'if': 'if',
   'then': 'then',
@@ -59,7 +39,7 @@ export const keywords: { [key: string]: Keywords } = {
   'not': 'not',
 }
 
-export const operators: { [key: string]: Kind } = {
+exports.operators = {
   '->' : 'arrow',
   ':'  : 'colon',
   '.'  : 'dot',
@@ -85,69 +65,3 @@ export const operators: { [key: string]: Kind } = {
   '>'  : 'gt',
   '>=' : 'ge',
 }
-
-export type Kind =
-  Keywords
-| Operators
-| Others
-
-export type Operators =
-  'add'
-| 'sub'
-| 'mul'
-| 'div'
-| 'rem'
-| 'and'
-| 'or'
-| 'not'
-| 'concat'
-| 'bitand'
-| 'bitor'
-| 'bitxor'
-| 'bitshr'
-| 'bitshl'
-| 'bitnot'
-| 'is'
-| 'eq'
-| 'ne'
-| 'lt'
-| 'le'
-| 'gt'
-| 'ge'
-| 'pipe'
-| 'dot'
-| 'semi'
-| 'equals'
-| 'walrus'
-
-
-export type Keywords =
-  'do'
-| 'if'
-| 'then'
-| 'else'
-| 'fn'
-| 'is'
-| 'and'
-| 'or'
-| 'not'
-
-
-export type Others =
-  'lparen'
-| 'rparen'
-| 'lbrace'
-| 'rbrace'
-| 'lbracket'
-| 'rbracket'
-| 'arrow'
-| 'colon'
-| 'comma'
-| 'lower'
-| 'upper'
-| 'number'
-| 'string start'
-| 'string finish'
-| 'string fragment'
-| 'string'
-| 'eof'

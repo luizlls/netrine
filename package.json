@@ -2,15 +2,13 @@
   "name": "netrine",
   "version": "0.0.1",
   "description": "A small, functional, programming language",
-  "main": "index.js",
+  "main": "src/netrine.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
-    "start": "tsc && node dist/netrine.js"
+    "start": "node src/netrine.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Luiz Lopes (luizlopedev@gmail.com)",
   "license": "MIT",
   "dependencies": {
-    "typescript": "^4.1.3"
   }
 }

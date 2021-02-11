@@ -1,14 +1,10 @@
-import * as AST from './syntax'
+const AST = require('./ast')
 
-interface Analyzer {
-  module: AST.Module
-}
-
-const analyzer = (module: AST.Module): Analyzer => ({
+const analyzer = (module) => ({
   module,
 })
 
-const checkExpr = (analyzer: Analyzer, expr: AST.Expr): AST.Expr => {
+const checkExpr = (analyzer, expr) => {
   switch (expr.kind) {
     case 'Function':
       return checkFun(analyzer, expr)
@@ -18,6 +14,10 @@ const checkExpr = (analyzer: Analyzer, expr: AST.Expr): AST.Expr => {
       return checkMut(analyzer, expr)
     case 'Apply':
       return checkApply(analyzer, expr)
+    case 'Unary':
+      return checkUnary(analyzer, expr)
+    case 'Binary':
+      return checkBinary(analyzer, expr)
     case 'Block':
       return checkBlock(analyzer, expr)
     case 'If':
@@ -32,8 +32,8 @@ const checkExpr = (analyzer: Analyzer, expr: AST.Expr): AST.Expr => {
       return checkRecord(analyzer, expr)
     case 'Member':
       return checkMember(analyzer, expr)
-    case 'Variant':
-      return checkVariant(analyzer, expr)
+    case 'Symbol':
+      return checkSymbol(analyzer, expr)
     case 'Template':
       return checkTemplate(analyzer, expr)
     default:
@@ -41,7 +41,7 @@ const checkExpr = (analyzer: Analyzer, expr: AST.Expr): AST.Expr => {
   }
 }
 
-const checkFun = (aa: Analyzer, fun: AST.Fun): AST.Fun => {
+const checkFun = (aa, fun) => {
   if (fun.params.length === 0) {
       fun.params.push(AST.name('', fun.span))
   }
@@ -50,10 +50,10 @@ const checkFun = (aa: Analyzer, fun: AST.Fun): AST.Fun => {
     .reverse()
     .reduce((value, param) => AST.fn([param], value, param.span), checkExpr(aa, fun.value))
 
-  return final as AST.Fun
+  return final
 }
 
-const checkLet = (aa: Analyzer, expr: AST.Let): AST.Let => {
+const checkLet = (aa, expr) => {
   if (expr.pattern.kind !== 'Name') {
     switch (expr.pattern.kind) {
       case 'Tuple':
@@ -70,7 +70,7 @@ const checkLet = (aa: Analyzer, expr: AST.Let): AST.Let => {
   return expr
 }
 
-const checkMut = (aa: Analyzer, expr: AST.Mut): AST.Mut => {
+const checkMut = (aa, expr) => {
   if (expr.pattern.kind !== 'Name') {
     return error(aa, expr, 'Mutable destructuring is not supported')
   }
@@ -79,53 +79,67 @@ const checkMut = (aa: Analyzer, expr: AST.Mut): AST.Mut => {
   return expr
 }
 
-const checkApply = (aa: Analyzer, app: AST.Apply): AST.Expr => {
-  if (app.fun.kind === 'Name') {
-    switch (app.fun.value) {
-      case 'pipe':
-        return checkPipe(aa, app)
-    }
-  }
-
+const checkApply = (aa, app) => {
   app.fun  = checkExpr(aa, app.fun)
   app.args = app.args.map(arg => checkExpr(aa, arg))
 
   return app
 }
 
-const checkPipe = (aa: Analyzer, app: AST.Apply): AST.Apply => {
-  const [arg, callee] = app.args
-  return AST.apply(callee, [checkExpr(aa, arg)], app.span)
+const checkUnary = (aa, unary) => {
+  unary.op  = checkExpr(aa, unary.op)
+  unary.rhs = checkExpr(aa, unary.rhs)
+
+  return AST.apply(unary.op, [unary.rhs], unary.span)
 }
 
-const checkBlock = (aa: Analyzer, block: AST.Block): AST.Block => {
+const checkBinary = (aa, binary) => {
+  if (binary.op.value === 'pipe') {
+    return checkPipe(aa, binary)
+  }
+
+  binary.op  = checkExpr(aa, binary.op)
+  binary.lhs = checkExpr(aa, binary.lhs)
+  binary.rhs = checkExpr(aa, binary.rhs)
+
+  return AST.apply(binary.op, [binary.lhs, binary.rhs], binary.span)
+}
+
+const checkPipe = (aa, pipe) => {
+  pipe.lhs = checkExpr(aa, pipe.lhs)
+  pipe.rhs = checkExpr(aa, pipe.rhs)
+
+  return AST.apply(pipe.rhs, [pipe.lhs], pipe.span)
+}
+
+const checkBlock = (aa, block) => {
   block.items = block.items.map(item => checkExpr(aa, item))
   return block
 }
 
-const checkIf = (aa: Analyzer, cond: AST.If): AST.If => {
+const checkIf = (aa, cond) => {
   cond.test = checkExpr(aa, cond.test)
   cond.then = checkExpr(aa, cond.then)
   cond.otherwise = checkExpr(aa, cond.otherwise)
   return cond
 }
 
-const checkGroup = (aa: Analyzer, group: AST.Group): AST.Group => {
+const checkGroup = (aa, group) => {
   group.inner =  checkExpr(aa, group.inner)
   return group
 }
 
-const checkTuple = (aa: Analyzer, tuple: AST.Tuple): AST.Tuple => {
+const checkTuple = (aa, tuple) => {
   tuple.items = tuple.items.map(item => checkExpr(aa, item))
   return tuple
 }
 
-const checkList = (aa: Analyzer, list: AST.List): AST.List => {
+const checkList = (aa, list) => {
   list.items = list.items.map(item => checkExpr(aa, item))
   return list
 }
 
-const checkRecord = (aa: Analyzer, record: AST.Record): AST.Record => {
+const checkRecord = (aa, record) => {
   record.props = record.props.map(prop => {
     if (prop.value) {
         prop.value = checkExpr(aa, prop.value)
@@ -135,26 +149,26 @@ const checkRecord = (aa: Analyzer, record: AST.Record): AST.Record => {
   return record
 }
 
-const checkMember = (aa: Analyzer, member: AST.Member): AST.Member => {
+const checkMember = (aa, member) => {
   member.main = checkExpr(aa, member.main)
   return member
 }
 
-const checkVariant = (aa: Analyzer, variant: AST.Variant): AST.Variant => {
-  variant.values = variant.values?.map(value => checkExpr(aa, value))
-  return variant
+const checkSymbol = (aa, symbol) => {
+  symbol.values = symbol.values.map(value => checkExpr(aa, value))
+  return symbol
 }
 
-const checkTemplate = (aa: Analyzer, template: AST.Template): AST.Template => {
-  template.elements = template.elements.map(element => checkExpr(aa, element))
+const checkTemplate = (aa, template) => {
+  template.elements = template.elements.map(el => checkExpr(aa, el))
   return template
 }
 
-const error = (aa: Analyzer, expr: AST.Expr, msg?: string) => {
-  throw `Error [${expr.span.lineno}]: ${msg}`
+const error = (aa, expr, msg) => {
+  throw `Error [${expr.span.lineno}]}`
 }
 
-export const analyze = (module: AST.Module): AST.Module => {
+exports.analyze = (module) => {
   const aa = analyzer(module)
 
   const nodes = module.nodes.map(node => checkExpr(aa, node))

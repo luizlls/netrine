@@ -1,7 +1,7 @@
-import { tokenize } from './src/lexer'
-import { parse } from './src/parser'
-import { analyze } from './src/analysis'
-import { compile } from './src/compiler'
+const { tokenize } = require('./lexer')
+const { parse } = require('./parser')
+const { analyze } = require('./analysis')
+const { compile } = require('./compiler')
 
 
 const source = `
