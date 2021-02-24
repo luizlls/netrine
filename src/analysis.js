@@ -1,17 +1,21 @@
-const AST = require('./ast')
-
 const analyzer = (module) => ({
   module,
 })
 
-const checkExpr = (analyzer, expr) => {
+const node = (kind, props, span) => {
+  return { kind, ...props, span }
+}
+
+const check = (analyzer, expr) => {
   switch (expr.kind) {
-    case 'Function':
-      return checkFun(analyzer, expr)
-    case 'Let':
-      return checkLet(analyzer, expr)
-    case 'Mut':
-      return checkMut(analyzer, expr)
+    case 'Fn':
+      return checkFn(analyzer, expr)
+    case 'Def':
+      return checkDef(analyzer, expr)
+    case 'Set':
+      return checkSet(analyzer, expr)
+    case 'Get':
+      return checkGet(analyzer, expr)
     case 'Apply':
       return checkApply(analyzer, expr)
     case 'Unary':
@@ -30,8 +34,6 @@ const checkExpr = (analyzer, expr) => {
       return checkList(analyzer, expr)
     case 'Record':
       return checkRecord(analyzer, expr)
-    case 'Member':
-      return checkMember(analyzer, expr)
     case 'Symbol':
       return checkSymbol(analyzer, expr)
     case 'Template':
@@ -41,137 +43,149 @@ const checkExpr = (analyzer, expr) => {
   }
 }
 
-const checkFun = (aa, fun) => {
-  if (fun.params.length === 0) {
-      fun.params.push(AST.name('', fun.span))
+const checkName = (aa, name) => {
+  // const item = find(ctx, name)
+
+  // if (!item) {
+  //   return error(aa, name, `Cannot find value '${name}' in this scope`)
+  // }
+
+  return name
+}
+
+const checkFn = (aa, fn) => {
+  if (fn.params.length === 0) {
+      fn.params.push(node('Name', { value: '' }, fn.span))
   }
 
-  const final = fun.params
+  const value = check(aa, fn.value)
+
+  return fn.params
     .reverse()
-    .reduce((value, param) => AST.fn([param], value, param.span), checkExpr(aa, fun.value))
-
-  return final
+    .reduce((value, param) => node('Fn', { param, value }, param.span), value)
 }
 
-const checkLet = (aa, expr) => {
-  if (expr.pattern.kind !== 'Name') {
-    switch (expr.pattern.kind) {
-      case 'Tuple':
-      case 'List':
-      case 'Record':
-      case 'Variant':
-        return error(aa, expr, `'${expr.pattern.kind}' destructuring is not supported for now`)
-      default:
-        return error(aa, expr, 'Invalid destructuring')
-    }
+const checkDef = (aa, def) => {
+  if (def.pattern.kind !== 'Name') {
+    return error(aa, span, 'destructuring is not supported for now')
   }
 
-  expr.value = checkExpr(aa, expr.value)
-  return expr
+  const value = check(aa, def.value)
+
+  return node('Def', { pattern:def.pattern, value }, def.span)
 }
 
-const checkMut = (aa, expr) => {
-  if (expr.pattern.kind !== 'Name') {
-    return error(aa, expr, 'Mutable destructuring is not supported')
+const checkSet = (aa, set) => {
+  if (set.pattern.kind !== 'Name') {
+    return error(aa, span, 'mutable destructuring is not allowed')
   }
 
-  expr.value = checkExpr(aa, expr.value)
-  return expr
+  const value = check(aa, set.value)
+
+  return node('Set', { pattern: set.pattern, value }, set.span)
+}
+
+const checkGet = (aa, get) => {
+  const expr = check(aa, get.expr)
+  return node('Get', { expr, name: get.name }, get.span)
 }
 
 const checkApply = (aa, app) => {
-  app.fun  = checkExpr(aa, app.fun)
-  app.args = app.args.map(arg => checkExpr(aa, arg))
+  const args = app.args.map(arg => check(aa, arg))
 
-  return app
+  const main = check(aa, app.fn)
+
+  return args
+    .reduce((fn, arg) => node('Apply', { fn, arg }, arg.span), main)
 }
 
 const checkUnary = (aa, unary) => {
-  unary.op  = checkExpr(aa, unary.op)
-  unary.rhs = checkExpr(aa, unary.rhs)
+  const fn  = check(aa, unary.operator)
+  const arg = check(aa, unary.rhs)
 
-  return AST.apply(unary.op, [unary.rhs], unary.span)
+  return node('Apply', { fn, arg }, unary.span)
 }
 
 const checkBinary = (aa, binary) => {
-  if (binary.op.value === 'pipe') {
+  if (binary.operator.value === 'pipe') {
     return checkPipe(aa, binary)
   }
 
-  binary.op  = checkExpr(aa, binary.op)
-  binary.lhs = checkExpr(aa, binary.lhs)
-  binary.rhs = checkExpr(aa, binary.rhs)
+  const main = check(aa, binary.operator)
 
-  return AST.apply(binary.op, [binary.lhs, binary.rhs], binary.span)
+  const args = [
+    check(aa, binary.lhs),
+    check(aa, binary.rhs),
+  ]
+
+  return args
+    .reduce((fn, arg) => node('Apply', { fn, arg }, arg.span), main)
 }
 
 const checkPipe = (aa, pipe) => {
-  pipe.lhs = checkExpr(aa, pipe.lhs)
-  pipe.rhs = checkExpr(aa, pipe.rhs)
+  const arg = check(aa, pipe.lhs)
+  const fn  = check(aa, pipe.rhs)
 
-  return AST.apply(pipe.rhs, [pipe.lhs], pipe.span)
+  return node('Apply', { fn, arg }, pipe.span)
 }
 
 const checkBlock = (aa, block) => {
-  block.items = block.items.map(item => checkExpr(aa, item))
-  return block
+  const items = block.items.map(item => check(aa, item))
+
+  return node('Block', { items }, block.span)
 }
 
 const checkIf = (aa, cond) => {
-  cond.test = checkExpr(aa, cond.test)
-  cond.then = checkExpr(aa, cond.then)
-  cond.otherwise = checkExpr(aa, cond.otherwise)
-  return cond
+  const test = check(aa, cond.test)
+  const then = check(aa, cond.then)
+  const otherwise = check(aa, cond.otherwise)
+
+  return node('Cond', { test, then, otherwise }, cond.span)
 }
 
 const checkGroup = (aa, group) => {
-  group.inner =  checkExpr(aa, group.inner)
-  return group
+  return check(aa, group.inner)
 }
 
 const checkTuple = (aa, tuple) => {
-  tuple.items = tuple.items.map(item => checkExpr(aa, item))
-  return tuple
+  const items = tuple.items.map(item => check(aa, item))
+
+  return node('List', { items }, tuple.span)
 }
 
 const checkList = (aa, list) => {
-  list.items = list.items.map(item => checkExpr(aa, item))
-  return list
+  const items = list.items.map(item => check(aa, item))
+
+  return node('List', { items }, list.span)
 }
 
 const checkRecord = (aa, record) => {
-  record.props = record.props.map(prop => {
-    if (prop.value) {
-        prop.value = checkExpr(aa, prop.value)
-    }
-    return prop
+  const properties = record.properties.map(prop => {
+    return { name: prop.name, value: check(aa, prop.value) }
   })
-  return record
-}
 
-const checkMember = (aa, member) => {
-  member.main = checkExpr(aa, member.main)
-  return member
+  return node('Record', { properties }, record.span)
 }
 
 const checkSymbol = (aa, symbol) => {
-  symbol.values = symbol.values.map(value => checkExpr(aa, value))
-  return symbol
+  const values = symbol.values.map(value => check(aa, value))
+
+  return node('Symbol', { name: symbol.name, values }, symbol.span)
 }
 
 const checkTemplate = (aa, template) => {
-  template.elements = template.elements.map(el => checkExpr(aa, el))
-  return template
+  const elements = template.elements.map(elem => check(aa, elem))
+
+  return node('Template', { elements }, template.span)
 }
 
-const error = (aa, expr, msg) => {
-  throw `Error [${expr.span.lineno}]}`
+const error = (aa, span, msg) => {
+  throw `Error [${span.lineno}] ${msg}`
 }
 
 exports.analyze = (module) => {
   const aa = analyzer(module)
-
-  const nodes = module.nodes.map(node => checkExpr(aa, node))
+  const nodes = module.nodes.map(node => check(aa, node))
 
   return { nodes }
 }

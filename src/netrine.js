@@ -8,7 +8,6 @@ const source = `
 hello(name) =
   print "Hello, {name}!"
 
-
 fizzbuzz() =
   (range 0 100)
   |> map (
@@ -30,20 +29,28 @@ factorial(n) =
 
 
 counter() = do
-  counter := 0;
+  counter = 0;
   div [
-    button "+" { click() = count := count + 1 },
-    p ["total ", strong "{count}"],
-    button "-" { click() = count := count - 1 },
+    button "+" { click() = counter := counter + 1 },
+    p ["total ", strong "{counter}"],
+    button "-" { click() = counter := counter - 1 },
   ]
 
-sum  = fold (+) 0
+sum = fold (+) 0
 
 prod = fold (*) 1
 `
 
 try {
-  console.log(compile(analyze(parse(tokenize(source)))))
+  const pipeline = [
+    tokenize,
+    parse,
+    analyze,
+    compile,
+  ]
+
+  const output = pipeline.reduce((partial, pass) => pass(partial), source)
+  console.log(output)
 } catch (e) {
   console.error(e)
 }

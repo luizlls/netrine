@@ -1,4 +1,3 @@
-const AST = require('./ast')
 const { operatorInfo, defaultToken } = require('./token')
 
 const parser = (tokens) => ({
@@ -9,10 +8,14 @@ const parser = (tokens) => ({
   nodes: [],
 })
 
+const node = (kind, props, span) => {
+  return { kind, ...props, span }
+}
+
 const definition = (parser) => {
   const start = parser.token.span
 
-  const name = identifier(parser)
+  const pattern = identifier(parser)
 
   let value
   switch (parser.token.kind) {
@@ -26,12 +29,12 @@ const definition = (parser) => {
       return error(parser, 'Expected definition')
   }
 
-  return AST.def(name, value, span(parser, start))
+  return node('Def', { pattern, value }, span(parser, start))
 }
 
 const identifier = (parser) => {
   const { value, span } = eat(parser, 'lower')
-  return AST.name(value, span)
+  return node('Name', { value }, span)
 }
 
 const parseFun = (parser) => {
@@ -40,7 +43,7 @@ const parseFun = (parser) => {
   eat(parser, 'equals')
   const value = parseExpr(parser)
 
-  return AST.fn(params, value, span(parser, start))
+  return node('Fn', { params, value }, span(parser, start))
 }
 
 const parseExpr = (parser) => {
@@ -85,11 +88,13 @@ const parseTerm = (parser, apply = true) => {
 
   switch (parser.token.kind) {
     case 'equals':
-      value = parseLet(parser, value); break
+      bump(parser)
+      value = parseDef(parser, value); break
     case 'walrus':
-      value = parseMut(parser, value); break
+      bump(parser)
+      value = parseSet(parser, value); break
     case 'dot':
-      value = parseDot(parser, value); break
+      value = parseGet(parser, value); break
   }
 
   if (apply) {
@@ -99,33 +104,35 @@ const parseTerm = (parser, apply = true) => {
   }
 }
 
-const parseLet = (parser, term) => {
-  bump(parser)
-  return AST.def(term, parseExpr(parser), span(parser, term.span))
+const parseDef = (parser, pattern) => {
+  const value = parseExpr(parser)
+  return node('Def', { pattern, value }, span(parser, pattern.span))
 }
 
-const parseMut = (parser, term) => {
-  bump(parser)
-  return AST.mut(term, parseExpr(parser), span(parser, term.span))
+const parseSet = (parser, pattern) => {
+  const value = parseExpr(parser)
+  return node('Set', { pattern, value }, span(parser, pattern.span))
 }
 
-const parseDot = (parser, term) => {
+const parseGet = (parser, expr) => {
   while (maybeEat(parser, 'dot')) {
-    term = AST.member(term, identifier(parser), span(parser, term.span))
+    const name = identifier(parser)
+    expr = node('Get', { expr, name }, span(parser, expr.span))
   }
-  return term
+  return expr
 }
 
 const parseUpper = (parser) => {
-  const { value, span: start } = eat(parser, 'upper')
+  const { value, span } = eat(parser, 'upper')
 
-  const name = AST.name(value, start)
+  const name = node('Name', { value }, span)
 
   if (matchLines(parser) && matches(parser, 'dot')) {
-    return parseDot(parser, name)
+    return parseGet(parser, name)
   }
 
-  return AST.symbol(name, parseArgs(parser), span(parser, start))
+  const values = parseArgs(parser)
+  return node('Symbol', { name, values }, span(parser, span))
 }
 
 const parseArgs = (parser) => {
@@ -153,19 +160,19 @@ const parseArgs = (parser) => {
   return args
 }
 
-const parseApply = (parser, callee) => {
+const parseApply = (parser, fn) => {
   const args = parseArgs(parser)
 
   if (args.length === 0) {
-    return callee
+    return fn
   } else {
-    return AST.apply(callee, args, span(parser, callee.span))
+    return node('Apply', { fn, args }, span(parser, fn.span))
   }
 }
 
 const parseNumber = (parser) => {
   const { value, span } = eat(parser, 'number')
-  return AST.number(value, span)
+  return node('Number', { value }, span)
 }
 
 const parseTemplate = (parser) => {
@@ -207,7 +214,7 @@ const parseTemplate = (parser) => {
     }
   })
 
-  return AST.template(elements, span(parser, start))
+  return node('Template', { elements }, span(parser, start))
 }
 
 const parseString = (parser, kind) => {
@@ -230,7 +237,7 @@ const parseString = (parser, kind) => {
     default:
       value = raw
   }
-  return AST.string(value, raw, span)
+  return node('String', { value, raw }, span)
 }
 
 const parseParens = (parser) => {
@@ -239,9 +246,9 @@ const parseParens = (parser) => {
 
   if (items.length === 1) {
     const inner = items[0]
-    return AST.group(inner, span(parser, start))
+    return node('Group', { inner }, span(parser, start))
   } else {
-    return AST.tuple(items, span(parser, start))
+    return node('Tuple', { items }, span(parser, start))
   }
 }
 
@@ -249,14 +256,14 @@ const parseList = (parser) => {
   const start = parser.token.span
   const items = blockOf(parser, 'lbracket', 'rbracket', parseExpr)
 
-  return AST.list(items, span(parser, start))
+  return node('List',  { items }, span(parser, start))
 }
 
 const parseRecord = (parser) => {
   const start = parser.token.span
-  const props = blockOf(parser, 'lbrace', 'rbrace', parseProperty)
+  const properties = blockOf(parser, 'lbrace', 'rbrace', parseProperty)
 
-  return AST.record(props, span(parser, start))
+  return node('Record', { properties }, span(parser, start))
 }
 
 const parseProperty = (parser) => {
@@ -285,9 +292,10 @@ const parseProperty = (parser) => {
 const parseUnary = (parser) => {
   const { kind, span } = parser.token
 
-  const operator = AST.name(kind, span)
+  const operator = node('Name', { value: kind }, span)
 
-  if (parser.prev.kind === 'lparen' && peek(parser).kind === 'rparen') {
+  if (parser.prev.kind === 'lparen'
+  && peek(parser).kind === 'rparen') {
     bump(parser)
     return operator
   }
@@ -295,7 +303,8 @@ const parseUnary = (parser) => {
   bump(parser)
 
   if (matchLines(parser)) {
-    return AST.unary(operator, parseTerm(parser, false), span(parser, span))
+    const rhs = parseTerm(parser, false);
+    return node('Unary', { operator, rhs }, span(parser, span))
   } else {
     return operator
   }
@@ -321,7 +330,7 @@ const parseBinary = (parser, minPrecedence) => {
         break;
     }
 
-    const operator = AST.name(parser.token.kind, parser.token.span)
+    const operator = node('Name', { value: parser.token.kind }, parser.token.span)
 
     bump(parser)
 
@@ -337,7 +346,7 @@ const parseBinary = (parser, minPrecedence) => {
     const rhs = parseBinary(parser, precedence + fix)
     const lhs = expr
 
-    expr = AST.binary(operator, lhs, rhs, span(parser, operator.span))
+    expr = node('Binary', { operator, lhs, rhs }, span(parser, operator.span))
   }
 
   return expr
@@ -348,7 +357,7 @@ const parseFn = (parser) => {
   const params = blockOf(parser, 'fn', 'arrow', identifier)
   const value = parseExpr(parser)
 
-  return AST.fn(params, value, span(parser, start))
+  return node('Fn', { params, value }, span(parser, start))
 }
 
 const parseDo = (parser) => {
@@ -365,7 +374,7 @@ const parseDo = (parser) => {
     }
   }
 
-  return AST.block(items, span(parser, start))
+  return node('Block', { items }, span(parser, start))
 }
 
 const parseIf = (parser) => {
@@ -377,7 +386,7 @@ const parseIf = (parser) => {
   eat(parser, 'else')
   const otherwise = parseExpr(parser)
 
-  return AST.cond(test, then, otherwise, span(parser, start))
+  return node('If', { test, then, otherwise }, span(parser, start))
 }
 
 const blockOf = (parser, open, close, fn) => {
@@ -432,6 +441,7 @@ const bump = (parser) => {
   parser.prev  = parser.token
   parser.token = parser.tokens[parser.index] || defaultToken()
   parser.index += 1
+  return parser
 }
 
 const matches = (parser, kind) => {

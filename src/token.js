@@ -29,13 +29,13 @@ exports.operatorInfo = {
 
 exports.keywords = {
   'do': 'do',
+  'fn': 'fn',
   'if': 'if',
   'then': 'then',
   'else': 'else',
-  'fn': 'fn',
-  'is': 'is',
+  'is' : 'is',
   'and': 'and',
-  'or': 'or',
+  'or' : 'or',
   'not': 'not',
 }
 

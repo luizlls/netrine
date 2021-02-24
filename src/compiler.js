@@ -1,5 +1,3 @@
-const AST = require('./ast')
-
 const INDENT_SPACES = 4
 
 const compiler = (module) => ({
@@ -12,30 +10,26 @@ const compiler = (module) => ({
 
 const compileExpr = (compiler, expr) => {
   switch (expr.kind) {
-    case 'Function':
-      return compileFun(compiler, expr)
+    case 'Fn':
+      return compileFn(compiler, expr)
     case 'Name':
       return compileName(compiler, expr)
-    case 'Let':
-      return compileLet(compiler, expr)
-    case 'Mut':
-      return compileMut(compiler, expr)
+    case 'Def':
+      return compileDef(compiler, expr)
+    case 'Set':
+      return compileSet(compiler, expr)
+    case 'Member':
+      return compileGet(compiler, expr)
     case 'Apply':
       return compileApply(compiler, expr)
     case 'Block':
       return compileBlock(compiler, expr)
-    case 'If':
-      return compileIf(compiler, expr)
-    case 'Group':
-      return compileGroup(compiler, expr)
-    case 'Tuple':
-      return compileTuple(compiler, expr)
+    case 'Cond':
+      return compileCond(compiler, expr)
     case 'List':
       return compileList(compiler, expr)
     case 'Record':
       return compileRecord(compiler, expr)
-    case 'Member':
-      return compileMember(compiler, expr)
     case 'Symbol':
       return compileSymbol(compiler, expr)
     case 'Number':
@@ -47,16 +41,16 @@ const compileExpr = (compiler, expr) => {
   }
 }
 
-const compileFun = (compiler, fun) => {
-  return `function(${fun.params[0].value}) { ${compileBody(compiler, fun.value)} }`
+const compileFn = (compiler, fun) => {
+  return `function(${fun.param.value}) { ${compileBody(compiler, fun.value)} }`
 }
 
 const compileBody = (compiler, body) => {
   let value = compileExpr(compiler, body);
 
   switch (body.kind) {
-    case 'Let': break
-    case 'Mut': break
+    case 'Def': break
+    case 'Set': break
     default:
       value = `return ${value};`
   }
@@ -68,23 +62,22 @@ const compileName = (compiler, name) => {
   return name.value
 }
 
-const compileLet = (compiler, decl) => {
-  if (!(decl.pattern.kind === 'Name')) {
-    return error(compiler, decl, `'${decl.pattern.kind}' destructuring is not supported for now`)
-  }
-  return `var ${decl.pattern.value} = ${compileExpr(compiler, decl.value)}`
+const compileDef = (compiler, def) => {
+  return `var ${def.pattern.value} = ${compileExpr(compiler, def.value)};`
 }
 
-const compileMut = (compiler, decl) => {
-  if (!(decl.pattern.kind === 'Name')) {
-    return error(compiler, decl, 'Mutable destructuring is not supported')
-  }
-  return `var ${decl.pattern.value} = ${compileExpr(compiler, decl.value)}`
+const compileSet = (compiler, set) => {
+  return     `${set.pattern.value} = ${compileExpr(compiler, set.value)};`
+}
+
+const compileGet = (compiler, member) => {
+  return `${compileExpr(compiler, member.main)}.${member.property.value}`
 }
 
 const compileApply = (compiler, app) => {
-  const args = app.args.map(arg => `(${compileExpr(compiler, arg)})`)
-  return `${compileExpr(compiler, app.fun)}${args.join('')}`
+  const fn  = compileExpr(compiler, app.fn)
+  const arg = compileExpr(compiler, app.arg)
+  return `${fn}(${arg})`
 }
 
 const compileBlock = (compiler, block) => {
@@ -92,10 +85,10 @@ const compileBlock = (compiler, block) => {
   const last  = items.pop()
   items.push(`return ${last}`)
 
-  return `(function() { ${items.join('')} })()`
+  return `(function() { ${items.join(' ')} })()`
 }
 
-const compileIf = (compiler, cond) => {
+const compileCond = (compiler, cond) => {
   const { test, then, otherwise } = cond
   return `(${compileExpr(compiler, test)} ? ${compileExpr(compiler, then)} : ${compileExpr(compiler, otherwise)})`
 }
@@ -109,25 +102,15 @@ const compileSymbol = (compiler, symbol) => {
   }
 }
 
-const compileGroup = (compiler, group) => {
-  return `${compileExpr(compiler, group.inner)}`
-}
-
 const compileList = (compiler, seq) => {
   return `[${seq.items.map(item => compileExpr(compiler, item)).join(', ')}]`
 }
 
-const compileTuple = (compiler, tuple) => {
-  return `[${tuple.items.map(item => compileExpr(compiler, item)).join(', ')}]`
-}
-
 const compileRecord = (compiler, record) => {
-  const props = record.props.map(prop => `${prop.name.value} : ${compileExpr(compiler, prop.value)}`)
+  const props = record.properties.map(prop => {
+    return `${prop.name.value} : ${compileExpr(compiler, prop.value)}`
+  })
   return `{ ${props.join(', ')} }`
-}
-
-const compileMember = (compiler, member) => {
-  return `${compileExpr(compiler, member.main)}.${member.property.value}`
 }
 
 const compileTemplate = (compiler, template) => {
