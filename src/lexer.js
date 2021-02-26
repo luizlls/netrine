@@ -85,7 +85,11 @@ const comment = (lexer) => {
   return lexer
 }
 
-const number = (lexer) => {
+const number = (lexer, prefix = false) => {
+  if (prefix) {
+    bump(lexer)
+  }
+
   let float = false
   while (numeric(current(lexer))) {
     bump(lexer)
@@ -164,6 +168,13 @@ const next = (lexer) => {
     }
     case '"':
       return template(lexer, true)
+    case '+':
+    case '-':
+      if (numeric(peek(lexer))) {
+        return number(lexer, true)
+      } else {
+        return operator(lexer)
+      }
     case '/':
       if (peek(lexer) === '/') {
         return comment(lexer)

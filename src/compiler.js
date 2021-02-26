@@ -18,7 +18,7 @@ const compileExpr = (compiler, expr) => {
       return compileDef(compiler, expr)
     case 'Set':
       return compileSet(compiler, expr)
-    case 'Member':
+    case 'Get':
       return compileGet(compiler, expr)
     case 'Apply':
       return compileApply(compiler, expr)
@@ -38,11 +38,13 @@ const compileExpr = (compiler, expr) => {
       return compileString(compiler, expr)
     case 'Template':
       return compileTemplate(compiler, expr)
+    case 'Unit':
+      return ''
   }
 }
 
-const compileFn = (compiler, fun) => {
-  return `function(${fun.param.value}) { ${compileBody(compiler, fun.value)} }`
+const compileFn = (compiler, fn) => {
+  return `function(${fn.param.value}) { ${compileBody(compiler, fn.value)} }`
 }
 
 const compileBody = (compiler, body) => {
@@ -63,15 +65,24 @@ const compileName = (compiler, name) => {
 }
 
 const compileDef = (compiler, def) => {
-  return `var ${def.pattern.value} = ${compileExpr(compiler, def.value)};`
+  const name  = compileExpr(compiler, def.pattern)
+  const value = compileExpr(compiler, def.value)
+  return `var ${name} = ${value};`
 }
 
 const compileSet = (compiler, set) => {
-  return     `${set.pattern.value} = ${compileExpr(compiler, set.value)};`
+  const target = compileExpr(compiler, set.target)
+  const value  = compileExpr(compiler, set.value)
+  return `${target} = ${value};`
 }
 
-const compileGet = (compiler, member) => {
-  return `${compileExpr(compiler, member.main)}.${member.property.value}`
+const compileGet = (compiler, get) => {
+  const target = compileExpr(compiler, get.expr)
+  if (get.index !== undefined) {
+    return `${target}[${compileExpr(compiler, get.index)}]`
+  } else {
+    return `${target}.${get.name.value}`
+  }
 }
 
 const compileApply = (compiler, app) => {

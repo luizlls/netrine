@@ -43,143 +43,154 @@ const check = (analyzer, expr) => {
   }
 }
 
-const checkName = (aa, name) => {
+const checkName = (analyzer, name) => {
   // const item = find(ctx, name)
 
   // if (!item) {
-  //   return error(aa, name, `Cannot find value '${name}' in this scope`)
+  //   return error(analyzer, name, `Cannot find value '${name}' in this scope`)
   // }
 
   return name
 }
 
-const checkFn = (aa, fn) => {
-  if (fn.params.length === 0) {
-      fn.params.push(node('Name', { value: '' }, fn.span))
-  }
+const checkFn = (analyzer, fn) => {
+  const params = fn.params.map(param => {
+    switch (param.kind) {
+      case 'Unit':
+        return node('Name', { value: '' }, fn.span)
+      case 'Name':
+        return param
+      default:
+        return error(analyzer, param.span, 'invalid pattern for a function parameter')
+    }
+  })
 
-  const value = check(aa, fn.value)
+  const value = check(analyzer, fn.value)
 
-  return fn.params
+  return params
     .reverse()
     .reduce((value, param) => node('Fn', { param, value }, param.span), value)
 }
 
-const checkDef = (aa, def) => {
+const checkDef = (analyzer, def) => {
   if (def.pattern.kind !== 'Name') {
-    return error(aa, span, 'destructuring is not supported for now')
+    return error(analyzer, span, 'destructuring is not supported for now')
   }
 
-  const value = check(aa, def.value)
+  const value = check(analyzer, def.value)
 
   return node('Def', { pattern:def.pattern, value }, def.span)
 }
 
-const checkSet = (aa, set) => {
-  if (set.pattern.kind !== 'Name') {
-    return error(aa, span, 'mutable destructuring is not allowed')
+const checkSet = (analyzer, set) => {
+  switch (set.target.kind) {
+    case 'Name': break
+    case 'Get' : break
+    default:
+      return error(analyzer, set.span, 'mutable destructuring is not allowed')
   }
 
-  const value = check(aa, set.value)
+  const value = check(analyzer, set.value)
 
-  return node('Set', { pattern: set.pattern, value }, set.span)
+  return node('Set', { target: set.target, value }, set.span)
 }
 
-const checkGet = (aa, get) => {
-  const expr = check(aa, get.expr)
-  return node('Get', { expr, name: get.name }, get.span)
+const checkGet = (analyzer, get) => {
+  const expr = check(analyzer, get.expr)
+  if (get.index) {
+      get.index = check(analyzer, get.index)
+  }
+
+  return node('Get', { expr, index: get.index, name: get.name }, get.span)
 }
 
-const checkApply = (aa, app) => {
-  const args = app.args.map(arg => check(aa, arg))
-
-  const main = check(aa, app.fn)
-
-  return args
-    .reduce((fn, arg) => node('Apply', { fn, arg }, arg.span), main)
+const checkApply = (analyzer, app) => {
+  app.fn  = check(analyzer, app.fn)
+  app.arg = check(analyzer, app.arg)
+  return app
 }
 
-const checkUnary = (aa, unary) => {
-  const fn  = check(aa, unary.operator)
-  const arg = check(aa, unary.rhs)
+const checkUnary = (analyzer, unary) => {
+  const fn  = check(analyzer, unary.operator)
+  const arg = check(analyzer, unary.rhs)
 
   return node('Apply', { fn, arg }, unary.span)
 }
 
-const checkBinary = (aa, binary) => {
+const checkBinary = (analyzer, binary) => {
   if (binary.operator.value === 'pipe') {
-    return checkPipe(aa, binary)
+    return checkPipe(analyzer, binary)
   }
 
-  const main = check(aa, binary.operator)
+  const main = check(analyzer, binary.operator)
 
   const args = [
-    check(aa, binary.lhs),
-    check(aa, binary.rhs),
+    check(analyzer, binary.lhs),
+    check(analyzer, binary.rhs),
   ]
 
   return args
     .reduce((fn, arg) => node('Apply', { fn, arg }, arg.span), main)
 }
 
-const checkPipe = (aa, pipe) => {
-  const arg = check(aa, pipe.lhs)
-  const fn  = check(aa, pipe.rhs)
+const checkPipe = (analyzer, pipe) => {
+  const arg = check(analyzer, pipe.lhs)
+  const fn  = check(analyzer, pipe.rhs)
 
   return node('Apply', { fn, arg }, pipe.span)
 }
 
-const checkBlock = (aa, block) => {
-  const items = block.items.map(item => check(aa, item))
+const checkBlock = (analyzer, block) => {
+  const items = block.items.map(item => check(analyzer, item))
 
   return node('Block', { items }, block.span)
 }
 
-const checkIf = (aa, cond) => {
-  const test = check(aa, cond.test)
-  const then = check(aa, cond.then)
-  const otherwise = check(aa, cond.otherwise)
+const checkIf = (analyzer, cond) => {
+  const test = check(analyzer, cond.test)
+  const then = check(analyzer, cond.then)
+  const otherwise = check(analyzer, cond.otherwise)
 
   return node('Cond', { test, then, otherwise }, cond.span)
 }
 
-const checkGroup = (aa, group) => {
-  return check(aa, group.inner)
+const checkGroup = (analyzer, group) => {
+  return check(analyzer, group.inner)
 }
 
-const checkTuple = (aa, tuple) => {
-  const items = tuple.items.map(item => check(aa, item))
+const checkTuple = (analyzer, tuple) => {
+  const items = tuple.items.map(item => check(analyzer, item))
 
   return node('List', { items }, tuple.span)
 }
 
-const checkList = (aa, list) => {
-  const items = list.items.map(item => check(aa, item))
+const checkList = (analyzer, list) => {
+  const items = list.items.map(item => check(analyzer, item))
 
   return node('List', { items }, list.span)
 }
 
-const checkRecord = (aa, record) => {
+const checkRecord = (analyzer, record) => {
   const properties = record.properties.map(prop => {
-    return { name: prop.name, value: check(aa, prop.value) }
+    return { name: prop.name, value: check(analyzer, prop.value) }
   })
 
   return node('Record', { properties }, record.span)
 }
 
-const checkSymbol = (aa, symbol) => {
-  const values = symbol.values.map(value => check(aa, value))
+const checkSymbol = (analyzer, symbol) => {
+  const values = symbol.values.map(value => check(analyzer, value))
 
   return node('Symbol', { name: symbol.name, values }, symbol.span)
 }
 
-const checkTemplate = (aa, template) => {
-  const elements = template.elements.map(elem => check(aa, elem))
+const checkTemplate = (analyzer, template) => {
+  const elements = template.elements.map(elem => check(analyzer, elem))
 
   return node('Template', { elements }, template.span)
 }
 
-const error = (aa, span, msg) => {
+const error = (analyzer, span, msg) => {
   throw `Error [${span.lineno}] ${msg}`
 }
 

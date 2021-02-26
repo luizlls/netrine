@@ -29,7 +29,6 @@ exports.operatorInfo = {
 
 exports.keywords = {
   'do': 'do',
-  'fn': 'fn',
   'if': 'if',
   'then': 'then',
   'else': 'else',
@@ -37,10 +36,11 @@ exports.keywords = {
   'and': 'and',
   'or' : 'or',
   'not': 'not',
+  'mut': 'mut',
 }
 
 exports.operators = {
-  '->' : 'arrow',
+  '=>' : 'arrow',
   ':'  : 'colon',
   '.'  : 'dot',
   '='  : 'equals',

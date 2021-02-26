@@ -5,46 +5,56 @@ const { compile } = require('./compiler')
 
 
 const source = `
-hello(name) =
+hello = name =>
   print "Hello, {name}!"
 
-fizzbuzz() =
+
+fizzbuzz = () =>
   (range 0 100)
   |> map (
-    fn num ->
-      if zero? (num % 15)
-        then "FizzBuzz"
-      else if zero? (num % 3)
-        then "Fizz"
-      else if zero? (num % 5)
-        then "Buzz"
-      else
-        string num
+      num =>
+        if zero? (num % 15)
+          then "FizzBuzz"
+        else if zero? (num % 3)
+          then "Fizz"
+        else if zero? (num % 5)
+          then "Buzz"
+        else
+          string num
     )
   |> each print
 
 
-factorial(n) =
-  if n <= 1 then 1 else n * factorial (n - 1)
+factorial = n => if n <= 1 then 1 else n * factorial (n - 1)
+
+factorial = n => fold (*) 1 (range 1 (n + 1))
 
 
-counter() = do
-  counter = 0;
+counter = () =>
+do
+  total = mut 0;
   div [
-    button "+" { click() = counter := counter + 1 },
-    p ["total ", strong "{counter}"],
-    button "-" { click() = counter := counter - 1 },
+    button "+" { click: () => total := total + 1 }
+    p ["total ", strong "{total}"]
+    button "-" { click: () => total := total - 1 }
   ]
+
 
 sum = fold (+) 0
 
 prod = fold (*) 1
+
+
+numbers = list (range 0 10)
+numbers.[0] := random()
+numbers.[1] := numbers.[0] + 1
 `
 
 try {
   const pipeline = [
     tokenize,
     parse,
+    // (nodes) => JSON.stringify(nodes, null, 4),
     analyze,
     compile,
   ]
