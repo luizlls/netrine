@@ -26,8 +26,6 @@ const check = (analyzer, expr) => {
       return checkBlock(analyzer, expr)
     case 'If':
       return checkIf(analyzer, expr)
-    case 'Group':
-      return checkGroup(analyzer, expr)
     case 'Tuple':
       return checkTuple(analyzer, expr)
     case 'List':
@@ -73,13 +71,13 @@ const checkFn = (analyzer, fn) => {
 }
 
 const checkDef = (analyzer, def) => {
-  if (def.pattern.kind !== 'Name') {
-    return error(analyzer, span, 'destructuring is not supported for now')
+  if (def.patt.kind !== 'Name') {
+    return error(analyzer, span, 'pattern destructuring is not supported for now')
   }
 
   const value = check(analyzer, def.value)
 
-  return node('Def', { pattern:def.pattern, value }, def.span)
+  return node('Def', { patt: def.patt, value }, def.span)
 }
 
 const checkSet = (analyzer, set) => {
@@ -152,10 +150,6 @@ const checkIf = (analyzer, cond) => {
   const otherwise = check(analyzer, cond.otherwise)
 
   return node('Cond', { test, then, otherwise }, cond.span)
-}
-
-const checkGroup = (analyzer, group) => {
-  return check(analyzer, group.inner)
 }
 
 const checkTuple = (analyzer, tuple) => {

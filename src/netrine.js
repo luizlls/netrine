@@ -27,16 +27,14 @@ fizzbuzz = () =>
 
 factorial = n => if n <= 1 then 1 else n * factorial (n - 1)
 
-factorial = n => fold (*) 1 (range 1 (n + 1))
-
 
 counter = () =>
 do
   total = mut 0;
   div [
-    button "+" { click: () => total := total + 1 }
-    p ["total ", strong "{total}"]
-    button "-" { click: () => total := total - 1 }
+    button "+" { click: () => total := total + 1 },
+    p ["total ", strong "{total}"],
+    button "-" { click: () => total := total - 1 },
   ]
 
 
@@ -54,12 +52,12 @@ try {
   const pipeline = [
     tokenize,
     parse,
-    // (nodes) => JSON.stringify(nodes, null, 4),
-    analyze,
-    compile,
+    (nodes) => JSON.stringify(nodes, null, 4),
+    // analyze,
+    // compile,
   ]
 
-  const output = pipeline.reduce((partial, pass) => pass(partial), source)
+  const output = pipeline.reduce((partial, pass) => pass(partial), 'hello = name => print "Hello, {name}"')
   console.log(output)
 } catch (e) {
   console.error(e)

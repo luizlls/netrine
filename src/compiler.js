@@ -65,7 +65,7 @@ const compileName = (compiler, name) => {
 }
 
 const compileDef = (compiler, def) => {
-  const name  = compileExpr(compiler, def.pattern)
+  const name  = compileExpr(compiler, def.patt)
   const value = compileExpr(compiler, def.value)
   return `var ${name} = ${value};`
 }

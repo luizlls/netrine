@@ -124,6 +124,21 @@ const identifier = (lexer) => {
   }
 }
 
+const special = (lexer) => {
+  bump(lexer)
+
+  while (alphanumeric(current(lexer))) {
+    bump(lexer)
+  }
+
+  switch (slice(lexer)) {
+    case '@js':
+      return 'native'
+    default:
+      return error(lexer, `invalid special form ${slice(lexer)}`)
+  }
+}
+
 const operator = (lexer) => {
   while (symbolic(current(lexer))) {
     bump(lexer)
@@ -181,6 +196,8 @@ const next = (lexer) => {
       } else {
         return operator(lexer)
       }
+    case '@':
+      return special(lexer)
     default:
       if (alpha(char)) {
         return identifier(lexer)

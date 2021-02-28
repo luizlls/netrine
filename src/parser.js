@@ -24,6 +24,8 @@ const parseExpr = (parser) => {
       return parseDo(parser)
     case 'if':
       return parseIf(parser)
+    case 'native':
+      return parseNative(parser)
     default:
       return parseBinary(parser, 0)
   }
@@ -86,10 +88,10 @@ const parseTerm = (parser, apply = true) => {
   return parseApply(parser, value)
 }
 
-const parseDef = (parser, pattern) => {
+const parseDef = (parser, patt) => {
   const mutable = maybeEat(parser, 'mut')
   const value   = parseExpr(parser)
-  return node('Def', { pattern, mutable, value }, span(parser, pattern.span))
+  return node('Def', { patt, mutable, value }, span(parser, patt.span))
 }
 
 const parseSet = (parser, target) => {
@@ -399,7 +401,9 @@ const blockOf = (parser, open, close, fn) => {
 
   while (!matches(parser, close)) {
     result.push(fn(parser))
-    maybeEat(parser, 'comma')
+    if (!maybeEat(parser, 'comma')) {
+      break;
+    }
   }
 
   eat(parser, close)
