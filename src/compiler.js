@@ -30,6 +30,8 @@ const compileExpr = (compiler, expr) => {
       return compileList(compiler, expr)
     case 'Record':
       return compileRecord(compiler, expr)
+    case 'Constructor':
+      return compileConstructor(compiler, expr)
     case 'Symbol':
       return compileSymbol(compiler, expr)
     case 'Number':
@@ -101,15 +103,26 @@ const compileBlock = (compiler, block) => {
 
 const compileCond = (compiler, cond) => {
   const { test, then, otherwise } = cond
-  return `(${compileExpr(compiler, test)} ? ${compileExpr(compiler, then)} : ${compileExpr(compiler, otherwise)})`
+  const _test = compileExpr(compiler, test)
+  const _then = compileExpr(compiler, then)
+  const _else = compileExpr(compiler, otherwise)
+  return `(${_test} ? ${_then} : ${_else})`
+}
+
+const compileConstructor = (compiler, ctor) => {
+  const build = `for (var i = 0; i < arguments.length; i++) { this['_' + i] = arguments[i]; }`
+  const inner = `function ${ctor.name.value}() { ${build}; return this; }`
+  return `var ${ctor.name.value} = (function() { ${inner}; return ${ctor.name.value}; })();`
 }
 
 const compileSymbol = (compiler, symbol) => {
   switch (symbol.name.value) {
     case 'True':  return 'true'
     case 'False': return 'false'
-    default:
-      return error(compiler, symbol, `symbols are not supported for now`)
+    default: {
+      const values = symbol.values.map(value => compileExpr(compiler, value))
+      return `new ${symbol.name.value}(${values})`
+    }
   }
 }
 

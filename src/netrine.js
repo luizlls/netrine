@@ -43,21 +43,22 @@ sum = fold (+) 0
 prod = fold (*) 1
 
 
-numbers = list (range 0 10)
-numbers.[0] := random()
-numbers.[1] := numbers.[0] + 1
+optional = Some 10
 `
+
+const pretty = (nodes) =>
+  JSON.stringify(nodes, null, 4);
 
 try {
   const pipeline = [
     tokenize,
     parse,
-    (nodes) => JSON.stringify(nodes, null, 4),
-    // analyze,
-    // compile,
+    // pretty
+    analyze,
+    compile,
   ]
 
-  const output = pipeline.reduce((partial, pass) => pass(partial), 'hello = name => print "Hello, {name}"')
+  const output = pipeline.reduce((partial, pass) => pass(partial), source)
   console.log(output)
 } catch (e) {
   console.error(e)

@@ -1,5 +1,7 @@
-const analyzer = (module) => ({
-  module,
+const analyzer = () => ({
+  definitions: {},
+  constructors: {},
+  nodes: [],
 })
 
 const node = (kind, props, span) => {
@@ -175,6 +177,10 @@ const checkRecord = (analyzer, record) => {
 const checkSymbol = (analyzer, symbol) => {
   const values = symbol.values.map(value => check(analyzer, value))
 
+  if (analyzer.constructors[symbol.name] === undefined) {
+      analyzer.constructors[symbol.name] = symbol
+  }
+
   return node('Symbol', { name: symbol.name, values }, symbol.span)
 }
 
@@ -184,13 +190,40 @@ const checkTemplate = (analyzer, template) => {
   return node('Template', { elements }, template.span)
 }
 
+const constructor = (analyzer, symbol) => {
+  return node('Constructor', { name: symbol.name }, symbol.span)
+}
+
+const definition = (analyzer, name, def) => {
+  if (Array.isArray(def)) {
+    return combine()
+  } else {
+    return checkDef(analyzer, def)
+  }
+}
+
 const error = (analyzer, span, msg) => {
   throw `Error [${span.lineno}] ${msg}`
 }
 
 exports.analyze = (module) => {
   const aa = analyzer(module)
-  const nodes = module.nodes.map(node => check(aa, node))
+
+  for (const node of module.nodes) {
+    aa.nodes.push(check(aa, node))
+  }
+
+  const nodes = []
+
+  for (const symbol of Object.values(aa.constructors)) {
+    nodes.push(constructor(aa, symbol))
+  }
+
+  for (const [name, def] of Object.entries(aa.definitions)) {
+    nodes.push(definition(aa, name, def))
+  }
+
+  nodes.push(...aa.nodes)
 
   return { nodes }
 }

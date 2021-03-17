@@ -139,16 +139,16 @@ const parseFn = (parser, params) => {
 }
 
 const parseUpper = (parser) => {
-  const { value, span } = eat(parser, 'upper')
+  const { value, span: start } = eat(parser, 'upper')
 
-  const name = node('Name', { value }, span)
+  const name = node('Name', { value }, start)
 
   if (matchLines(parser) && matches(parser, 'dot')) {
     return parseGet(parser, name)
   }
 
   const values = parseTerms(parser)
-  return node('Symbol', { name, values }, span(parser, span))
+  return node('Symbol', { name, values }, span(parser, start))
 }
 
 const parseTerms = (parser) => {
