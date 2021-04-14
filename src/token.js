@@ -1,5 +1,5 @@
 exports.defaultToken = () => ({
-  kind: 'eof', span: { lineno: 0, start: 0, offset: 0 }
+  kind: 'eof', meta: { line: 0, span: { start: 0, offset: 0 } }
 })
 
 exports.operatorInfo = {
@@ -28,11 +28,6 @@ exports.operatorInfo = {
 }
 
 exports.keywords = {
-  'do': 'do',
-  'if': 'if',
-  'then': 'then',
-  'else': 'else',
-  'is' : 'is',
   'and': 'and',
   'or' : 'or',
   'not': 'not',

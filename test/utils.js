@@ -1,10 +1,11 @@
 const removeSpans = (node) => {
-  if (!node.kind && !Array.isArray(node)) {
+  if (!node || !node.kind && !Array.isArray(node)) {
     return node
   }
 
-  if (node.hasOwnProperty('span')) {
-    delete node.span
+  if (node.hasOwnProperty('meta')) {
+    delete node.meta.span
+    delete node.meta.line
   }
 
   for (const prop in node) {

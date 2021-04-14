@@ -15,10 +15,12 @@ const token = (lexer, kind, value = null) => {
   lexer.tokens.push({
     kind,
     value,
-    span: {
-      lineno: lexer.line,
-      start: lexer.prev,
-      offset: lexer.curr,
+    meta: {
+      line: lexer.line,
+      span: {
+        start: lexer.prev,
+        offset: lexer.curr,
+      }
     }
   })
   return lexer
@@ -111,6 +113,7 @@ const identifier = (lexer) => {
     case '!': {
       bump(lexer)
     }
+    break
   }
 
   const ident = slice(lexer)
@@ -124,19 +127,9 @@ const identifier = (lexer) => {
   }
 }
 
-const special = (lexer) => {
+const wildcard = (lexer) => {
   bump(lexer)
-
-  while (alphanumeric(current(lexer))) {
-    bump(lexer)
-  }
-
-  switch (slice(lexer)) {
-    case '@js':
-      return 'native'
-    default:
-      return error(lexer, `invalid special form ${slice(lexer)}`)
-  }
+  return token(lexer, 'wildcard')
 }
 
 const operator = (lexer) => {
@@ -196,8 +189,12 @@ const next = (lexer) => {
       } else {
         return operator(lexer)
       }
-    case '@':
-      return special(lexer)
+    case '_':
+      if (alpha(peek(lexer))) {
+        return identifier(lexer)
+      } else {
+        return wildcard(lexer)
+      }
     default:
       if (alpha(char)) {
         return identifier(lexer)
