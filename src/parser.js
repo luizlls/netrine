@@ -9,195 +9,241 @@ const parser = (tokens) => ({
   nodes: [],
 })
 
-const node = (kind, props, span) => {
-  return { kind, ...props, span }
+const node = (kind, value, meta) => {
+  return { kind, value, meta }
 }
 
-const identifier = (parser) => {
-  const { value, span } = eat(parser, 'lower')
-  return node('Name', { value }, span)
+const expr = (kind, args, meta) => {
+  args = Array.isArray(args) ? args : [args]
+  return { kind, args, meta }
+}
+
+const parseIdent = (parser) => {
+  const { value, meta } = eat(parser, 'lower')
+  return node('name', value, meta)
 }
 
 const parseExpr = (parser) => {
   switch (parser.token.kind) {
-    case 'do':
-      return parseDo(parser)
+    case 'fn':
+      return parseFn(parser)
     case 'if':
       return parseIf(parser)
-    case 'native':
-      return parseNative(parser)
-    default:
-      return parseBinary(parser, 0)
+    case 'for':
+      return parseFor(parser)
+    case 'case':
+      return parseCase(parser)
+    default: {
+      if (startTerm(parser)) {
+        const term = parseTerm(parser)
+
+        if (term.kind === 'name') {
+          switch (parser.token.kind) {
+            case 'equals':
+              return parseDef(parser, term)
+            case 'walrus':
+              return parseSet(parser, term)
+            default:
+              break
+          }
+        }
+
+        if (operatorInfo[parser.token.kind] !== undefined) {
+          return parseBinary(parser, 0, term)
+        } else if (startTerm(parser) && matchLines(parser)) {
+          return parseApply(parser, term)
+        } else {
+          return term
+        }
+      } else if (operatorInfo[parser.token.kind] !== undefined) {
+        return parseUnary(parser)
+      } else {
+        const { kind, meta } = parser.token
+        return error(parser, meta, `Unexpected ${kind}`)
+      }
+    }
   }
 }
 
-const parseTerm = (parser, apply = true) => {
+const startTerm = (parser) => {
+  switch (parser.token.kind) {
+    case 'lower':
+    case 'upper':
+    case 'lparen':
+    case 'lbracket':
+    case 'lbrace':
+    case 'number':
+    case 'string':
+    case 'string start':
+      return true
+    default:
+      return false
+  }
+}
+
+const parseTerm = (parser) => {
   let value
   switch (parser.token.kind) {
     case 'lower':
-      value = identifier(parser); break
-    case 'lparen':
-      value = parseParens(parser); break
-    case 'lbrace':
-      value = parseRecord(parser); break
-    case 'lbracket':
-      value = parseList(parser); break
+      value = parseIdent(parser); break
     case 'upper':
       value = parseUpper(parser); break
+    case 'lparen':
+      value = parseParens(parser); break
+    case 'lbracket':
+      value = parseBrackets(parser); break
+    case 'lbrace':
+      value = parseBlock(parser); break
     case 'number':
       value = parseNumber(parser); break
     case 'string':
-      value = parseString(parser, 'string'); break
+      value = parseString(parser); break
     case 'string start':
       value = parseTemplate(parser); break
     default:
-      const { kind, span } = parser.token
-
-      if (operatorInfo[kind]) {
-        value = parseUnary(parser); break
-      } else {
-        return error(parser, span, `unexpected ${kind}`)
-      }
+      const { kind, meta } = parser.token
+      return error(parser, meta, `unexpected ${kind}`)
   }
 
-  if (!apply) {
-    switch (parser.token.kind) {
-      case 'dot':
-        return parseGet(parser, value)
-      default:
-        return value
-    }
+  if (tokenIs(parser, 'dot')) {
+    value = parseGet(parser, value)
   }
 
-  loop:
-  while (!done(parser)) {
-    switch (parser.token.kind) {
-      case 'equals':
-        bump(parser)
-        return parseDef(parser, value); break
-      case 'walrus':
-        bump(parser)
-        return parseSet(parser, value); break
-      case 'dot':
-        value = parseGet(parser, value); break
-      default:
-        break loop
-    }
-  }
-
-  return parseApply(parser, value)
+  return value
 }
 
-const parseDef = (parser, patt) => {
+const parseDef = (parser, name) => {
+  eat(parser, 'equals')
   const mutable = maybeEat(parser, 'mut')
-  const value   = parseExpr(parser)
-  return node('Def', { patt, mutable, value }, span(parser, patt.span))
+  const value = parseExpr(parser)
+  const meta  = { mutable, ...name.meta }
+  return expr('def', [name, value], span(parser, meta))
 }
 
 const parseSet = (parser, target) => {
+  eat(parser, 'walrus')
   const value = parseExpr(parser)
-  return node('Set', { target, value }, span(parser, target.span))
+  return expr('set', [target, value], span(parser, target.meta))
 }
 
 const parseGet = (parser, expr) => {
   while (maybeEat(parser, 'dot')) {
     let name
     let index
-    if (matches(parser, 'lbracket')) {
+    if (tokenIs(parser, 'lbracket')) {
       eat(parser, 'lbracket')
       index = parseExpr(parser)
       eat(parser, 'rbracket')
     } else {
-      name = identifier(parser)
+      name = parseIdent(parser)
     }
-    expr = node('Get', { expr, name, index }, span(parser, expr.span))
+    expr = expr('get', [expr, name || index], span(parser, expr.meta))
   }
   return expr
 }
 
-const parseFn = (parser, params) => {
-  eat(parser, 'arrow')
-
-  params.forEach(param => {
-    switch (param.kind) {
-      case 'Name':
-      case 'Unit':
-      case 'Tuple':
-      case 'List':
-      case 'Record':
-      case 'Symbol':
-      case 'String':
-      case 'Number': break;
-      default:
-        return error(parser, param.span, 'invalid pattern for a function parameter')
-    }
-  })
-
-  const value = parseExpr(parser)
-
-  return node('Fn', { params, value }, span(parser, params[0].span))
-}
-
 const parseUpper = (parser) => {
-  const { value, span: start } = eat(parser, 'upper')
+  const { value, meta } = eat(parser, 'upper')
 
-  const name = node('Name', { value }, start)
+  const name = node('name', value, meta)
 
-  if (matchLines(parser) && matches(parser, 'dot')) {
+  if (matchLines(parser) && tokenIs(parser, 'dot')) {
     return parseGet(parser, name)
   }
 
-  const values = parseTerms(parser)
-  return node('Symbol', { name, values }, span(parser, start))
+  const values = parseArgs(parser)
+  return expr('symbol', [name, values], span(parser, meta))
 }
 
-const parseTerms = (parser) => {
-  const terms = []
+const parseArgs = (parser) => {
+  const args = []
 
-  loop:
-  while (matchLines(parser)) {
-    switch (parser.token.kind) {
-      case 'lower':
-      case 'upper':
-      case 'number':
-      case 'string':
-      case 'string start':
-      case 'lparen':
-      case 'lbrace':
-      case 'lbracket': {
-        terms.push(parseTerm(parser, false))
-        break
-      }
-      default:
-        break loop
+  while (startTerm(parser) && matchLines(parser)) {
+    args.push(parseTerm(parser))
+  }
+
+  return args
+}
+
+const parseApply = (parser, fn) => {
+  const args = parseArgs(parser)
+  return expr('apply', [fn, ...args], span(parser, fn.meta))
+}
+
+const parseUnary = (parser) => {
+  const { kind, meta } = parser.token
+
+  const operator = node('name', kind, meta)
+
+  if (parser.prev.kind === 'lparen'
+  &&  parser.peek.kind === 'rparen') {
+    bump(parser)
+    return operator
+  }
+
+  const info = operatorInfo[kind]
+
+  if (info === undefined || info.precedence !== undefined) {
+    return error(parser, meta, `'${kind}' is not a valid unary (prefix) operator`)
+  }
+
+  bump(parser)
+
+  return expr('apply', [operator, parseTerm(parser)], span(parser, meta))
+}
+
+const parseBinary = (parser, minimum, lhs) => {
+  if (lhs == null) {
+      lhs = parseExpr(parser)
+  }
+
+  while (!done(parser)) {
+    const { kind, meta } = parser.token
+
+    if (operatorInfo[kind] === undefined) {
+      break;
     }
+
+    const { precedence,
+            associativity } = operatorInfo[kind];
+
+    if (precedence == null) {
+      return error(parser, meta, `'${kind}' is not a valid binary (infix) operator`)
+    }
+
+    if (precedence < minimum) {
+        break;
+    }
+
+    const operator = node('name', kind, meta)
+
+    bump(parser)
+
+    let fix = 0
+    switch (associativity) {
+        case 'right':
+          fix = 0; break
+        case 'left':
+        case 'none':
+          fix = 1; break
+    }
+
+    const _rhs = parseBinary(parser, precedence + fix)
+    const _lhs = lhs
+
+    lhs = expr('apply', [operator, _lhs, _rhs], span(parser, lhs.meta))
   }
 
-  return terms
-}
-
-const parseApply = (parser, callee) => {
-  const args = parseTerms(parser)
-
-  if (matchLines(parser) && matches(parser, 'arrow')) {
-    return parseFn(parser, [callee, ...args])
-  }
-
-  if (args.length === 0) {
-    return callee
-  } else {
-    return args
-      .reduce((fn, arg) => node('Apply', { fn, arg }, arg.span), callee)
-  }
+  return lhs
 }
 
 const parseNumber = (parser) => {
-  const { value, span } = eat(parser, 'number')
-  return node('Number', { value }, span)
+  const { value, meta } = eat(parser, 'number')
+  return node('number', value, meta)
 }
 
 const parseTemplate = (parser) => {
-  const start = parser.token.span
+  const meta = parser.token.meta
 
   const parts = []
 
@@ -235,11 +281,11 @@ const parseTemplate = (parser) => {
     }
   })
 
-  return node('Template', { elements }, span(parser, start))
+  return expr('template', elements, span(parser, meta))
 }
 
-const parseString = (parser, kind) => {
-  const { value: raw, span } = eat(parser, kind)
+const parseString = (parser, kind = 'string') => {
+  const { value: raw, meta } = eat(parser, kind)
 
   let value = raw
   switch (kind) {
@@ -258,132 +304,113 @@ const parseString = (parser, kind) => {
     default:
       value = raw
   }
-  return node('String', { value, raw }, span)
+  return node('string', value, { raw, ...meta })
 }
 
 const parseParens = (parser) => {
-  const start = parser.token.span
+  const meta = parser.token.meta
   const items = blockOf(parser, 'lparen', 'rparen', parseExpr)
 
-  if (items.length === 0) {
-    return node('Unit', { }, span(parser, start))
-  }
-  if (items.length === 1) {
-    return items.pop()
-  }
-  return node('Tuple', { items }, span(parser, start))
-}
-
-const parseList = (parser) => {
-  const start = parser.token.span
-  const items = blockOf(parser, 'lbracket', 'rbracket', parseExpr)
-
-  return node('List',  { items }, span(parser, start))
-}
-
-const parseRecord = (parser) => {
-  const start = parser.token.span
-  const properties = blockOf(parser, 'lbrace', 'rbrace', parseProperty)
-
-  return node('Record', { properties }, span(parser, start))
-}
-
-const parseProperty = (parser) => {
-  const name = identifier(parser)
-
-  if (!matches(parser, 'comma')
-   && !matches(parser, 'rbrace')
-   && !matchLines(parser)) {
-    return error(parser, parser.token.span, 'the property name and value must start in the same line')
-  }
-
-  if (matches(parser, 'colon')) {
-    bump(parser)
-    return { name, value: parseExpr(parser) }
-  } else {
-    return { name, value: name }
+  switch (items.length) {
+    case 0:
+      return node('unit', undefined, span(parser, meta))
+    case 1:
+      return expr('group', items, span(parser, meta))
+    default:
+      return expr('tuple', items, span(parser, meta))
   }
 }
 
-const parseUnary = (parser) => {
-  const { kind, span: start } = parser.token
+const parseBrackets = (parser) => {
+  const meta = parser.token.meta
 
-  const operator = node('Name', { value: kind }, start)
+  let items = []
+  let kind
 
-  if (parser.prev.kind === 'lparen'
-  &&  parser.peek.kind === 'rparen') {
-    bump(parser)
-    return operator
+  eat(parser, 'lbracket')
+
+  if (tokenIs(parser, 'colon') && peekIs(parser, 'rbracket')) {
+    kind = 'Dict'
+    bump(parser) // :
   }
-
-  bump(parser)
-
-  const rhs = parseTerm(parser)
-  return node('Unary', { operator, rhs }, span(parser, start))
-}
-
-const parseBinary = (parser, minPrecedence) => {
-  let expr = parseTerm(parser)
 
   while (!done(parser)) {
-    const { kind, span: start } = parser.token
-
-    const info = operatorInfo[kind]
-
-    if (info == null) {
-      break;
+    if (tokenIs(parser, 'rbracket')) {
+      break
     }
 
-    const { precedence, associativity } = info;
+    let key = parseExpr(parser)
 
-    if (precedence == null) {
-      return error(parser, start, `'${kind}' is not a valid binary (infix) operator`)
+    if (kind === undefined) {
+      if (tokenIs(parser, 'colon') && matchLines(parser)) {
+        kind = 'dict'
+      } else {
+        kind = 'list'
+      }
     }
 
-    if (precedence < minPrecedence) {
-        break;
+    let value = key
+    if (kind === 'dict') {
+      eat(parser, 'colon')
+      value = parseExpr(parser)
     }
 
-    const operator = node('Name', { value: kind }, start)
-
-    bump(parser)
-
-    let fix = 0
-    switch (associativity) {
-        case 'right':
-          fix = 0; break
-        case 'left':
-        case 'none':
-          fix = 1; break
+    if (kind === 'dict') {
+      items.push([key, value])
+    } else {
+      items.push(value)
     }
 
-    const rhs = parseBinary(parser, precedence + fix)
-    const lhs = expr
-
-    expr = node('Binary', { operator, lhs, rhs }, span(parser, operator.span))
+    if (!maybeEat(parser, 'comma')) {
+      break
+    }
   }
 
-  return expr
+  eat(parser, 'rbracket')
+
+  return expr(kind, items, span(parser, meta))
 }
 
-const parseDo = (parser) => {
-  const start = parser.token.span
+const parseBlock = (parser) => {
+  const meta = parser.token.meta
   const items = []
 
-  eat(parser, 'do')
-
+  eat(parser, 'lbrace')
   while (!done(parser)) {
-    items.push(parseExpr(parser))
-    if (!maybeEat(parser, 'semi')) {
-      break;
+    if (tokenIs(parser, 'rbrace')) {
+      break
     }
+    items.push(parseExpr(parser))
+  }
+  eat(parser, 'rbrace')
+
+  return expr('block', items, span(parser, meta))
+}
+
+const parseFn = (parser) => {
+  const meta = parser.token.meta
+
+  eat(parser, 'fn')
+
+  const args = []
+  while (matchLines(parser) && tokenIs(parser, 'lower')) {
+    args.push(parseIdent(parser))
   }
 
-  return node('Block', { items }, span(parser, start))
+  let value
+  if (matchLines(parser)) {
+    value = parseExpr(parser)
+  } else if (args.length) {
+    value = args.pop()
+  } else {
+    return error(parser, meta, 'fn `value` must start in the same line')
+  }
+
+  return expr('fn', [args, value], span(parser, meta))
 }
 
 const parseIf = (parser) => {
-  const start = parser.token.span
+  const meta = parser.token.meta
   eat(parser, 'if')
   const test = parseExpr(parser)
   eat(parser, 'then')
@@ -391,7 +418,38 @@ const parseIf = (parser) => {
   eat(parser, 'else')
   const otherwise = parseExpr(parser)
 
-  return node('If', { test, then, otherwise }, span(parser, start))
+  return expr('if', [test, then, otherwise], span(parser, meta))
+}
+
+const parseFor = (parser) => {
+  const meta = parser.token.meta
+  eat(parser, 'for')
+
+  const target = parseTerm(parser)
+  const source = parseTerm(parser)
+  const execution = parseExpr(parser)
+
+  return expr('for', [target, source, execution], span(parser, meta))
+}
+
+const parseCase = (parser) => {
+  const meta = parser.token.meta
+  eat(parser, 'case')
+  const value = parseExpr(parser)
+  eat(parser, 'of')
+  const cases = []
+
+  while (!done(parser)) {
+    const test = parseTerm(parser)
+    eat(parser, 'arrow')
+    const then = parseExpr(parser)
+    cases.push([test, then])
+    if (!maybeEat(parser, 'pipe')) {
+      break
+    }
+  }
+
+  return expr('case', [value, ...cases], span(parser, meta))
 }
 
 const blockOf = (parser, open, close, fn) => {
@@ -399,7 +457,7 @@ const blockOf = (parser, open, close, fn) => {
 
   eat(parser, open)
 
-  while (!matches(parser, close)) {
+  while (!tokenIs(parser, close)) {
     result.push(fn(parser))
     if (!maybeEat(parser, 'comma')) {
       break;
@@ -411,17 +469,17 @@ const blockOf = (parser, open, close, fn) => {
   return result
 }
 
-const span = (parser, start, end = null) => {
-  end = end || parser.prev.span
-  return { ...start, offset: end.offset }
+const span = (parser, meta, end = null) => {
+  end = end || parser.prev.meta.span
+  return { ...meta, span: { ...meta.span, offset: end.offset } }
 }
 
 const matchLines = (parser) => {
-  return parser.token.span.lineno === parser.prev.span.lineno
+  return parser.token.meta.line === parser.prev.meta.line
 }
 
 const maybeEat = (parser, kind) => {
-  if (matches(parser, kind)) {
+  if (tokenIs(parser, kind)) {
     bump(parser)
     return true
   } else {
@@ -430,12 +488,12 @@ const maybeEat = (parser, kind) => {
 }
 
 const eat = (parser, expected) => {
-  if (matches(parser, expected)) {
+  if (tokenIs(parser, expected)) {
     bump(parser)
     return parser.prev
   } else {
-    const { kind, span } = parser.token
-    return error(parser, span, `expected '${expected}', but found '${kind}'`)
+    const { kind, meta } = parser.token
+    return error(parser, meta, `expected '${expected}', but found '${kind}'`)
   }
 }
 
@@ -451,12 +509,16 @@ const bump = (parser) => {
   return parser
 }
 
-const matches = (parser, kind) => {
+const tokenIs = (parser, kind) => {
   return parser.token.kind === kind
 }
 
-const error = (parser, span, msg) => {
-  throw `Error [${span.lineno}]: ${msg}`
+const peekIs = (parser, kind) => {
+  return parser.peek.kind === kind
+}
+
+const error = (parser, meta, msg) => {
+  throw `Error [${meta.line}]: ${msg}`
 }
 
 exports.parse = (tokens) => {

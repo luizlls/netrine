@@ -1,65 +1,55 @@
+const readline = require('readline')
+const filesystem = require('fs')
+
 const { tokenize } = require('./lexer')
 const { parse } = require('./parser')
 const { analyze } = require('./analysis')
 const { compile } = require('./compiler')
+const { pretty, sexpr } = require('./pprint')
 
 
-const source = `
-hello = name =>
-  print "Hello, {name}!"
+const file = (path) => {
+  filesystem.readFile(path, null, (err, data) => {
+    console.log(eval(data.toString('utf8')))
+  })
+}
 
 
-fizzbuzz = () =>
-  (range 0 100)
-  |> map (
-      num =>
-        if zero? (num % 15)
-          then "FizzBuzz"
-        else if zero? (num % 3)
-          then "Fizz"
-        else if zero? (num % 5)
-          then "Buzz"
-        else
-          string num
-    )
-  |> each print
+const repl = () => {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false,
+  })
+
+  process.stdout.write('>>>> ')
+
+  rl.on('line', line => {
+    console.log(eval(line))
+    process.stdout.write('>>>> ')
+  })
+}
 
 
-factorial = n => if n <= 1 then 1 else n * factorial (n - 1)
+const pipeline = [
+  tokenize,
+  parse,
+  pretty,
+  // analyze,
+  // compile,
+]
 
-
-counter = () =>
-do
-  total = mut 0;
-  div [
-    button "+" { click: () => total := total + 1 },
-    p ["total ", strong "{total}"],
-    button "-" { click: () => total := total - 1 },
-  ]
-
-
-sum = fold (+) 0
-
-prod = fold (*) 1
-
-
-optional = Some 10
-`
-
-const pretty = (nodes) =>
-  JSON.stringify(nodes, null, 4);
+const eval = (source) => {
+  return pipeline.reduce((partial, pass) => pass(partial), source)
+}
 
 try {
-  const pipeline = [
-    tokenize,
-    parse,
-    // pretty
-    analyze,
-    compile,
-  ]
-
-  const output = pipeline.reduce((partial, pass) => pass(partial), source)
-  console.log(output)
+  const args = process.argv.slice(2)
+  if (args.length) {
+    file(args.shift())
+  } else {
+    repl()
+  }
 } catch (e) {
   console.error(e)
 }

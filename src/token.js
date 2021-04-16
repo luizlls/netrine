@@ -1,5 +1,5 @@
 exports.defaultToken = () => ({
-  kind: 'eof', span: { lineno: 0, start: 0, offset: 0 }
+  kind: 'eof', meta: { line: 0, span: { start: 0, offset: 0 } }
 })
 
 exports.operatorInfo = {
@@ -7,7 +7,7 @@ exports.operatorInfo = {
   'bitnot': { associativity: 'none' },
   'mul':    { associativity: 'left',  precedence: 11, },
   'div':    { associativity: 'left',  precedence: 11, },
-  'rem':    { associativity: 'left',  precedence: 11, },
+  'mod':    { associativity: 'left',  precedence: 11, },
   'add':    { associativity: 'left',  precedence: 10, },
   'sub':    { associativity: 'left',  precedence: 10, },
   'concat': { associativity: 'left',  precedence: 10, },
@@ -24,32 +24,37 @@ exports.operatorInfo = {
   'eq':     { associativity: 'left',  precedence: 5,  },
   'and':    { associativity: 'left',  precedence: 4,  },
   'or':     { associativity: 'left',  precedence: 3,  },
-  'pipe':   { associativity: 'left',  precedence: 2,  },
+  'lpipe':  { associativity: 'left',  precedence: 2,  },
+  'rpipe':  { associativity: 'left',  precedence: 2,  },
 }
 
 exports.keywords = {
-  'do': 'do',
+  'fn': 'fn',
   'if': 'if',
   'then': 'then',
   'else': 'else',
-  'is' : 'is',
+  'case': 'case',
+  'of': 'of',
+  'for': 'for',
   'and': 'and',
   'or' : 'or',
   'not': 'not',
   'mut': 'mut',
 }
 
+
 exports.operators = {
-  '=>' : 'arrow',
+  '->' : 'arrow',
   ':'  : 'colon',
   '.'  : 'dot',
   '='  : 'equals',
   ':=' : 'walrus',
+  '|'  : 'pipe',
   '+'  : 'add',
   '-'  : 'sub',
   '*'  : 'mul',
   '/'  : 'div',
-  '%'  : 'rem',
+  '%'  : 'mod',
   '&&&': 'bitand',
   '|||': 'bitor',
   '~~~': 'bitnot',
@@ -57,7 +62,8 @@ exports.operators = {
   '>>>': 'bitshl',
   '<<<': 'bitshr',
   '++' : 'concat',
-  '|>' : 'pipe',
+  '|>' : 'lpipe',
+  '<|' : 'rpipe',
   '==' : 'eq',
   '!=' : 'ne',
   '<'  : 'lt',

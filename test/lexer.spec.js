@@ -17,15 +17,16 @@ describe('Lexer', () => {
     })
 
     it('tokenize keywords', () => {
-      const tokens = tokenize('if x > y then X else Y')
-      assert.strictEqual(tokens[0].kind, 'if')
-      assert.strictEqual(tokens[1].kind, 'lower')
-      assert.strictEqual(tokens[2].kind, 'gt')
-      assert.strictEqual(tokens[3].kind, 'lower')
-      assert.strictEqual(tokens[4].kind, 'then')
+      const tokens = tokenize('value = mut True and False or not True')
+      assert.strictEqual(tokens[0].kind, 'lower')
+      assert.strictEqual(tokens[1].kind, 'equals')
+      assert.strictEqual(tokens[2].kind, 'mut')
+      assert.strictEqual(tokens[3].kind, 'upper')
+      assert.strictEqual(tokens[4].kind, 'and')
       assert.strictEqual(tokens[5].kind, 'upper')
-      assert.strictEqual(tokens[6].kind, 'else')
-      assert.strictEqual(tokens[7].kind, 'upper')
+      assert.strictEqual(tokens[6].kind, 'or')
+      assert.strictEqual(tokens[7].kind, 'not')
+      assert.strictEqual(tokens[8].kind, 'upper')
     })
 
     it('tokenize operators', () => {
@@ -34,13 +35,13 @@ describe('Lexer', () => {
       assert.strictEqual(tokens[3].kind, 'mul')
       assert.strictEqual(tokens[5].kind, 'div')
       assert.strictEqual(tokens[7].kind, 'sub')
-      assert.strictEqual(tokens[9].kind, 'pipe')
-      assert.strictEqual(tokens[11].kind, 'rem')
+      assert.strictEqual(tokens[9].kind, 'lpipe')
+      assert.strictEqual(tokens[11].kind, 'mod')
       assert.strictEqual(tokens[13].kind, 'concat')
     })
 
     it('tokenize numbers', () => {
-      const [integer, _, decimal] = tokenize('42 + 3.1459')
+      const [integer, op, decimal] = tokenize('42 + 3.1459')
       assert.strictEqual(integer.kind, 'number')
       assert.strictEqual(decimal.kind, 'number')
     })
