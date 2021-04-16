@@ -35,13 +35,13 @@ describe('Lexer', () => {
       assert.strictEqual(tokens[3].kind, 'mul')
       assert.strictEqual(tokens[5].kind, 'div')
       assert.strictEqual(tokens[7].kind, 'sub')
-      assert.strictEqual(tokens[9].kind, 'pipe')
-      assert.strictEqual(tokens[11].kind, 'rem')
+      assert.strictEqual(tokens[9].kind, 'lpipe')
+      assert.strictEqual(tokens[11].kind, 'mod')
       assert.strictEqual(tokens[13].kind, 'concat')
     })
 
     it('tokenize numbers', () => {
-      const [integer, _, decimal] = tokenize('42 + 3.1459')
+      const [integer, op, decimal] = tokenize('42 + 3.1459')
       assert.strictEqual(integer.kind, 'number')
       assert.strictEqual(decimal.kind, 'number')
     })

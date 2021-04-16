@@ -1,4 +1,4 @@
-const { keywords, operators } = require('./token')
+const { keywords, operators, symbols } = require('./token')
 
 const SYMBOLS = '.%^&|:=~+-*<>!/'
 
@@ -139,12 +139,11 @@ const operator = (lexer) => {
 
   const operator = operators[slice(lexer)]
 
-  if (operator) {
+  if (operator != undefined) {
     return token(lexer, operator)
   } else {
     return error(lexer, `Invalid operator '${slice(lexer)}'`)
   }
-
 }
 
 const next = (lexer) => {

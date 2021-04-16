@@ -8,23 +8,23 @@ describe('Parser', () => {
   describe('parser', () => {
 
     it('parse basic definition', () => {
-      const { nodes: [node] } = parse(tokenize('variable = 1'))
+      const { nodes: [node] } = parse(tokenize('var = 1'))
 
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "Def",
+        kind: "def",
         meta: {
           mutable: false,
         },
         args: [
           {
-            kind: "Name",
-            value: "variable",
+            kind: "name",
+            value: "var",
             meta: {}
           },
           {
-            kind: "Number",
+            kind: "number",
             value: "1",
             meta: {}
           }
@@ -39,31 +39,31 @@ describe('Parser', () => {
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "List",
+        kind: "list",
         meta: {},
         args: [
           {
-            kind: "Number",
+            kind: "number",
             value: "1",
             meta: {}
           },
           {
-            kind: "String",
+            kind: "string",
             value: "A",
             meta: {
               raw: "\"A\""
             }
           },
           {
-            kind: "Number",
+            kind: "number",
             value: "3.14",
             meta: {}
           },
           {
-            kind: "Symbol",
+            kind: "symbol",
             args: [
               {
-                kind: "Name",
+                kind: "name",
                 value: "Ok",
                 meta: {}
               },
@@ -72,10 +72,10 @@ describe('Parser', () => {
             meta: {}
           },
           {
-            kind: "List",
+            kind: "list",
             args: [
               {
-                kind: "String",
+                kind: "string",
                 value: "nested",
                 meta: {
                   raw: "\"nested\""
@@ -89,46 +89,46 @@ describe('Parser', () => {
     })
 
     it('parse basic dict definition', () => {
-      const { nodes: [node] } = parse(tokenize('["number": 1, "symbol": Some 5, "list": [1, "A", "3.14"], "nested": ["inner": "value"]]'))
+      const { nodes: [node] } = parse(tokenize('["number": 1, "symbol": Some 5, "list": [1, "A", 3.14], "nested": ["inner": "value"]]'))
 
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "Dict",
+        kind: "dict",
         args: [
           [
             {
-              kind: "String",
+              kind: "string",
               value: "number",
               meta: {
                 raw: "\"number\"",
               }
             },
             {
-              kind: "Number",
+              kind: "number",
               value: "1",
               meta: {}
             }
           ],
           [
             {
-              kind: "String",
+              kind: "string",
               value: "symbol",
               meta: {
                 raw: "\"symbol\"",
               }
             },
             {
-              kind: "Symbol",
+              kind: "symbol",
               args: [
                 {
-                  kind: "Name",
+                  kind: "name",
                   value: "Some",
                   meta: {}
                 },
                 [
                   {
-                    kind: "Number",
+                    kind: "number",
                     value: "5",
                     meta: {}
                   }
@@ -139,33 +139,31 @@ describe('Parser', () => {
           ],
           [
             {
-              kind: "String",
+              kind: "string",
               value: "list",
               meta: {
                 raw: "\"list\"",
               }
             },
             {
-              kind: "List",
+              kind: "list",
               args: [
                 {
-                  kind: "Number",
+                  kind: "number",
                   value: "1",
                   meta: {}
                 },
                 {
-                  kind: "String",
+                  kind: "string",
                   value: "A",
                   meta: {
                     raw: "\"A\"",
                   }
                 },
                 {
-                  kind: "String",
+                  kind: "number",
                   value: "3.14",
-                  meta: {
-                    raw: "\"3.14\"",
-                  }
+                  meta: {}
                 }
               ],
               meta: {
@@ -174,25 +172,25 @@ describe('Parser', () => {
           ],
           [
             {
-              kind: "String",
+              kind: "string",
               value: "nested",
               meta: {
                 raw: "\"nested\"",
               }
             },
             {
-              kind: "Dict",
+              kind: "dict",
               args: [
                 [
                   {
-                    kind: "String",
+                    kind: "string",
                     value: "inner",
                     meta: {
                       raw: "\"inner\"",
                     }
                   },
                   {
-                    kind: "String",
+                    kind: "string",
                     value: "value",
                     meta: {
                       raw: "\"value\"",
@@ -214,41 +212,43 @@ describe('Parser', () => {
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "Def",
+        kind: "def",
         meta: {
           mutable: false,
         },
         args: [
           {
-            kind: "Name",
+            kind: "name",
             value: "hello",
             meta: {}
           },
           {
-            kind: "Apply",
+            kind: "fn",
             args: [
+              [],
               {
-                kind: "Name",
-                value: "fn",
-                meta: {}
-              },
-              {
-                kind: "Apply",
+                kind: "group",
                 args: [
                   {
-                    kind: "Name",
-                    value: "print",
+                    kind: "apply",
+                    args: [
+                      {
+                        kind: "name",
+                        value: "print",
+                        meta: {}
+                      },
+                      {
+                        kind: "string",
+                        value: "Hello!",
+                        meta: {
+                          raw: "\"Hello!\""
+                        }
+                      }
+                    ],
                     meta: {}
-                  },
-                  {
-                    kind: "String",
-                    value: "Hello!",
-                    meta: {
-                      raw: "\"Hello!\""
-                    }
                   }
                 ],
-                meta: {}
+                meta: {},
               }
             ],
             meta: {}
