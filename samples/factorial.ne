@@ -1,5 +1,6 @@
-factorial = fn n {
-  case n of
-    1 -> 1
-  | n -> n * factorial (n - 1)
-}
+factorial =
+  fn n {
+    if (n <= 1) 1 else: n * factorial (n - 1)
+  }
+
+factorial 20

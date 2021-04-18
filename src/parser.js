@@ -24,44 +24,32 @@ const parseIdent = (parser) => {
 }
 
 const parseExpr = (parser) => {
-  switch (parser.token.kind) {
-    case 'fn':
-      return parseFn(parser)
-    case 'if':
-      return parseIf(parser)
-    case 'for':
-      return parseFor(parser)
-    case 'case':
-      return parseCase(parser)
-    default: {
-      if (startTerm(parser)) {
-        const term = parseTerm(parser)
-
-        if (term.kind === 'name') {
-          switch (parser.token.kind) {
-            case 'equals':
-              return parseDef(parser, term)
-            case 'walrus':
-              return parseSet(parser, term)
-            default:
-              break
+  if (tokenIs(parser, 'case')) {
+    return parseCase(parser)
+  } else if (operatorInfo[parser.token.kind] !== undefined) {
+    return parseUnary(parser)
+  } else if (startTerm(parser)) {
+    const term = parseTerm(parser)
+    if (term.kind === 'name') {
+      switch (parser.token.kind) {
+        case 'equals':
+          return parseDef(parser, term)
+        case 'walrus':
+          return parseSet(parser, term)
+        default:
+          if (startTerm(parser) && matchLines(parser)) {
+            return parseApply(parser, term)
           }
-        }
-
-        if (operatorInfo[parser.token.kind] !== undefined) {
-          return parseBinary(parser, 0, term)
-        } else if (startTerm(parser) && matchLines(parser)) {
-          return parseApply(parser, term)
-        } else {
-          return term
-        }
-      } else if (operatorInfo[parser.token.kind] !== undefined) {
-        return parseUnary(parser)
-      } else {
-        const { kind, meta } = parser.token
-        return error(parser, meta, `Unexpected ${kind}`)
+          break
       }
     }
+    if (operatorInfo[parser.token.kind] !== undefined) {
+      return parseBinary(parser, 0, term)
+    } else {
+      return term
+    }
+  } else {
+    return error(parser, parser.token.meta, `Unexpected ${parser.token.kind}`)
   }
 }
 
@@ -75,6 +63,8 @@ const startTerm = (parser) => {
     case 'number':
     case 'string':
     case 'string start':
+    case 'kwarg':
+    case 'wildcard':
       return true
     default:
       return false
@@ -100,6 +90,10 @@ const parseTerm = (parser) => {
       value = parseString(parser); break
     case 'string start':
       value = parseTemplate(parser); break
+    case 'kwarg':
+      value = parseKwArg(parser); break
+    case 'wildcard':
+      value = parseWildcard(parser); break
     default:
       const { kind, meta } = parser.token
       return error(parser, meta, `unexpected ${kind}`)
@@ -159,7 +153,12 @@ const parseArgs = (parser) => {
   const args = []
 
   while (startTerm(parser) && matchLines(parser)) {
-    args.push(parseTerm(parser))
+    const kwarg = prevIs(parser, 'kwarg')
+    if (kwarg) {
+      args.push(parseExpr(parser))
+    } else {
+      args.push(parseTerm(parser))
+    }
   }
 
   return args
@@ -175,8 +174,8 @@ const parseUnary = (parser) => {
 
   const operator = node('name', kind, meta)
 
-  if (parser.prev.kind === 'lparen'
-  &&  parser.peek.kind === 'rparen') {
+  if (prevIs(parser, 'lparen')
+  &&  peekIs(parser, 'rparen')) {
     bump(parser)
     return operator
   }
@@ -201,18 +200,18 @@ const parseBinary = (parser, minimum, lhs) => {
     const { kind, meta } = parser.token
 
     if (operatorInfo[kind] === undefined) {
-      break;
+      break
     }
 
     const { precedence,
-            associativity } = operatorInfo[kind];
+            associativity } = operatorInfo[kind]
 
     if (precedence == null) {
       return error(parser, meta, `'${kind}' is not a valid binary (infix) operator`)
     }
 
     if (precedence < minimum) {
-        break;
+        break
     }
 
     const operator = node('name', kind, meta)
@@ -307,13 +306,25 @@ const parseString = (parser, kind = 'string') => {
   return node('string', value, { raw, ...meta })
 }
 
+const parseKwArg = (parser) => {
+  const { value, meta } = parser.token
+  eat(parser, 'kwarg')
+  return node('kwarg', value, meta)
+}
+
+const parseWildcard = (parser) => {
+  const meta = parser.token.meta
+  eat(parser, 'wildcard')
+  return node('wildcard', '_', meta)
+}
+
 const parseParens = (parser) => {
   const meta = parser.token.meta
   const items = blockOf(parser, 'lparen', 'rparen', parseExpr)
 
   switch (items.length) {
     case 0:
-      return node('unit', undefined, span(parser, meta))
+      return node('unit', {}, span(parser, meta))
     case 1:
       return expr('group', items, span(parser, meta))
     default:
@@ -329,7 +340,7 @@ const parseBrackets = (parser) => {
 
   eat(parser, 'lbracket')
 
-  if (tokenIs(parser, 'colon') && peekIs(parser, 'rbracket')) {
+  if (tokenIs(parser, 'arrow') && peekIs(parser, 'rbracket')) {
     kind = 'Dict'
     bump(parser) // :
   }
@@ -342,7 +353,7 @@ const parseBrackets = (parser) => {
     let key = parseExpr(parser)
 
     if (kind === undefined) {
-      if (tokenIs(parser, 'colon') && matchLines(parser)) {
+      if (tokenIs(parser, 'arrow') && matchLines(parser)) {
         kind = 'dict'
       } else {
         kind = 'list'
@@ -351,7 +362,7 @@ const parseBrackets = (parser) => {
 
     let value = key
     if (kind === 'dict') {
-      eat(parser, 'colon')
+      eat(parser, 'arrow')
       value = parseExpr(parser)
     }
 
@@ -387,51 +398,6 @@ const parseBlock = (parser) => {
   return expr('block', items, span(parser, meta))
 }
 
-const parseFn = (parser) => {
-  const meta = parser.token.meta
-
-  eat(parser, 'fn')
-
-  const args = []
-  while (matchLines(parser) && tokenIs(parser, 'lower')) {
-    args.push(parseIdent(parser))
-  }
-
-  let value
-  if (matchLines(parser)) {
-    value = parseExpr(parser)
-  } else if (args.length) {
-    value = args.pop()
-  } else {
-    return error(parser, meta, 'fn `value` must start in the same line')
-  }
-
-  return expr('fn', [args, value], span(parser, meta))
-}
-
-const parseIf = (parser) => {
-  const meta = parser.token.meta
-  eat(parser, 'if')
-  const test = parseExpr(parser)
-  eat(parser, 'then')
-  const then = parseExpr(parser)
-  eat(parser, 'else')
-  const otherwise = parseExpr(parser)
-
-  return expr('if', [test, then, otherwise], span(parser, meta))
-}
-
-const parseFor = (parser) => {
-  const meta = parser.token.meta
-  eat(parser, 'for')
-
-  const target = parseTerm(parser)
-  const source = parseTerm(parser)
-  const execution = parseExpr(parser)
-
-  return expr('for', [target, source, execution], span(parser, meta))
-}
-
 const parseCase = (parser) => {
   const meta = parser.token.meta
   eat(parser, 'case')
@@ -460,7 +426,7 @@ const blockOf = (parser, open, close, fn) => {
   while (!tokenIs(parser, close)) {
     result.push(fn(parser))
     if (!maybeEat(parser, 'comma')) {
-      break;
+      break
     }
   }
 
@@ -511,6 +477,10 @@ const bump = (parser) => {
 
 const tokenIs = (parser, kind) => {
   return parser.token.kind === kind
+}
+
+const prevIs = (parser, kind) => {
+  return parser.prev.kind === kind
 }
 
 const peekIs = (parser, kind) => {

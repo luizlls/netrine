@@ -57,5 +57,11 @@ describe('Lexer', () => {
       assert.strictEqual(name.kind, 'lower')
       assert.strictEqual(finish.kind, 'string finish')
     })
+
+    it('tokenize kwarg (keyword argument)', () => {
+      const [kwarg] = tokenize('then: 1')
+      assert.strictEqual(kwarg.kind, 'kwarg')
+      assert.strictEqual(kwarg.value, 'then:')
+    })
   })
 })

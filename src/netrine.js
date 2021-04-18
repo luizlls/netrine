@@ -34,7 +34,8 @@ const repl = () => {
 const pipeline = [
   tokenize,
   parse,
-  pretty,
+  (module) => module.nodes.map(it => sexpr(it)),
+  // pretty,
   // analyze,
   // compile,
 ]

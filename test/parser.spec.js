@@ -89,7 +89,16 @@ describe('Parser', () => {
     })
 
     it('parse basic dict definition', () => {
-      const { nodes: [node] } = parse(tokenize('["number": 1, "symbol": Some 5, "list": [1, "A", 3.14], "nested": ["inner": "value"]]'))
+      const { nodes: [node] } = parse(tokenize(`
+        [
+          "number" => 1,
+          "string" => "Hello",
+          "list" => [1, "Hi"],
+          "symbol" => Some 42,
+          "nested" => [
+            "inner" => "value"
+          ]
+        ]`))
 
       const clean = removeSpans(node)
 
@@ -113,28 +122,17 @@ describe('Parser', () => {
           [
             {
               kind: "string",
-              value: "symbol",
+              value: "string",
               meta: {
-                raw: "\"symbol\"",
+                raw: "\"string\"",
               }
             },
             {
-              kind: "symbol",
-              args: [
-                {
-                  kind: "name",
-                  value: "Some",
-                  meta: {}
-                },
-                [
-                  {
-                    kind: "number",
-                    value: "5",
-                    meta: {}
-                  }
-                ]
-              ],
-              meta: {}
+              kind: "string",
+              value: "Hello",
+              meta: {
+                raw: "\"Hello\"",
+              }
             }
           ],
           [
@@ -155,19 +153,41 @@ describe('Parser', () => {
                 },
                 {
                   kind: "string",
-                  value: "A",
+                  value: "Hi",
                   meta: {
-                    raw: "\"A\"",
+                    raw: "\"Hi\"",
                   }
-                },
-                {
-                  kind: "number",
-                  value: "3.14",
-                  meta: {}
                 }
               ],
               meta: {
               }
+            }
+          ],
+          [
+            {
+              kind: "string",
+              value: "symbol",
+              meta: {
+                raw: "\"symbol\"",
+              }
+            },
+            {
+              kind: "symbol",
+              args: [
+                {
+                  kind: "name",
+                  value: "Some",
+                  meta: {}
+                },
+                [
+                  {
+                    kind: "number",
+                    value: "42",
+                    meta: {}
+                  }
+                ]
+              ],
+              meta: {}
             }
           ],
           [
@@ -223,9 +243,13 @@ describe('Parser', () => {
             meta: {}
           },
           {
-            kind: "fn",
+            kind: "apply",
             args: [
-              [],
+              {
+                kind: "name",
+                value: "fn",
+                meta: {}
+              },
               {
                 kind: "group",
                 args: [

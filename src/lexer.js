@@ -108,7 +108,14 @@ const identifier = (lexer) => {
     bump(lexer)
   }
 
+  kwarg = false
+
   switch (current(lexer)) {
+    case ':': {
+      kwarg = true
+      bump(lexer)
+      break
+    }
     case '?':
     case '!': {
       bump(lexer)
@@ -117,6 +124,10 @@ const identifier = (lexer) => {
   }
 
   const ident = slice(lexer)
+
+  if (kwarg) {
+    return token(lexer, 'kwarg', ident)
+  }
 
   const keyword = keywords[ident]
 
