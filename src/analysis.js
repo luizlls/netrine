@@ -30,6 +30,8 @@ const check = (analyzer, expr) => {
       return checkGroup(analyzer, expr)
     case 'If':
       return checkIf(analyzer, expr)
+    case 'Case':
+      return checkCase(analyzer, expr)
     case 'For':
       return checkFor(analyzer, expr)
     case 'Tuple':
@@ -42,8 +44,6 @@ const check = (analyzer, expr) => {
       return checkSymbol(analyzer, expr)
     case 'Template':
       return checkTemplate(analyzer, expr)
-    case 'Case':
-      return error(analyzer, expr.meta, `'${expr.kind}' is not supported at the moment`)
     default:
       return expr
   }
@@ -138,6 +138,11 @@ const checkPipe = (analyzer, pipe) => {
 
 const checkBlock = (analyzer, block) => {
   const items = block.items.map(item => check(analyzer, item))
+
+  if (items.length == 1) {
+    return items.pop()
+  }
+
   return node('Block', { items }, block.meta)
 }
 
@@ -145,18 +150,60 @@ const checkGroup = (analyzer, group) => {
   return check(analyzer, group.inner)
 }
 
-const checkIf = (analyzer, cond) => {
-  const test = check(analyzer, cond.test)
-  const then = check(analyzer, cond.then)
-  const otherwise = check(analyzer, cond.otherwise)
+const checkIf = (analyzer, exprIf) => {
+  const conditions = []
 
-  return node('Cond', { test, then, otherwise }, cond.meta)
+  conditions.push(
+      node('CondItem', {
+      test: check(analyzer, exprIf.test),
+      then: check(analyzer, exprIf.then),
+    }, {}))
+
+  let otherwise = exprIf.otherwise
+
+  while (otherwise.kind === 'If') {
+    conditions.push(
+        node('CondItem', {
+        test: check(analyzer, otherwise.test),
+        then: check(analyzer, otherwise.then),
+      }, {}))
+
+    otherwise = otherwise.otherwise
+  }
+
+  otherwise = check(analyzer, otherwise)
+
+  return node('Cond', { conditions, otherwise }, exprIf.meta)
 }
 
-const checkFor = (analyzer, expr) => {
+const checkCase = (analyzer, exprCase) => {
+  const { result: last } = exprCase.cases.pop()
+
+  const conditions = exprCase.cases.map(caseItem => {
+
+    const test = node('Binary', {
+      operator: node('Name', { value: 'eq' }, {}),
+      lhs: exprCase.value,
+      rhs: caseItem.pattern,
+    }, {})
+
+    const then = caseItem.result
+
+    return node('CondItem', {
+      test: check(analyzer, test),
+      then: check(analyzer, then),
+    }, {})
+  })
+
+  const otherwise = check(analyzer, last)
+
+  return node('Cond', { conditions, otherwise }, exprCase.meta)
+}
+
+const checkFor = (analyzer, exprFor) => {
   const { target
         , source
-        , value } = expr
+        , value } = exprFor
 
   const map = node('Name', { value: 'map' }, {})
 

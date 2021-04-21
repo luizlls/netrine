@@ -32,24 +32,26 @@ const parseExpr = (parser) => {
       if (operatorInfo[parser.token.kind] !== undefined) {
         return parseUnary(parser)
       } else if (startTerm(parser)) {
-        const term = parseTerm(parser)
-        if (term.kind === 'Name') {
+        let value = parseTerm(parser)
+
+        if (value.kind === 'Name') {
           switch (parser.token.kind) {
             case 'equals':
-              return parseDef(parser, term)
+              return parseDef(parser, value)
             case 'walrus':
-              return parseSet(parser, term)
+              return parseSet(parser, value)
             default:
               if (startTerm(parser) && matchLines(parser)) {
-                return parseApply(parser, term)
+                value = parseApply(parser, value)
               }
               break
           }
         }
+
         if (operatorInfo[parser.token.kind] !== undefined) {
-          return parseBinary(parser, 0, term)
+          return parseBinary(parser, 0, value)
         } else {
-          return term
+          return value
         }
       } else {
         return error(parser, parser.token.meta, `Unexpected ${parser.token.kind}`)

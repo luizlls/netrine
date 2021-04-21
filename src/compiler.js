@@ -8,7 +8,7 @@ const compiler = (module) => ({
 })
 
 
-const compileExpr = (compiler, expr) => {
+const compile = (compiler, expr) => {
   switch (expr.kind) {
     case 'Fn':
       return compileFn(compiler, expr)
@@ -50,7 +50,7 @@ const compileFn = (compiler, fn) => {
 }
 
 const compileBody = (compiler, body) => {
-  let value = compileExpr(compiler, body);
+  let value = compile(compiler, body)
 
   switch (body.kind) {
     case 'Def': break
@@ -67,34 +67,34 @@ const compileName = (compiler, name) => {
 }
 
 const compileDef = (compiler, def) => {
-  const name  = compileExpr(compiler, def.name)
-  const value = compileExpr(compiler, def.value)
-  return `var ${name} = ${value};`
+  const name  = compile(compiler, def.name)
+  const value = compile(compiler, def.value)
+  return `var ${name} = ${value}`
 }
 
 const compileSet = (compiler, set) => {
-  const target = compileExpr(compiler, set.target)
-  const value  = compileExpr(compiler, set.value)
-  return `${target} = ${value};`
+  const target = compile(compiler, set.target)
+  const value  = compile(compiler, set.value)
+  return `${target} = ${value}`
 }
 
 const compileGet = (compiler, get) => {
-  const target = compileExpr(compiler, get.expr)
+  const target = compile(compiler, get.expr)
   if (get.index !== undefined) {
-    return `${target}[${compileExpr(compiler, get.index)}]`
+    return `${target}[${compile(compiler, get.index)}]`
   } else {
     return `${target}.${get.name.value}`
   }
 }
 
 const compileApply = (compiler, app) => {
-  const fn  = compileExpr(compiler, app.fn)
-  const arg = compileExpr(compiler, app.arg)
+  const fn  = compile(compiler, app.fn)
+  const arg = compile(compiler, app.arg)
   return `${fn}(${arg})`
 }
 
 const compileBlock = (compiler, block) => {
-  const items = block.items.map(item => `${compileExpr(compiler, item)};`)
+  const items = block.items.map(item => `${compile(compiler, item)};`)
   const last  = items.pop()
   items.push(`return ${last}`)
 
@@ -102,11 +102,17 @@ const compileBlock = (compiler, block) => {
 }
 
 const compileCond = (compiler, cond) => {
-  const { test, then, otherwise } = cond
-  const _test = compileExpr(compiler, test)
-  const _then = compileExpr(compiler, then)
-  const _else = compileExpr(compiler, otherwise)
-  return `(${_test} ? ${_then} : ${_else})`
+  const conditions = cond
+    .conditions
+    .map(cond => {
+      const test = compile(compiler, cond.test)
+      const then = compile(compiler, cond.then)
+      return `if (${test}) { return ${then}; }`
+    })
+
+  const otherwise = compile(compiler, cond.otherwise)
+
+  return `(function() { ${conditions.join(' else ')} else { return ${otherwise} } })()`
 }
 
 const compileConstructor = (compiler, ctor) => {
@@ -120,14 +126,14 @@ const compileSymbol = (compiler, symbol) => {
     case 'True':  return 'true'
     case 'False': return 'false'
     default: {
-      const values = symbol.values.map(value => compileExpr(compiler, value))
+      const values = symbol.values.map(value => compile(compiler, value))
       return `new ${symbol.name.value}(${values})`
     }
   }
 }
 
 const compileList = (compiler, seq) => {
-  return `[${seq.items.map(item => compileExpr(compiler, item)).join(', ')}]`
+  return `[${seq.items.map(item => compile(compiler, item)).join(', ')}]`
 }
 
 const compileDict = (compiler, dict) => {
@@ -141,10 +147,10 @@ const compileDict = (compiler, dict) => {
         key = compileString(compiler, item.key)
         break
       default:
-        key = `[${compileExpr(compiler, item.key)}]`
+        key = `[${compile(compiler, item.key)}]`
     }
 
-    const value = compileExpr(compiler, item.value)
+    const value = compile(compiler, item.value)
 
     return `${key} : ${value}`
   })
@@ -156,7 +162,7 @@ const compileTemplate = (compiler, template) => {
     if (element.kind === 'String') {
       return `'${element.value}'`
     } else {
-      return `(${compileExpr(compiler, element)}).toString()`
+      return `(${compile(compiler, element)}).toString()`
     }
   })
   return `${parts.join(' + ')}`
@@ -198,7 +204,7 @@ const error = (compiler, expr, msg) => {
 exports.compile = (module) => {
   const cc = compiler(module)
 
-  const nodes = module.nodes.map(node => compileExpr(cc, node))
+  const nodes = module.nodes.map(node => compile(cc, node))
 
   return nodes.join('\n')
 }
