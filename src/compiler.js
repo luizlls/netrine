@@ -28,8 +28,8 @@ const compileExpr = (compiler, expr) => {
       return compileCond(compiler, expr)
     case 'List':
       return compileList(compiler, expr)
-    case 'Record':
-      return compileRecord(compiler, expr)
+    case 'Dict':
+      return compileDict(compiler, expr)
     case 'Constructor':
       return compileConstructor(compiler, expr)
     case 'Symbol':
@@ -67,7 +67,7 @@ const compileName = (compiler, name) => {
 }
 
 const compileDef = (compiler, def) => {
-  const name  = compileExpr(compiler, def.patt)
+  const name  = compileExpr(compiler, def.name)
   const value = compileExpr(compiler, def.value)
   return `var ${name} = ${value};`
 }
@@ -130,11 +130,25 @@ const compileList = (compiler, seq) => {
   return `[${seq.items.map(item => compileExpr(compiler, item)).join(', ')}]`
 }
 
-const compileRecord = (compiler, record) => {
-  const props = record.properties.map(prop => {
-    return `${prop.name.value} : ${compileExpr(compiler, prop.value)}`
+const compileDict = (compiler, dict) => {
+  const items = dict.items.map(item => {
+    let key
+    switch (item.key.kind) {
+      case 'Name':
+        key = item.key.value
+        break
+      case 'String':
+        key = compileString(compiler, item.key)
+        break
+      default:
+        key = `[${compileExpr(compiler, item.key)}]`
+    }
+
+    const value = compileExpr(compiler, item.value)
+
+    return `${key} : ${value}`
   })
-  return `{ ${props.join(', ')} }`
+  return `{${items.join(', ')}}`
 }
 
 const compileTemplate = (compiler, template) => {
@@ -178,7 +192,7 @@ const dedent = (compiler) => {
 }
 
 const error = (compiler, expr, msg) => {
-  throw `Error [${expr.span.lineno}] ${msg}`
+  throw `Error [${expr.meta.line}] ${msg}`
 }
 
 exports.compile = (module) => {

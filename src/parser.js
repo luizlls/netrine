@@ -122,10 +122,9 @@ const parseSet = (parser, target) => {
   return node('Set', { target, value }, span(parser, target.meta))
 }
 
-const parseGet = (parser, node) => {
+const parseGet = (parser, main) => {
   while (maybeEat(parser, 'dot')) {
-    let name
-    let index
+    let name, index
     if (tokenIs(parser, 'lbracket')) {
       eat(parser, 'lbracket')
       index = parseExpr(parser)
@@ -133,9 +132,9 @@ const parseGet = (parser, node) => {
     } else {
       name = parseIdent(parser)
     }
-    node = node('Get', { expr, name, index }, span(parser, node.meta))
+    main = node('Get', { main, name, index }, span(parser, main.meta))
   }
-  return node
+  return main
 }
 
 const parseUpper = (parser) => {
@@ -153,7 +152,8 @@ const parseUpper = (parser) => {
 
 const parseApply = (parser, fn) => {
   const args = parseArgs(parser)
-  return node('Apply', { fn, args }, span(parser, fn.meta))
+  return args
+    .reduce((fn, arg) => node('Apply', { fn, arg }, span(parser, fn.meta)), fn)
 }
 
 const parseArgs = (parser) => {
@@ -164,7 +164,7 @@ const parseArgs = (parser) => {
 const parseUnary = (parser) => {
   const { kind, meta } = parser.token
 
-  const operator = node('Name', kind, meta)
+  const operator = node('Name', { value: kind }, meta)
 
   if (parser.prev.kind === 'lparen'
   &&  parser.peek.kind === 'rparen') {
@@ -206,7 +206,7 @@ const parseBinary = (parser, minimum, expr) => {
         break
     }
 
-    const operator = node('Name', kind, meta)
+    const operator = node('Name', { value: kind }, meta)
 
     bump(parser)
 
@@ -222,7 +222,7 @@ const parseBinary = (parser, minimum, expr) => {
     const rhs = parseBinary(parser, precedence + fix)
     const lhs = expr
 
-    expr = node('Apply', { operator, lhs, rhs }, span(parser, expr.meta))
+    expr = node('Binary', { operator, lhs, rhs }, span(parser, expr.meta))
   }
 
   return expr
@@ -357,7 +357,7 @@ const parseBrackets = (parser) => {
       const meta = {
         line: key.meta.line,
         span: {
-          start: key.meta.start,
+          start:  key.meta.start,
           offset: val.meta.offset,
         }
       }
@@ -372,6 +372,10 @@ const parseBrackets = (parser) => {
   }
 
   eat(parser, 'rbracket')
+
+  if (kind === undefined) {
+      kind = 'List'
+  }
 
   return node(kind, { items }, span(parser, meta))
 }
@@ -397,19 +401,19 @@ const parseFn = (parser) => {
 
   eat(parser, 'fn')
 
-  const args = parseWhile(
+  const params = parseWhile(
     parser, parseIdent, pp => matchLines(pp) && tokenIs(pp, 'lower'))
 
   let value
   if (startTerm(parser) && matchLines(parser)) {
     value = parseExpr(parser)
-  } else if (args.length) {
-    value = args.pop()
+  } else if (params.length) {
+    value = params.pop()
   } else {
     return error(parser, meta, 'fn `value` must start in the same line')
   }
 
-  return node('Fn', { args, value }, span(parser, meta))
+  return node('Fn', { params, value }, span(parser, meta))
 }
 
 const parseIf = (parser) => {
@@ -446,7 +450,7 @@ const parseCase = (parser) => {
     const pattern = parseTerm(parser)
     eat(parser, 'arrow')
     const result = parseExpr(parser)
-    items.push(node('CaseItem', { pattern, result }, span(parser, pattern.meta)))
+    cases.push(node('CaseItem', { pattern, result }, span(parser, pattern.meta)))
     if (!maybeEat(parser, 'pipe')) {
       break
     }

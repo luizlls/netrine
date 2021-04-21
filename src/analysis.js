@@ -4,8 +4,8 @@ const analyzer = () => ({
   nodes: [],
 })
 
-const node = (kind, props, span) => {
-  return { kind, ...props, span }
+const node = (kind, props, meta) => {
+  return { kind, ...props, meta }
 }
 
 const check = (analyzer, expr) => {
@@ -26,18 +26,23 @@ const check = (analyzer, expr) => {
       return checkBinary(analyzer, expr)
     case 'Block':
       return checkBlock(analyzer, expr)
+    case 'Group':
+      return checkGroup(analyzer, expr)
     case 'If':
       return checkIf(analyzer, expr)
     case 'Tuple':
       return checkTuple(analyzer, expr)
     case 'List':
       return checkList(analyzer, expr)
-    case 'Record':
-      return checkRecord(analyzer, expr)
+    case 'Dict':
+      return checkDict(analyzer, expr)
     case 'Symbol':
       return checkSymbol(analyzer, expr)
     case 'Template':
       return checkTemplate(analyzer, expr)
+    case 'For':
+    case 'Case':
+      return error(analyzer, expr.meta, `'${expr.kind}' is not supported at the moment`)
     default:
       return expr
   }
@@ -54,54 +59,35 @@ const checkName = (analyzer, name) => {
 }
 
 const checkFn = (analyzer, fn) => {
-  const params = fn.params.map(param => {
-    switch (param.kind) {
-      case 'Unit':
-        return node('Name', { value: '' }, fn.span)
-      case 'Name':
-        return param
-      default:
-        return error(analyzer, param.span, 'invalid pattern for a function parameter')
-    }
-  })
+  if (fn.params.length == 0) {
+      fn.params.push(node('Name', { value: '' }, {}))
+  }
 
   const value = check(analyzer, fn.value)
 
-  return params
+  return fn.params
     .reverse()
-    .reduce((value, param) => node('Fn', { param, value }, param.span), value)
+    .reduce((value, param) => node('Fn', { param, value }, param.meta), value)
 }
 
 const checkDef = (analyzer, def) => {
-  if (def.patt.kind !== 'Name') {
-    return error(analyzer, span, 'pattern destructuring is not supported for now')
-  }
-
-  const value = check(analyzer, def.value)
-
-  return node('Def', { patt: def.patt, value }, def.span)
+  def.value = check(analyzer, def.value)
+  return def
 }
 
 const checkSet = (analyzer, set) => {
-  switch (set.target.kind) {
-    case 'Name': break
-    case 'Get' : break
-    default:
-      return error(analyzer, set.span, 'mutable destructuring is not allowed')
-  }
-
-  const value = check(analyzer, set.value)
-
-  return node('Set', { target: set.target, value }, set.span)
+  set.value = check(analyzer, set.value)
+  set.target = check(analyzer, set.target)
+  return set
 }
 
 const checkGet = (analyzer, get) => {
-  const expr = check(analyzer, get.expr)
+  const expr = check(analyzer, get.main)
   if (get.index) {
       get.index = check(analyzer, get.index)
   }
 
-  return node('Get', { expr, index: get.index, name: get.name }, get.span)
+  return node('Get', { main, index: get.index, name: get.name }, get.meta)
 }
 
 const checkApply = (analyzer, app) => {
@@ -114,11 +100,11 @@ const checkUnary = (analyzer, unary) => {
   const fn  = check(analyzer, unary.operator)
   const arg = check(analyzer, unary.rhs)
 
-  return node('Apply', { fn, arg }, unary.span)
+  return node('Apply', { fn, arg }, unary.meta)
 }
 
 const checkBinary = (analyzer, binary) => {
-  if (binary.operator.value === 'pipe') {
+  if (binary.operator.value.includes('pipe')) {
     return checkPipe(analyzer, binary)
   }
 
@@ -130,20 +116,32 @@ const checkBinary = (analyzer, binary) => {
   ]
 
   return args
-    .reduce((fn, arg) => node('Apply', { fn, arg }, arg.span), main)
+    .reduce((fn, arg) => node('Apply', { fn, arg }, arg.meta), main)
 }
 
 const checkPipe = (analyzer, pipe) => {
-  const arg = check(analyzer, pipe.lhs)
-  const fn  = check(analyzer, pipe.rhs)
+  const lhs = check(analyzer, pipe.lhs)
+  const rhs = check(analyzer, pipe.rhs)
 
-  return node('Apply', { fn, arg }, pipe.span)
+  let fn, arg
+  if (pipe.operator.kind === 'lpipe') {
+    fn  = rhs
+    arg = lhs
+  } else {
+    fn  = lhs
+    arg = rhs
+  }
+
+  return node('Apply', { fn, arg }, pipe.meta)
 }
 
 const checkBlock = (analyzer, block) => {
   const items = block.items.map(item => check(analyzer, item))
+  return node('Block', { items }, block.meta)
+}
 
-  return node('Block', { items }, block.span)
+const checkGroup = (analyzer, group) => {
+  return check(analyzer, group.inner)
 }
 
 const checkIf = (analyzer, cond) => {
@@ -151,27 +149,26 @@ const checkIf = (analyzer, cond) => {
   const then = check(analyzer, cond.then)
   const otherwise = check(analyzer, cond.otherwise)
 
-  return node('Cond', { test, then, otherwise }, cond.span)
+  return node('Cond', { test, then, otherwise }, cond.meta)
 }
 
 const checkTuple = (analyzer, tuple) => {
   const items = tuple.items.map(item => check(analyzer, item))
 
-  return node('List', { items }, tuple.span)
+  return node('List', { items }, tuple.meta)
 }
 
 const checkList = (analyzer, list) => {
   const items = list.items.map(item => check(analyzer, item))
-
-  return node('List', { items }, list.span)
+  return node('List', { items }, list.meta)
 }
 
-const checkRecord = (analyzer, record) => {
-  const properties = record.properties.map(prop => {
-    return { name: prop.name, value: check(analyzer, prop.value) }
+const checkDict = (analyzer, record) => {
+  const items = record.items.map(prop => {
+    return { key: check(analyzer, prop.key), value: check(analyzer, prop.value) }
   })
 
-  return node('Record', { properties }, record.span)
+  return node('Dict', { items }, record.meta)
 }
 
 const checkSymbol = (analyzer, symbol) => {
@@ -181,17 +178,17 @@ const checkSymbol = (analyzer, symbol) => {
       analyzer.constructors[symbol.name] = symbol
   }
 
-  return node('Symbol', { name: symbol.name, values }, symbol.span)
+  return node('Symbol', { name: symbol.name, values }, symbol.meta)
 }
 
 const checkTemplate = (analyzer, template) => {
   const elements = template.elements.map(elem => check(analyzer, elem))
 
-  return node('Template', { elements }, template.span)
+  return node('Template', { elements }, template.meta)
 }
 
 const constructor = (analyzer, symbol) => {
-  return node('Constructor', { name: symbol.name }, symbol.span)
+  return node('Constructor', { name: symbol.name }, symbol.meta)
 }
 
 const definition = (analyzer, name, def) => {
@@ -202,8 +199,8 @@ const definition = (analyzer, name, def) => {
   }
 }
 
-const error = (analyzer, span, msg) => {
-  throw `Error [${span.lineno}] ${msg}`
+const error = (analyzer, meta, msg) => {
+  throw `Error [${meta.line}] ${msg}`
 }
 
 exports.analyze = (module) => {

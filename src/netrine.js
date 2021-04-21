@@ -43,9 +43,9 @@ const pretty = (node) =>
 const pipeline = [
   tokenize,
   parse,
-  pretty,
-  // analyze,
-  // compile,
+  analyze,
+  //pretty,
+  compile,
 ]
 
 const eval = (source) => {
