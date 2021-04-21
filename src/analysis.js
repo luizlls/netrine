@@ -30,6 +30,8 @@ const check = (analyzer, expr) => {
       return checkGroup(analyzer, expr)
     case 'If':
       return checkIf(analyzer, expr)
+    case 'For':
+      return checkFor(analyzer, expr)
     case 'Tuple':
       return checkTuple(analyzer, expr)
     case 'List':
@@ -40,7 +42,6 @@ const check = (analyzer, expr) => {
       return checkSymbol(analyzer, expr)
     case 'Template':
       return checkTemplate(analyzer, expr)
-    case 'For':
     case 'Case':
       return error(analyzer, expr.meta, `'${expr.kind}' is not supported at the moment`)
     default:
@@ -150,6 +151,24 @@ const checkIf = (analyzer, cond) => {
   const otherwise = check(analyzer, cond.otherwise)
 
   return node('Cond', { test, then, otherwise }, cond.meta)
+}
+
+const checkFor = (analyzer, expr) => {
+  const { target
+        , source
+        , value } = expr
+
+  const map = node('Name', { value: 'map' }, {})
+
+  const arg = node('Fn', {
+    value,
+    params: [ target ],
+  }, {})
+
+  const first = node('Apply', { fn: map, arg })
+  const final = node('Apply', { fn: first, arg: source })
+
+  return check(analyzer, final)
 }
 
 const checkTuple = (analyzer, tuple) => {
