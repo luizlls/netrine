@@ -5,7 +5,6 @@ const { tokenize } = require('./lexer')
 const { parse } = require('./parser')
 const { analyze } = require('./analysis')
 const { compile } = require('./compiler')
-const { pretty, sexpr } = require('./pprint')
 
 
 const file = (path) => {
@@ -24,12 +23,22 @@ const repl = () => {
 
   process.stdout.write('>>>> ')
 
+  let lines = []
+
   rl.on('line', line => {
-    console.log(eval(line))
+    if (line != null && line != '') {
+      return lines.push(line.trim())
+    }
+    const source = lines.join('\n')
+    console.log(eval(source))
     process.stdout.write('>>>> ')
+    lines = []
   })
 }
 
+
+const pretty = (node) =>
+  JSON.stringify(node, null, 4)
 
 const pipeline = [
   tokenize,

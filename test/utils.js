@@ -3,13 +3,19 @@ const removeSpans = (node) => {
     return node
   }
 
-  if (node.hasOwnProperty('meta')) {
-    delete node.meta.span
-    delete node.meta.line
-  }
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      removeSpans(item)
+    }
+  } else {
+    if (node.hasOwnProperty('meta')) {
+      delete node.meta.span
+      delete node.meta.line
+    }
 
-  for (const prop in node) {
-    node[prop] = removeSpans(node[prop])
+    for (const prop in node) {
+      node[prop] = removeSpans(node[prop])
+    }
   }
 
   return node

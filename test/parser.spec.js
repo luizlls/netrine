@@ -13,22 +13,20 @@ describe('Parser', () => {
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "def",
+        kind: "Def",
         meta: {
           mutable: false,
         },
-        args: [
-          {
-            kind: "name",
-            value: "var",
-            meta: {}
-          },
-          {
-            kind: "number",
-            value: "1",
-            meta: {}
-          }
-        ],
+        name: {
+          kind: "Name",
+          value: "var",
+          meta: {}
+        },
+        value: {
+          kind: "Number",
+          value: "1",
+          meta: {}
+        },
       })
 
     })
@@ -39,43 +37,41 @@ describe('Parser', () => {
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "list",
+        kind: "List",
         meta: {},
-        args: [
+        items: [
           {
-            kind: "number",
+            kind: "Number",
             value: "1",
             meta: {}
           },
           {
-            kind: "string",
+            kind: "String",
             value: "A",
             meta: {
               raw: "\"A\""
             }
           },
           {
-            kind: "number",
+            kind: "Number",
             value: "3.14",
             meta: {}
           },
           {
-            kind: "symbol",
-            args: [
-              {
-                kind: "name",
-                value: "Ok",
-                meta: {}
-              },
-              []
-            ],
+            kind: "Symbol",
+            name: {
+              kind: "Name",
+              value: "Ok",
+              meta: {}
+            },
+            values: [],
             meta: {}
           },
           {
-            kind: "list",
-            args: [
+            kind: "List",
+            items: [
               {
-                kind: "string",
+                kind: "String",
                 value: "nested",
                 meta: {
                   raw: "\"nested\""
@@ -94,113 +90,120 @@ describe('Parser', () => {
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "dict",
-        args: [
-          [
-            {
-              kind: "string",
+        kind: "Dict",
+        items: [
+          {
+            kind: 'Property',
+            meta: {},
+            key: {
+              kind: "String",
               value: "number",
               meta: {
                 raw: "\"number\"",
               }
             },
-            {
-              kind: "number",
+            value: {
+              kind: "Number",
               value: "1",
               meta: {}
             }
-          ],
-          [
-            {
-              kind: "string",
+          },
+          {
+            kind: 'Property',
+            meta: {},
+            key: {
+              kind: "String",
               value: "symbol",
               meta: {
                 raw: "\"symbol\"",
               }
             },
-            {
-              kind: "symbol",
-              args: [
+            value: {
+              kind: "Symbol",
+              name: {
+                kind: "Name",
+                value: "Some",
+                meta: {}
+              },
+              values: [
                 {
-                  kind: "name",
-                  value: "Some",
+                  kind: "Number",
+                  value: "5",
                   meta: {}
-                },
-                [
-                  {
-                    kind: "number",
-                    value: "5",
-                    meta: {}
-                  }
-                ]
+                }
               ],
               meta: {}
             }
-          ],
-          [
-            {
-              kind: "string",
+          },
+          {
+            kind: 'Property',
+            meta: {},
+            key: {
+              kind: "String",
               value: "list",
               meta: {
                 raw: "\"list\"",
               }
             },
-            {
-              kind: "list",
-              args: [
+            value: {
+              kind: "List",
+              items: [
                 {
-                  kind: "number",
+                  kind: "Number",
                   value: "1",
                   meta: {}
                 },
                 {
-                  kind: "string",
+                  kind: "String",
                   value: "A",
                   meta: {
                     raw: "\"A\"",
                   }
                 },
                 {
-                  kind: "number",
+                  kind: "Number",
                   value: "3.14",
                   meta: {}
                 }
               ],
-              meta: {
-              }
+              meta: {}
             }
-          ],
-          [
-            {
-              kind: "string",
+          },
+          {
+            kind: 'Property',
+            meta: {},
+            key: {
+              kind: "String",
               value: "nested",
               meta: {
                 raw: "\"nested\"",
               }
             },
-            {
-              kind: "dict",
-              args: [
-                [
-                  {
-                    kind: "string",
+            value: {
+              kind: "Dict",
+              items: [
+                {
+                  kind: 'Property',
+                  meta: {},
+                  key: {
+                    kind: "String",
                     value: "inner",
                     meta: {
                       raw: "\"inner\"",
                     }
                   },
-                  {
-                    kind: "string",
+                  value: {
+                    kind: "String",
                     value: "value",
                     meta: {
                       raw: "\"value\"",
                     }
                   }
-                ]
+                }
               ],
               meta: {}
             }
-          ]
+          }
         ],
         meta: {}
       })
@@ -212,48 +215,42 @@ describe('Parser', () => {
       const clean = removeSpans(node)
 
       assert.deepStrictEqual(clean, {
-        kind: "def",
+        kind: "Def",
         meta: {
           mutable: false,
         },
-        args: [
-          {
-            kind: "name",
-            value: "hello",
-            meta: {}
-          },
-          {
-            kind: "fn",
-            args: [
-              [],
-              {
-                kind: "group",
+        name: {
+          kind: "Name",
+          value: "hello",
+          meta: {}
+        },
+        value: {
+            kind: "Fn",
+            args: [],
+            value: {
+              kind: "Group",
+              inner: {
+                kind: "Apply",
+                fn: {
+                  kind: "Name",
+                  value: "print",
+                  meta: {}
+                },
                 args: [
                   {
-                    kind: "apply",
-                    args: [
-                      {
-                        kind: "name",
-                        value: "print",
-                        meta: {}
-                      },
-                      {
-                        kind: "string",
-                        value: "Hello!",
-                        meta: {
-                          raw: "\"Hello!\""
-                        }
-                      }
-                    ],
-                    meta: {}
+                    kind: "String",
+                    value: "Hello!",
+                    meta: {
+                      raw: "\"Hello!\""
+                    }
                   }
                 ],
-                meta: {},
-              }
-            ],
+                meta: {}
+              },
+              meta: {},
+            },
             meta: {}
-          }
-        ],
+          },
       })
     })
   })
