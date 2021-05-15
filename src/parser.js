@@ -26,8 +26,10 @@ const parseExpr = (parser) => {
       return parseIf(parser)
     case 'for':
       return parseFor(parser)
-    case 'case':
-      return parseCase(parser)
+    case 'match':
+      return parseMatch(parser)
+    case 'mut':
+      return parseMut(parser)
     default: {
       if (operatorInfo[parser.token.kind] !== undefined) {
         return parseUnary(parser)
@@ -66,7 +68,6 @@ const startTerm = (parser) => {
     case 'upper':
     case 'lparen':
     case 'lbracket':
-    case 'lbrace':
     case 'number':
     case 'string':
     case 'string start':
@@ -88,8 +89,6 @@ const parseTerm = (parser) => {
       value = parseParens(parser); break
     case 'lbracket':
       value = parseBrackets(parser); break
-    case 'lbrace':
-      value = parseBlock(parser); break
     case 'number':
       value = parseNumber(parser); break
     case 'string':
@@ -112,10 +111,8 @@ const parseTerm = (parser) => {
 
 const parseDef = (parser, name) => {
   eat(parser, 'equals')
-  const mutable = maybeEat(parser, 'mut')
   const value = parseExpr(parser)
-  const meta  = { mutable, ...name.meta }
-  return node('Def', { name, value }, span(parser, meta))
+  return node('Def', { name, value }, span(parser, name.meta))
 }
 
 const parseSet = (parser, target) => {
@@ -137,6 +134,13 @@ const parseGet = (parser, main) => {
     main = node('Get', { main, name, index }, span(parser, main.meta))
   }
   return main
+}
+
+const parseMut = (parser) => {
+  const meta = parser.token.meta
+  eat(parser, 'mut')
+  const value = parseExpr(parser)
+  return node('Mut', { value }, span(parser, meta))
 }
 
 const parseUpper = (parser) => {
@@ -387,12 +391,14 @@ const parseBlock = (parser) => {
   const items = []
 
   eat(parser, 'lbrace')
+
   while (!done(parser)) {
     if (tokenIs(parser, 'rbrace')) {
       break
     }
     items.push(parseExpr(parser))
   }
+
   eat(parser, 'rbrace')
 
   return node('Block', { items }, span(parser, meta))
@@ -407,9 +413,11 @@ const parseFn = (parser) => {
     parser, parseIdent, pp => matchLines(pp) && tokenIs(pp, 'lower'))
 
   let value
-  if (startTerm(parser) && matchLines(parser)) {
+  if (tokenIs(parser, 'lbrace') && matchLines(parser)) {
+    value = parseBlock(parser)
+  } else if (matchLines(parser)) {
     value = parseExpr(parser)
-  } else if (params.length) {
+  } else if (params.length !== 0) {
     value = params.pop()
   } else {
     return error(parser, meta, 'fn `value` must start in the same line')
@@ -421,10 +429,19 @@ const parseFn = (parser) => {
 const parseIf = (parser) => {
   const meta = parser.token.meta
   eat(parser, 'if')
+
   const test = parseExpr(parser)
-  eat(parser, 'then')
-  const then = parseExpr(parser)
+
+  let then
+  if (tokenIs(parser, 'lbrace') && matchLines(parser)) {
+    then = parseBlock(parser)
+  } else {
+    eat(parser, 'then')
+    then = parseExpr(parser)
+  }
+
   eat(parser, 'else')
+
   const otherwise = parseExpr(parser)
 
   return node('If', { test, then, otherwise }, span(parser, meta))
@@ -436,29 +453,47 @@ const parseFor = (parser) => {
 
   const target = parseTerm(parser)
   const source = parseTerm(parser)
-  const value  = parseExpr(parser)
+  let value
+  if (tokenIs(parser, 'lbrace') && matchLines(parser)) {
+    value = parseBlock(parser)
+  } else {
+    value = parseExpr(parser)
+  }
 
   return node('For', { target, source, value }, span(parser, meta))
 }
 
-const parseCase = (parser) => {
+const parseMatch = (parser) => {
   const meta = parser.token.meta
-  eat(parser, 'case')
+  eat(parser, 'match')
   const value = parseExpr(parser)
-  eat(parser, 'of')
+
+  eat(parser, 'lbrace')
+
   const cases = []
 
   while (!done(parser)) {
     const pattern = parseTerm(parser)
+
     eat(parser, 'arrow')
-    const result = parseExpr(parser)
-    cases.push(node('CaseItem', { pattern, result }, span(parser, pattern.meta)))
-    if (!maybeEat(parser, 'pipe')) {
+
+    let result
+    if (tokenIs(parser, 'lbrace') && matchLines(parser)) {
+      result = parseBlock(parser)
+    } else {
+      result = parseExpr(parser)
+    }
+
+    cases.push(node('Case', { pattern, result }, span(parser, pattern.meta)))
+
+    if (tokenIs(parser, 'rbrace')) {
       break
     }
   }
 
-  return node('Case', { value, cases }, span(parser, meta))
+  eat(parser, 'rbrace')
+
+  return node('Match', { value, cases }, span(parser, meta))
 }
 
 const parseWhile = (parser, fn, predicate) => {
@@ -537,7 +572,7 @@ const peekIs = (parser, kind) => {
 }
 
 const error = (parser, meta, msg) => {
-  throw `Error [${meta.line}]: ${msg}`
+  throw new Error(`Error [${meta.line}]: ${msg}`)
 }
 
 exports.parse = (tokens) => {

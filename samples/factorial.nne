@@ -1,0 +1,6 @@
+factorial = fn n {
+  match n {
+    1 -> 1
+    n -> n * factorial (n - 1)
+  }
+}

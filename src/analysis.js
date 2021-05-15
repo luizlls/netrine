@@ -18,6 +18,8 @@ const check = (analyzer, expr) => {
       return checkSet(analyzer, expr)
     case 'Get':
       return checkGet(analyzer, expr)
+    case 'Mut':
+      return checkMut(analyzer, expr)
     case 'Apply':
       return checkApply(analyzer, expr)
     case 'Unary':
@@ -30,8 +32,8 @@ const check = (analyzer, expr) => {
       return checkGroup(analyzer, expr)
     case 'If':
       return checkIf(analyzer, expr)
-    case 'Case':
-      return checkCase(analyzer, expr)
+    case 'Match':
+      return checkMatch(analyzer, expr)
     case 'For':
       return checkFor(analyzer, expr)
     case 'Tuple':
@@ -89,6 +91,10 @@ const checkGet = (analyzer, get) => {
   }
 
   return node('Get', { main, index: get.index, name: get.name }, get.meta)
+}
+
+const checkMut = (analyzer, mut) => {
+  return check(analyzer, mut.value)
 }
 
 const checkApply = (analyzer, app) => {
@@ -154,7 +160,7 @@ const checkIf = (analyzer, exprIf) => {
   const conditions = []
 
   conditions.push(
-      node('CondItem', {
+      node('Case', {
       test: check(analyzer, exprIf.test),
       then: check(analyzer, exprIf.then),
     }, {}))
@@ -163,7 +169,7 @@ const checkIf = (analyzer, exprIf) => {
 
   while (otherwise.kind === 'If') {
     conditions.push(
-        node('CondItem', {
+        node('Case', {
         test: check(analyzer, otherwise.test),
         then: check(analyzer, otherwise.then),
       }, {}))
@@ -176,20 +182,20 @@ const checkIf = (analyzer, exprIf) => {
   return node('Cond', { conditions, otherwise }, exprIf.meta)
 }
 
-const checkCase = (analyzer, exprCase) => {
-  const { result: last } = exprCase.cases.pop()
+const checkMatch = (analyzer, match) => {
+  const { result: last } = match.cases.pop()
 
-  const conditions = exprCase.cases.map(caseItem => {
+  const conditions = match.cases.map(item => {
 
     const test = node('Binary', {
       operator: node('Name', { value: 'eq' }, {}),
-      lhs: exprCase.value,
-      rhs: caseItem.pattern,
+      lhs: match.value,
+      rhs: item.pattern,
     }, {})
 
-    const then = caseItem.result
+    const then = item.result
 
-    return node('CondItem', {
+    return node('Case', {
       test: check(analyzer, test),
       then: check(analyzer, then),
     }, {})
@@ -197,7 +203,7 @@ const checkCase = (analyzer, exprCase) => {
 
   const otherwise = check(analyzer, last)
 
-  return node('Cond', { conditions, otherwise }, exprCase.meta)
+  return node('Cond', { conditions, otherwise }, match.meta)
 }
 
 const checkFor = (analyzer, exprFor) => {
