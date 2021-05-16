@@ -34,3 +34,10 @@ match bindings {
     print("3rd: {third}")
   }
 }
+
+
+match dict {
+  [:]          -> "empty dict"
+  [key: value] -> "key = {value}"
+  ["key": 10]  -> "key is 10"
+}

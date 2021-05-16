@@ -22,12 +22,6 @@ const compile = (compiler, expr) => {
       return compileGet(compiler, expr)
     case 'Apply':
       return compileApply(compiler, expr)
-    case 'NativeEquals':
-      return compileNativeEquals(compiler, expr)
-    case 'NativeAnd':
-      return compileNativeAnd(compiler, expr)
-    case 'AssertList':
-      return compileAssertList(compiler, expr)
     case 'Block':
       return compileBlock(compiler, expr)
     case 'Cond':
@@ -46,8 +40,20 @@ const compile = (compiler, expr) => {
       return compileTemplate(compiler, expr)
     case 'Raise':
       return compileRaise(compiler, expr)
-    case 'Literal':
-      return expr.value
+    case 'NativeEquals':
+      return compileNativeEquals(compiler, expr)
+    case 'NativeAnd':
+      return compileNativeAnd(compiler, expr)
+    case 'AssertNotNull':
+      return compileAssertNotNull(compiler, expr)
+    case 'AssertList':
+      return compileAssertList(compiler, expr)
+    case 'AssertEmptyList':
+      return compileAssertEmptyList(compiler, expr)
+    case 'AssertDict':
+      return compileAssertDict(compiler, expr)
+    case 'AssertEmptyDict':
+      return compileAssertEmptyDict(compiler, expr)
     case 'Unit':
       return ''
   }
@@ -101,27 +107,6 @@ const compileApply = (compiler, app) => {
   const fn  = compile(compiler, app.fn)
   const arg = compile(compiler, app.arg)
   return `${fn}(${arg})`
-}
-
-const compileNativeEquals = (compiler, native) => {
-  const values = native.values.map(it => compile(compiler, it))
-  return values.join(' === ')
-}
-
-const compileNativeAnd = (compiler, native) => {
-  const values = native.values.map(it => compile(compiler, it))
-  return values.join(' && ')
-}
-
-const compileAssertList = (compiler, assert) => {
-  return assert.values
-    .map(value => {
-      return compile(compiler, value)
-    })
-    .map(value => {
-      return `Array.isArray(${value})`
-    })
-    .join(' && ')
 }
 
 const compileBlock = (compiler, block) => {
@@ -223,6 +208,71 @@ const compileString = (compiler, literal) => {
 
 const compileNumber = (compiler, literal) => {
   return literal.value
+}
+
+const compileAssertNotNull = (compiler, assert) => {
+  return assert.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map(value => {
+      return `${value} != undefined`
+    })
+    .join(' && ')
+}
+
+const compileNativeEquals = (compiler, native) => {
+  const values = native.values.map(it => compile(compiler, it))
+  return values.join(' === ')
+}
+
+const compileNativeAnd = (compiler, native) => {
+  const values = native.values.map(it => compile(compiler, it))
+  return values.join(' && ')
+}
+
+const compileAssertList = (compiler, assert) => {
+  return assert.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map(value => {
+      return `Array.isArray(${value})`
+    })
+    .join(' && ')
+}
+
+const compileAssertEmptyList = (compiler, assert) => {
+  return assert.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map(value => {
+      return `${value}.length === 0`
+    })
+    .join(' && ')
+}
+
+const compileAssertDict = (compiler, assert) => {
+  return assert.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map(value => {
+      return `${value}.constructor === Object`
+    })
+    .join(' && ')
+}
+
+const compileAssertEmptyDict = (compiler, assert) => {
+  return assert.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map(value => {
+      return `Object.keys(${value}).length === 0`
+    })
+    .join(' && ')
 }
 
 const compileRaise = (compiler, raise) => {

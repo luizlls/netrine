@@ -224,6 +224,8 @@ const checkMatch = (analyzer, match) => {
 
 const checkPattern = (analyzer, value, pattern) => {
   switch (pattern.kind) {
+    case 'Name':
+      return namePattern(analyzer, value, pattern)
     case 'Number':
     case 'String':
       return literalPattern(analyzer, value, pattern)
@@ -233,11 +235,9 @@ const checkPattern = (analyzer, value, pattern) => {
     case 'Tuple':
       return listPattern(analyzer, value, pattern)
     case 'Dict':
-      //return dictPattern(analyzer, value, pattern)
+      return dictPattern(analyzer, value, pattern)
     case 'Symbol':
       //return variantPattern(analyzer, value, pattern)
-    case 'Name':
-      return namePattern(analyzer, value, pattern)
     default:
       return error(analyzer, pattern.meta, `'${pattern.kind}' pattern not supported`)
   }
@@ -278,16 +278,7 @@ const listPattern = (analyzer, value, pattern) => {
   const arrayCheck = node('AssertList', { values: [ value ] })
 
   if (pattern.items.length === 0) {
-    const emptyCheck = node('NativeEquals', {
-      values: [
-        node('Get', {
-          main: value,
-          name: node('Name', { value: 'length' }),
-        }),
-
-        node('Number', { value: '0' }),
-      ]
-    })
+    const emptyCheck = node('AssertEmptyList', { values: [ value ] })
 
     return {
       conditions: [
@@ -321,6 +312,53 @@ const listPattern = (analyzer, value, pattern) => {
 }
 
 const dictPattern = (analyzer, value, pattern) => {
+  const dictCheck = node('AssertDict', { values: [ value ] })
+
+  if (pattern.items.length === 0) {
+    const emptyCheck = node('AssertEmptyDict', { values: [ value ] })
+    return {
+      conditions: [
+        dictCheck,
+        emptyCheck,
+      ],
+      definitions: []
+    }
+  }
+
+  const items = pattern.items.map(item => {
+    const element = node('Get', {
+      main: value,
+      index: item.key.kind === 'String'
+        ? item.key
+        : node('String', { value: item.key.value })
+    })
+
+    const contains = node('AssertNotNull', {
+      values: [ element ]
+    })
+
+    const val = checkPattern(analyzer, element, item.value)
+
+    return {
+      conditions: [
+        contains, ...val.conditions
+      ],
+      definitions: val.definitions
+    }
+  })
+
+  items.unshift({ conditions: [dictCheck], definitions: [] })
+
+  return items.reduce((total, item) => {
+    return {
+      conditions: [
+        ...total.conditions, ...item.conditions,
+      ],
+      definitions: [
+        ...total.definitions, ...item.definitions,
+      ]
+    }
+  })
 }
 
 const variantPattern = (analyzer, value, pattern) => {
