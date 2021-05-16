@@ -10,6 +10,11 @@ match wildcard {
 }
 
 
+match tuple {
+  (1, 2) -> "tuples are the same as lists"
+}
+
+
 match list {
   []  -> "empty list"
   [1] -> "one item"
@@ -17,6 +22,15 @@ match list {
 }
 
 
-match complex {
-  ["list", ["with", ["nested", "patterns"]]] -> "really complex"
+match nested {
+  ["really", ["nested", ["patterns"]]] -> "really nested"
+}
+
+
+match bindings {
+  [first, second, third] -> {
+    print("1st: {first}")
+    print("2nd: {second}")
+    print("3rd: {third}")
+  }
 }

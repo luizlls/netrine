@@ -22,8 +22,12 @@ const compile = (compiler, expr) => {
       return compileGet(compiler, expr)
     case 'Apply':
       return compileApply(compiler, expr)
-    case 'Native':
-      return compileNative(compiler, expr)
+    case 'NativeEquals':
+      return compileNativeEquals(compiler, expr)
+    case 'NativeAnd':
+      return compileNativeAnd(compiler, expr)
+    case 'AssertList':
+      return compileAssertList(compiler, expr)
     case 'Block':
       return compileBlock(compiler, expr)
     case 'Cond':
@@ -50,7 +54,7 @@ const compile = (compiler, expr) => {
 }
 
 const compileFn = (compiler, fn) => {
-  return `function(${fn.param.value}) { ${compileBody(compiler, fn.value)} }`
+  return `function(${fn.param.value}) { ${compileBody(compiler, fn.value)}; }`
 }
 
 const compileBody = (compiler, body) => {
@@ -59,8 +63,10 @@ const compileBody = (compiler, body) => {
   switch (body.kind) {
     case 'Def': break
     case 'Set': break
+    case 'Raise':
+      value = `throw ${value}`; break
     default:
-      value = `return ${value};`
+      value = `return ${value}`
   }
 
   return value
@@ -97,27 +103,25 @@ const compileApply = (compiler, app) => {
   return `${fn}(${arg})`
 }
 
-const compileNative = (compiler, native) => {
+const compileNativeEquals = (compiler, native) => {
   const values = native.values.map(it => compile(compiler, it))
-  switch (native.action) {
-    case 'Equals':
-      return values.join(' === ')
-    case 'And':
-      return values.join(' && ')
-    case 'Or':
-      return values.join(' || ')
-    case 'Not': {
-      const negated = values.map(value => `!(${value})`)
-      return negated.join(' && ')
-    }
-    case 'Call': {
-      const call = values.shift()
-      const args = values.join(', ')
-      return `${call}(${args})`
-    }
-    case 'Throw':
-      return `throw new Error(${values.join('. ')})`
-  }
+  return values.join(' === ')
+}
+
+const compileNativeAnd = (compiler, native) => {
+  const values = native.values.map(it => compile(compiler, it))
+  return values.join(' && ')
+}
+
+const compileAssertList = (compiler, assert) => {
+  return assert.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map(value => {
+      return `Array.isArray(${value})`
+    })
+    .join(' && ')
 }
 
 const compileBlock = (compiler, block) => {

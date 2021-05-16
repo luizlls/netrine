@@ -475,6 +475,14 @@ const parseMatch = (parser) => {
   while (!done(parser)) {
     const pattern = parseTerm(parser)
 
+    switch (pattern.kind) {
+      case 'Template':
+      case 'Group':
+        return error(parser, pattern.meta, `'${pattern.kind}' pattern not supported`)
+      default:
+        break;
+    }
+
     eat(parser, 'arrow')
 
     let result

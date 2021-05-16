@@ -81,7 +81,7 @@ const checkSet = (analyzer, set) => {
 }
 
 const checkGet = (analyzer, get) => {
-  const expr = check(analyzer, get.main)
+  const main = check(analyzer, get.main)
   if (get.index) {
       get.index = check(analyzer, get.index)
   }
@@ -182,19 +182,23 @@ const checkMatch = (analyzer, match) => {
   const conditions = match.cases.map(item => {
 
     const { conditions
-          , bindings } = checkPattern(analyzer, match.value, item.pattern)
+          , definitions } = checkPattern(analyzer, match.value, item.pattern)
 
     let test
     if (conditions.length !== 1) {
-      test = node('Native', {
-        action: 'And',
-        values: conditions,
-      })
+      test = node('NativeAnd', { values: conditions })
     } else {
       test = conditions.pop()
     }
 
-    const then = item.result
+    const bindings = definitions.map(({ name, value }) => {
+      return node('Def', {
+        name: node('Name', { value: name }, name.meta),
+        value,
+      })
+    })
+
+    const then = node('Block', { items: [...bindings, item.result] })
 
     return node('Case', {
       test: check(analyzer, test),
@@ -226,26 +230,25 @@ const checkPattern = (analyzer, value, pattern) => {
     case 'Wildcard':
       return anyPattern(analyzer, value, pattern)
     case 'List':
+    case 'Tuple':
       return listPattern(analyzer, value, pattern)
     case 'Dict':
       //return dictPattern(analyzer, value, pattern)
-    case 'Tuple':
-      //return tuplePattern(analyzer, value, pattern)
     case 'Symbol':
       //return variantPattern(analyzer, value, pattern)
     case 'Name':
-      //return namePattern(analyzer, value, pattern)
+      return namePattern(analyzer, value, pattern)
     default:
-      return error(analyzer, item.pattern.meta, `'${item.pattern.kind}' not supported`)
+      return error(analyzer, pattern.meta, `'${pattern.kind}' pattern not supported`)
   }
 }
 
 const literalPattern = (analyzer, value, pattern) => {
   return {
     conditions: [
-      node('Native', { action: 'Equals', values: [value, pattern] })
+      node('NativeEquals', { values: [value, pattern] })
     ],
-    bindings: [],
+    definitions: [],
   }
 }
 
@@ -254,7 +257,7 @@ const namePattern = (analyzer, value, pattern) => {
     conditions: [
       node('Symbol', { name: node('Name', { value: 'True' }), values: [] }, pattern.meta)
     ],
-    bindings: [
+    definitions: [
       {
         name: pattern.value, value
       }
@@ -267,28 +270,22 @@ const anyPattern = (analyzer, value, pattern) => {
     conditions: [
       node('Symbol', { name: node('Name', { value: 'True' }), values: [] }, pattern.meta)
     ],
-    bindings: []
+    definitions: []
   }
 }
 
 const listPattern = (analyzer, value, pattern) => {
-  const arrayCheck = node('Native', {
-    action: 'Call',
-    values: [
-      node('Literal', { value: 'Array.isArray' }),
-      value,
-    ]
-  })
+  const arrayCheck = node('AssertList', { values: [ value ] })
 
   if (pattern.items.length === 0) {
-    const emptyCheck = node('Native', {
-      action: 'Equals',
+    const emptyCheck = node('NativeEquals', {
       values: [
         node('Get', {
           main: value,
           name: node('Name', { value: 'length' }),
         }),
-        node('Number', { value: '0' })
+
+        node('Number', { value: '0' }),
       ]
     })
 
@@ -297,7 +294,7 @@ const listPattern = (analyzer, value, pattern) => {
         arrayCheck,
         emptyCheck,
       ],
-      bindings: []
+      definitions: []
     }
   }
 
@@ -309,24 +306,21 @@ const listPattern = (analyzer, value, pattern) => {
     return checkPattern(analyzer, element, item)
   })
 
-  items.unshift({ conditions: [arrayCheck], bindings: [] })
+  items.unshift({ conditions: [arrayCheck], definitions: [] })
 
   return items.reduce((total, item) => {
     return {
       conditions: [
         ...total.conditions, ...item.conditions,
       ],
-      bindings: [
-        ...total.bindings, ...item.bindings,
+      definitions: [
+        ...total.definitions, ...item.definitions,
       ]
     }
   })
 }
 
 const dictPattern = (analyzer, value, pattern) => {
-}
-
-const tuplePattern = (analyzer, value, pattern) => {
 }
 
 const variantPattern = (analyzer, value, pattern) => {
@@ -382,7 +376,7 @@ const checkTemplate = (analyzer, template) => {
 }
 
 const error = (analyzer, meta, msg) => {
-  throw `Error [${meta.line}] ${msg}`
+  throw new Error(`Error [${meta.line}] ${msg}`)
 }
 
 exports.analyze = (module) => {
