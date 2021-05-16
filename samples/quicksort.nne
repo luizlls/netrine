@@ -1,0 +1,10 @@
+quicksort = fn list {
+  match list {
+    []            -> []
+    [head , tail] -> {
+      less = filter (<  head) tail
+      more = filter (>= head) tail
+      (quicksort less) ++ [head] ++ (quicksort more)
+    }
+  }
+}

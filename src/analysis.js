@@ -237,7 +237,7 @@ const checkPattern = (analyzer, value, pattern) => {
     case 'Dict':
       return dictPattern(analyzer, value, pattern)
     case 'Symbol':
-      //return variantPattern(analyzer, value, pattern)
+      return variantPattern(analyzer, value, pattern)
     default:
       return error(analyzer, pattern.meta, `'${pattern.kind}' pattern not supported`)
   }
@@ -326,25 +326,23 @@ const dictPattern = (analyzer, value, pattern) => {
   }
 
   const items = pattern.items.map(item => {
-    const element = node('Get', {
-      main: value,
-      index: item.key.kind === 'String'
-        ? item.key
-        : node('String', { value: item.key.value })
-    })
-
-    const contains = node('AssertNotNull', {
-      values: [ element ]
-    })
-
-    const val = checkPattern(analyzer, element, item.value)
-
-    return {
-      conditions: [
-        contains, ...val.conditions
-      ],
-      definitions: val.definitions
+    let index
+    if (item.key.kind === 'Name') {
+      index = node('String', { value: item.key.value })
+    } else {
+      index = item.key
     }
+
+    const property = node('Get', {
+      main: value, index
+    })
+
+    const result = checkPattern(analyzer, property, item.value)
+
+    result.conditions.unshift(
+      node('AssertNotNull', { values: [ property ] }))
+
+    return result
   })
 
   items.unshift({ conditions: [dictCheck], definitions: [] })
@@ -362,6 +360,46 @@ const dictPattern = (analyzer, value, pattern) => {
 }
 
 const variantPattern = (analyzer, value, pattern) => {
+  const kindCheck = node('NativeEquals', {
+    values: [
+      node('Get', {
+        main: value,
+        name: node('Name', {
+          value: '$$'
+        })
+      }),
+      node('String', {
+        value: pattern.name.value
+      }),
+    ]
+  })
+
+  const values = pattern.values.map((item, index) => {
+    const element = node('Get', {
+      main: value,
+      name: node('Name', { value: `$${index.toString()}` })
+    })
+
+    const result = checkPattern(analyzer, element, item)
+
+    result.conditions.unshift(
+      node('AssertNotNull', { values: [ element ] }))
+
+    return result
+  })
+
+  values.unshift({ conditions: [kindCheck], definitions: [] })
+
+  return values.reduce((total, item) => {
+    return {
+      conditions: [
+        ...total.conditions, ...item.conditions,
+      ],
+      definitions: [
+        ...total.definitions, ...item.definitions,
+      ]
+    }
+  })
 }
 
 const checkFor = (analyzer, exprFor) => {

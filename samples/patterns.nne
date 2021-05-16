@@ -41,3 +41,9 @@ match dict {
   [key: value] -> "key = {value}"
   ["key": 10]  -> "key is 10"
 }
+
+
+match optional {
+  None     -> "nothing"
+  Some val -> val
+}

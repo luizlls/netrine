@@ -178,15 +178,10 @@ const parseUnary = (parser) => {
     return operator
   }
 
-  const info = operatorInfo[kind]
-
-  if (info === undefined || info.precedence !== undefined) {
-    return error(parser, meta, `'${kind}' is not a valid unary (prefix) operator`)
-  }
-
   bump(parser)
 
-  return node('Unary', { operator, rhs: parseTerm(parser) }, span(parser, meta))
+  const rhs = parseTerm(parser)
+  return node('Unary', { operator, rhs }, span(parser, meta))
 }
 
 const parseBinary = (parser, minimum, expr) => {
