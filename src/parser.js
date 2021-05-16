@@ -30,35 +30,35 @@ const parseExpr = (parser) => {
       return parseMatch(parser)
     case 'mut':
       return parseMut(parser)
-    default: {
-      if (operatorInfo[parser.token.kind] !== undefined) {
-        return parseUnary(parser)
-      } else if (startTerm(parser)) {
-        let value = parseTerm(parser)
+    default: break
+  }
 
-        if (value.kind === 'Name') {
-          switch (parser.token.kind) {
-            case 'equals':
-              return parseDef(parser, value)
-            case 'walrus':
-              return parseSet(parser, value)
-            default:
-              if (startTerm(parser) && matchLines(parser)) {
-                value = parseApply(parser, value)
-              }
-              break
+  if (operatorInfo[parser.token.kind] !== undefined) {
+    return parseUnary(parser)
+  } else if (startTerm(parser)) {
+    let value = parseTerm(parser)
+
+    if (value.kind === 'Name') {
+      switch (parser.token.kind) {
+        case 'equals':
+          return parseDef(parser, value)
+        case 'walrus':
+          return parseSet(parser, value)
+        default:
+          if (startTerm(parser) && matchLines(parser)) {
+            value = parseApply(parser, value)
           }
-        }
-
-        if (operatorInfo[parser.token.kind] !== undefined) {
-          return parseBinary(parser, 0, value)
-        } else {
-          return value
-        }
-      } else {
-        return error(parser, parser.token.meta, `Unexpected ${parser.token.kind}`)
+          break
       }
     }
+
+    if (operatorInfo[parser.token.kind] !== undefined) {
+      return parseBinary(parser, 0, value)
+    } else {
+      return value
+    }
+  } else {
+    return error(parser, parser.token.meta, `Unexpected ${parser.token.kind}`)
   }
 }
 

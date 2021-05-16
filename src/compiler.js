@@ -22,6 +22,8 @@ const compile = (compiler, expr) => {
       return compileGet(compiler, expr)
     case 'Apply':
       return compileApply(compiler, expr)
+    case 'Native':
+      return compileNative(compiler, expr)
     case 'Block':
       return compileBlock(compiler, expr)
     case 'Cond':
@@ -30,8 +32,6 @@ const compile = (compiler, expr) => {
       return compileList(compiler, expr)
     case 'Dict':
       return compileDict(compiler, expr)
-    case 'Constructor':
-      return compileConstructor(compiler, expr)
     case 'Symbol':
       return compileSymbol(compiler, expr)
     case 'Number':
@@ -40,6 +40,10 @@ const compile = (compiler, expr) => {
       return compileString(compiler, expr)
     case 'Template':
       return compileTemplate(compiler, expr)
+    case 'Raise':
+      return compileRaise(compiler, expr)
+    case 'Literal':
+      return expr.value
     case 'Unit':
       return ''
   }
@@ -79,11 +83,11 @@ const compileSet = (compiler, set) => {
 }
 
 const compileGet = (compiler, get) => {
-  const target = compile(compiler, get.expr)
+  const main = compile(compiler, get.main)
   if (get.index !== undefined) {
-    return `${target}[${compile(compiler, get.index)}]`
+    return `${main}[${compile(compiler, get.index)}]`
   } else {
-    return `${target}.${get.name.value}`
+    return `${main}.${get.name.value}`
   }
 }
 
@@ -91,6 +95,29 @@ const compileApply = (compiler, app) => {
   const fn  = compile(compiler, app.fn)
   const arg = compile(compiler, app.arg)
   return `${fn}(${arg})`
+}
+
+const compileNative = (compiler, native) => {
+  const values = native.values.map(it => compile(compiler, it))
+  switch (native.action) {
+    case 'Equals':
+      return values.join(' === ')
+    case 'And':
+      return values.join(' && ')
+    case 'Or':
+      return values.join(' || ')
+    case 'Not': {
+      const negated = values.map(value => `!(${value})`)
+      return negated.join(' && ')
+    }
+    case 'Call': {
+      const call = values.shift()
+      const args = values.join(', ')
+      return `${call}(${args})`
+    }
+    case 'Throw':
+      return `throw new Error(${values.join('. ')})`
+  }
 }
 
 const compileBlock = (compiler, block) => {
@@ -107,29 +134,47 @@ const compileCond = (compiler, cond) => {
     .map(cond => {
       const test = compile(compiler, cond.test)
       const then = compile(compiler, cond.then)
-      return `if (${test}) { return ${then}; }`
+
+      if (cond.then.kind === 'Raise') {
+        return `if (${test}) { throw ${then}; }`
+      } else {
+        return `if (${test}) { return ${then}; }`
+      }
+
     })
+    .join(' else ')
+
+  if (cond.otherwise === undefined) {
+    return `(function() { ${conditions} })()`
+  }
 
   const otherwise = compile(compiler, cond.otherwise)
 
-  return `(function() { ${conditions.join(' else ')} else { return ${otherwise} } })()`
-}
-
-const compileConstructor = (compiler, ctor) => {
-  const build = `for (var i = 0; i < arguments.length; i++) { this['_' + i] = arguments[i]; }`
-  const inner = `function ${ctor.name.value}() { ${build}; return this; }`
-  return `var ${ctor.name.value} = (function() { ${inner}; return ${ctor.name.value}; })();`
+  if (cond.otherwise.kind === 'Raise') {
+    return `(function() { ${conditions} else { throw ${otherwise}; } })()`
+  } else {
+    return `(function() { ${conditions} else { return ${otherwise}; } })()`
+  }
 }
 
 const compileSymbol = (compiler, symbol) => {
   switch (symbol.name.value) {
     case 'True':  return 'true'
     case 'False': return 'false'
-    default: {
-      const values = symbol.values.map(value => compile(compiler, value))
-      return `new ${symbol.name.value}(${values})`
-    }
+    default:
+      break
   }
+
+  const values = symbol.values
+    .map(value => {
+      return compile(compiler, value)
+    })
+    .map((value, idx) => {
+      return `$${idx}: ${value}`
+    })
+    .join(', ')
+
+  return `{ $$: '${symbol.name.value}', ${values} }`
 }
 
 const compileList = (compiler, seq) => {
@@ -160,7 +205,7 @@ const compileDict = (compiler, dict) => {
 const compileTemplate = (compiler, template) => {
   const parts = template.elements.map(element => {
     if (element.kind === 'String') {
-      return `'${element.value}'`
+      return `"${element.value}"`
     } else {
       return `(${compile(compiler, element)}).toString()`
     }
@@ -169,11 +214,15 @@ const compileTemplate = (compiler, template) => {
 }
 
 const compileString = (compiler, literal) => {
-  return `'${literal.value}'`
+  return `"${literal.value}"`
 }
 
 const compileNumber = (compiler, literal) => {
   return literal.value
+}
+
+const compileRaise = (compiler, raise) => {
+  return `new Error(${compile(compiler, raise.error)})`
 }
 
 const emit = (compiler, str) => {
@@ -206,5 +255,5 @@ exports.compile = (module) => {
 
   const nodes = module.nodes.map(node => compile(cc, node))
 
-  return nodes.join('\n')
+  return nodes.join(';\n')
 }

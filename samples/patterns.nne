@@ -1,0 +1,22 @@
+match literal {
+  42   -> "integer"
+  3.14 -> "float"
+  "Hi" -> "string"
+}
+
+
+match wildcard {
+  _ -> "anything"
+}
+
+
+match list {
+  []  -> "empty list"
+  [1] -> "one item"
+  [42, 3.14, "Hello"] -> "multiple items"
+}
+
+
+match complex {
+  ["list", ["with", ["nested", "patterns"]]] -> "really complex"
+}

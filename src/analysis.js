@@ -1,10 +1,6 @@
-const analyzer = () => ({
-  definitions: {},
-  constructors: {},
-  nodes: [],
-})
+const analyzer = () => ({})
 
-const node = (kind, props, meta) => {
+const node = (kind, props = {}, meta = {}) => {
   return { kind, ...props, meta }
 }
 
@@ -161,18 +157,18 @@ const checkIf = (analyzer, exprIf) => {
 
   conditions.push(
       node('Case', {
-      test: check(analyzer, exprIf.test),
-      then: check(analyzer, exprIf.then),
-    }, {}))
+        test: check(analyzer, exprIf.test),
+        then: check(analyzer, exprIf.then),
+      }, {}))
 
   let otherwise = exprIf.otherwise
 
   while (otherwise.kind === 'If') {
     conditions.push(
         node('Case', {
-        test: check(analyzer, otherwise.test),
-        then: check(analyzer, otherwise.then),
-      }, {}))
+          test: check(analyzer, otherwise.test),
+          then: check(analyzer, otherwise.then),
+        }, {}))
 
     otherwise = otherwise.otherwise
   }
@@ -183,15 +179,20 @@ const checkIf = (analyzer, exprIf) => {
 }
 
 const checkMatch = (analyzer, match) => {
-  const { result: last } = match.cases.pop()
-
   const conditions = match.cases.map(item => {
 
-    const test = node('Binary', {
-      operator: node('Name', { value: 'eq' }, {}),
-      lhs: match.value,
-      rhs: item.pattern,
-    }, {})
+    const { conditions
+          , bindings } = checkPattern(analyzer, match.value, item.pattern)
+
+    let test
+    if (conditions.length !== 1) {
+      test = node('Native', {
+        action: 'And',
+        values: conditions,
+      })
+    } else {
+      test = conditions.pop()
+    }
 
     const then = item.result
 
@@ -201,9 +202,134 @@ const checkMatch = (analyzer, match) => {
     }, {})
   })
 
-  const otherwise = check(analyzer, last)
+  const last = conditions[conditions.length - 1]
+
+  let otherwise
+  if (last.test.kind === 'Symbol' && last.test.name.value === 'True') {
+    otherwise = undefined
+  } else {
+    otherwise = node('Raise', {
+      error: node('String', {
+        value: 'Could not match any of the patterns'
+      })
+    }, match.value.meta)
+  }
 
   return node('Cond', { conditions, otherwise }, match.meta)
+}
+
+const checkPattern = (analyzer, value, pattern) => {
+  switch (pattern.kind) {
+    case 'Number':
+    case 'String':
+      return literalPattern(analyzer, value, pattern)
+    case 'Wildcard':
+      return anyPattern(analyzer, value, pattern)
+    case 'List':
+      return listPattern(analyzer, value, pattern)
+    case 'Dict':
+      //return dictPattern(analyzer, value, pattern)
+    case 'Tuple':
+      //return tuplePattern(analyzer, value, pattern)
+    case 'Symbol':
+      //return variantPattern(analyzer, value, pattern)
+    case 'Name':
+      //return namePattern(analyzer, value, pattern)
+    default:
+      return error(analyzer, item.pattern.meta, `'${item.pattern.kind}' not supported`)
+  }
+}
+
+const literalPattern = (analyzer, value, pattern) => {
+  return {
+    conditions: [
+      node('Native', { action: 'Equals', values: [value, pattern] })
+    ],
+    bindings: [],
+  }
+}
+
+const namePattern = (analyzer, value, pattern) => {
+  return {
+    conditions: [
+      node('Symbol', { name: node('Name', { value: 'True' }), values: [] }, pattern.meta)
+    ],
+    bindings: [
+      {
+        name: pattern.value, value
+      }
+    ]
+  }
+}
+
+const anyPattern = (analyzer, value, pattern) => {
+  return {
+    conditions: [
+      node('Symbol', { name: node('Name', { value: 'True' }), values: [] }, pattern.meta)
+    ],
+    bindings: []
+  }
+}
+
+const listPattern = (analyzer, value, pattern) => {
+  const arrayCheck = node('Native', {
+    action: 'Call',
+    values: [
+      node('Literal', { value: 'Array.isArray' }),
+      value,
+    ]
+  })
+
+  if (pattern.items.length === 0) {
+    const emptyCheck = node('Native', {
+      action: 'Equals',
+      values: [
+        node('Get', {
+          main: value,
+          name: node('Name', { value: 'length' }),
+        }),
+        node('Number', { value: '0' })
+      ]
+    })
+
+    return {
+      conditions: [
+        arrayCheck,
+        emptyCheck,
+      ],
+      bindings: []
+    }
+  }
+
+  const items = pattern.items.map((item, index) => {
+    const element = node('Get', {
+      main: value,
+      index: node('Number', { value: index.toString() })
+    })
+    return checkPattern(analyzer, element, item)
+  })
+
+  items.unshift({ conditions: [arrayCheck], bindings: [] })
+
+  return items.reduce((total, item) => {
+    return {
+      conditions: [
+        ...total.conditions, ...item.conditions,
+      ],
+      bindings: [
+        ...total.bindings, ...item.bindings,
+      ]
+    }
+  })
+}
+
+const dictPattern = (analyzer, value, pattern) => {
+}
+
+const tuplePattern = (analyzer, value, pattern) => {
+}
+
+const variantPattern = (analyzer, value, pattern) => {
 }
 
 const checkFor = (analyzer, exprFor) => {
@@ -246,10 +372,6 @@ const checkDict = (analyzer, record) => {
 const checkSymbol = (analyzer, symbol) => {
   const values = symbol.values.map(value => check(analyzer, value))
 
-  if (analyzer.constructors[symbol.name] === undefined) {
-      analyzer.constructors[symbol.name] = symbol
-  }
-
   return node('Symbol', { name: symbol.name, values }, symbol.meta)
 }
 
@@ -259,40 +381,13 @@ const checkTemplate = (analyzer, template) => {
   return node('Template', { elements }, template.meta)
 }
 
-const constructor = (analyzer, symbol) => {
-  return node('Constructor', { name: symbol.name }, symbol.meta)
-}
-
-const definition = (analyzer, name, def) => {
-  if (Array.isArray(def)) {
-    return combine()
-  } else {
-    return checkDef(analyzer, def)
-  }
-}
-
 const error = (analyzer, meta, msg) => {
   throw `Error [${meta.line}] ${msg}`
 }
 
 exports.analyze = (module) => {
   const aa = analyzer(module)
-
-  for (const node of module.nodes) {
-    aa.nodes.push(check(aa, node))
-  }
-
-  const nodes = []
-
-  for (const symbol of Object.values(aa.constructors)) {
-    nodes.push(constructor(aa, symbol))
-  }
-
-  for (const [name, def] of Object.entries(aa.definitions)) {
-    nodes.push(definition(aa, name, def))
-  }
-
-  nodes.push(...aa.nodes)
+  const nodes = module.nodes.map(node => check(aa, node))
 
   return { nodes }
 }

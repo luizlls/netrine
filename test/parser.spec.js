@@ -14,9 +14,7 @@ describe('Parser', () => {
 
       assert.deepStrictEqual(clean, {
         kind: "Def",
-        meta: {
-          mutable: false,
-        },
+        meta: {},
         name: {
           kind: "Name",
           value: "var",
@@ -216,9 +214,7 @@ describe('Parser', () => {
 
       assert.deepStrictEqual(clean, {
         kind: "Def",
-        meta: {
-          mutable: false,
-        },
+        meta: {},
         name: {
           kind: "Name",
           value: "hello",
@@ -226,7 +222,7 @@ describe('Parser', () => {
         },
         value: {
             kind: "Fn",
-            args: [],
+            params: [],
             value: {
               kind: "Group",
               inner: {
@@ -236,15 +232,13 @@ describe('Parser', () => {
                   value: "print",
                   meta: {}
                 },
-                args: [
-                  {
-                    kind: "String",
-                    value: "Hello!",
-                    meta: {
-                      raw: "\"Hello!\""
-                    }
+                arg: {
+                  kind: "String",
+                  value: "Hello!",
+                  meta: {
+                    raw: "\"Hello!\""
                   }
-                ],
+                },
                 meta: {}
               },
               meta: {},

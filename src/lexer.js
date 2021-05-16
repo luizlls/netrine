@@ -194,17 +194,18 @@ const next = (lexer) => {
       } else {
         return wildcard(lexer)
       }
-    default:
-      if (alpha(char)) {
-        return identifier(lexer)
-      } else if (numeric(char)) {
-        return number(lexer)
-      } else if (symbolic(char)) {
-        return operator(lexer)
-      } else {
-        bump(lexer)
-        return error(lexer, `Invalid character '${slice(lexer)}'`)
-      }
+    default: break
+  }
+
+  if (alpha(char)) {
+    return identifier(lexer)
+  } else if (numeric(char)) {
+    return number(lexer)
+  } else if (symbolic(char)) {
+    return operator(lexer)
+  } else {
+    bump(lexer)
+    return error(lexer, `Invalid character '${slice(lexer)}'`)
   }
 }
 
