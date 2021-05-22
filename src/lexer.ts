@@ -1,8 +1,22 @@
-const { keywords, operators, symbols } = require('./token')
+import { Token, TokenKind, keywords, operators } from './token'
 
 const SYMBOLS = '.%^&|:=~+-*<>!/'
 
-const lexer = (source) => ({
+interface Lexer {
+  source: string
+  line: number
+  prev: number
+  curr: number
+  mode: Mode,
+  tokens: Token[]
+}
+
+type Mode =
+  'regular'
+| 'string'
+| 'template'
+
+const lexer = (source: string): Lexer => ({
   source,
   line: 1,
   curr: 0,
@@ -11,7 +25,7 @@ const lexer = (source) => ({
   tokens: [],
 })
 
-const token = (lexer, kind, value = null) => {
+const token = (lexer: Lexer, kind: TokenKind, value?: string) => {
   lexer.tokens.push({
     kind,
     value,
@@ -26,68 +40,68 @@ const token = (lexer, kind, value = null) => {
   return lexer
 }
 
-const done = (lexer) => {
+const done = (lexer: Lexer) => {
   return lexer.curr >= lexer.source.length
 }
 
-const bump = (lexer) => {
+const bump = (lexer: Lexer) => {
   lexer.curr += 1
   return lexer
 }
 
-const line = (lexer) => {
+const line = (lexer: Lexer) => {
   lexer.line += 1
   return bump(lexer)
 }
 
-const current = (lexer) => {
+const current = (lexer: Lexer) => {
   return lexer.source[lexer.curr]
 }
 
-const peek = (lexer) => {
+const peek = (lexer: Lexer) => {
   return lexer.source[lexer.curr + 1]
 }
 
-const slice = (lexer) => {
+const slice = (lexer: Lexer) => {
   return lexer.source.slice(lexer.prev, lexer.curr)
 }
 
-const numeric = (char) => {
+const numeric = (char: string) => {
   return char >= '0' && char <= '9'
 }
 
-const lower = (char) => {
+const lower = (char: string) => {
   return char >= 'a' && char <= 'z' || char === '_'
 }
 
-const upper = (char) => {
+const upper = (char: string) => {
   return char >= 'A' && char <= 'Z'
 }
 
-const alpha = (char) => {
+const alpha = (char: string) => {
   return lower(char) || upper(char)
 }
 
-const alphanumeric = (char) => {
+const alphanumeric = (char: string) => {
   return lower(char) || upper(char) || numeric(char)
 }
 
-const symbolic = (char) => {
+const symbolic = (char: string) => {
   return SYMBOLS.includes(char)
 }
 
-const error = (lexer, msg) => {
+const error = (lexer: Lexer, msg: string) => {
   throw `Error [${lexer.line}]: ${msg}`
 }
 
-const comment = (lexer) => {
+const comment = (lexer: Lexer) => {
   while (current(lexer) !== '\n' && !done(lexer)) {
     bump(lexer)
   }
   return lexer
 }
 
-const number = (lexer, prefix = false) => {
+const number = (lexer: Lexer, prefix = false) => {
   if (prefix) {
     bump(lexer)
   }
@@ -103,7 +117,7 @@ const number = (lexer, prefix = false) => {
   return token(lexer, 'number', slice(lexer))
 }
 
-const identifier = (lexer) => {
+const identifier = (lexer: Lexer) => {
   while (alphanumeric(current(lexer))) {
     bump(lexer)
   }
@@ -127,12 +141,12 @@ const identifier = (lexer) => {
   }
 }
 
-const wildcard = (lexer) => {
+const wildcard = (lexer: Lexer) => {
   bump(lexer)
-  return token(lexer, 'wildcard')
+  return token(lexer, 'any')
 }
 
-const operator = (lexer) => {
+const operator = (lexer: Lexer) => {
   while (symbolic(current(lexer))) {
     bump(lexer)
   }
@@ -146,7 +160,7 @@ const operator = (lexer) => {
   }
 }
 
-const next = (lexer) => {
+const next = (lexer: Lexer) => {
   lexer.prev = lexer.curr
 
   if (lexer.mode === 'string') {
@@ -209,7 +223,7 @@ const next = (lexer) => {
   }
 }
 
-const template = (lexer, start) => {
+const template = (lexer: Lexer, start: boolean) => {
   lexer.prev = lexer.curr
 
   while (!done(lexer)) {
@@ -266,7 +280,7 @@ const template = (lexer, start) => {
 
 }
 
-exports.tokenize = (source) => {
+export const tokenize = (source: string) => {
   const tokenizer = lexer(source)
 
   while (!done(tokenizer)) { next(tokenizer) }

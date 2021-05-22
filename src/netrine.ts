@@ -1,15 +1,15 @@
-const readline = require('readline')
-const filesystem = require('fs')
+import * as readline from 'readline'
+import * as filesystem from 'fs'
 
-const { tokenize } = require('./lexer')
-const { parse } = require('./parser')
-const { analyze } = require('./analysis')
-const { compile } = require('./compiler')
+import { tokenize } from './lexer'
+import { parse } from './parser'
+import { analyze } from './analysis'
+import { compile } from './compiler'
 
 
-const file = (path) => {
+const file = (path: string) => {
   filesystem.readFile(path, null, (err, data) => {
-    console.log(eval(data.toString('utf8')))
+    console.log(evaluate(data.toString('utf8')))
   })
 }
 
@@ -23,39 +23,39 @@ const repl = () => {
 
   process.stdout.write('>>>> ')
 
-  let lines = []
+  let lines: string[] = []
 
   rl.on('line', line => {
     if (line != null && line != '') {
       return lines.push(line.trim())
     }
     const source = lines.join('\n')
-    console.log(eval(source))
+    console.log(evaluate(source))
     process.stdout.write('>>>> ')
     lines = []
   })
 }
 
 
-const pretty = (node) =>
+const pretty = (node: string): string =>
   JSON.stringify(node, null, 4)
 
 const pipeline = [
   tokenize,
   parse,
   analyze,
-  //pretty,
   compile,
+  //pretty,
 ]
 
-const eval = (source) => {
-  return pipeline.reduce((partial, pass) => pass(partial), source)
+const evaluate = (source: string) => {
+  return pipeline.reduce((partial: any, pass) => pass(partial), source)
 }
 
 try {
   const args = process.argv.slice(2)
-  if (args.length) {
-    file(args.shift())
+  if (args.length != 0) {
+    file(args[0])
   } else {
     repl()
   }

@@ -1,6 +1,6 @@
-const assert = require('assert')
+import * as assert from 'assert'
 
-const { tokenize } = require('../src/lexer')
+import { tokenize } from '../src/lexer'
 
 describe('Lexer', () => {
   describe('tokenizer', () => {

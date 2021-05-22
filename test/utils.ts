@@ -1,4 +1,4 @@
-const removeSpans = (node) => {
+export const removeSpans = (node) => {
   if (!node || !node.kind && !Array.isArray(node)) {
     return node
   }
@@ -20,5 +20,3 @@ const removeSpans = (node) => {
 
   return node
 }
-
-exports.removeSpans = removeSpans

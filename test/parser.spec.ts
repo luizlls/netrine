@@ -1,8 +1,8 @@
-const assert = require('assert')
+import * as assert from 'assert'
 
-const { tokenize } = require('../src/lexer')
-const { parse } = require('../src/parser')
-const { removeSpans } = require('./utils')
+import { tokenize } from '../src/lexer'
+import { parse } from '../src/parser'
+import { removeSpans } from './utils'
 
 describe('Parser', () => {
   describe('parser', () => {

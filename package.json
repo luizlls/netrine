@@ -2,15 +2,17 @@
   "name": "netrine",
   "version": "0.0.1",
   "description": "A small, functional, programming language",
-  "main": "src/netrine.js",
+  "main": "src/netrine.ts",
   "scripts": {
-    "start": "node src/netrine.js",
+    "build": "tsc",
+    "start": "tsc && node dist/netrine.js",
     "test": "mocha"
   },
   "author": "Luiz Lopes (luizlopedev@gmail.com)",
   "license": "MIT",
-  "dependencies": {},
   "devDependencies": {
-    "mocha": "^8.3.0"
+    "@types/node": "^15.6.0",
+    "mocha": "^8.3.0",
+    "typescript": "^4.2.4"
   }
 }
