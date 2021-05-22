@@ -27,6 +27,7 @@ const repl = () => {
 
   rl.on('line', line => {
     if (line != null && line != '') {
+      process.stdout.write('>>>> ')
       return lines.push(line.trim())
     }
     const source = lines.join('\n')

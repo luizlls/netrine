@@ -150,7 +150,7 @@ const checkBlock = (analyzer: Analyzer, block: Syntax.Block): Syntax.Expr => {
   if (block.items.length === 1) {
     return check(analyzer, block.items[0])
   }
-  
+
   block.items = block.items.map(item => check(analyzer, item))
   return block
 }
@@ -205,11 +205,11 @@ const checkMatch = (analyzer: Analyzer, match: Syntax.Match): Syntax.Cond => {
     }
   })
 
-  const last = clauses[clauses.length - 1]
+  const last = clauses.pop()
 
-  let otherwise: Syntax.Expr | undefined
-  if (last.condition.kind === 'True') {
-    otherwise = undefined
+  let otherwise: Syntax.Expr
+  if (last != undefined && last.condition.kind === 'True') {
+    otherwise = last.result
   } else {
     otherwise = node('Raise', {
       error: node('String', {
@@ -502,7 +502,7 @@ const checkVariant = (analyzer: Analyzer, variant: Syntax.Variant): Syntax.Varia
 const checkTemplate = (analyzer: Analyzer, template: Syntax.Template): Syntax.Expr => {
   const elements = template.elements.map(elem => check(analyzer, elem))
 
-  const concats  = elements.reduce((lhs, rhs) => 
+  const concats  = elements.reduce((lhs, rhs) =>
     node('Binary', { operator: 'concat', lhs, rhs }))
 
   return check(analyzer, concats)

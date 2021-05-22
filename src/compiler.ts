@@ -15,7 +15,7 @@ const compiler = (module: Syntax.Module) => ({
 })
 
 
-const compileExpr = (compiler: Compiler, expr: Syntax.Expr): string => {
+const compileExpr = (compiler: Compiler, expr: Syntax.Expr, fullBlock = true): string => {
   switch (expr.kind) {
     case 'Fn':
       return compileFn(compiler, expr)
@@ -32,9 +32,9 @@ const compileExpr = (compiler: Compiler, expr: Syntax.Expr): string => {
     case 'Apply':
       return compileApply(compiler, expr)
     case 'Block':
-      return compileBlock(compiler, expr)
+      return compileBlock(compiler, expr, fullBlock)
     case 'Cond':
-      return compileCond(compiler, expr)
+      return compileCond(compiler, expr, fullBlock)
     case 'List':
       return compileList(compiler, expr)
     case 'Dict':
@@ -54,7 +54,7 @@ const compileExpr = (compiler: Compiler, expr: Syntax.Expr): string => {
     case 'False':
       return 'false'
     case 'Any':
-      return '_' 
+      return '_'
     case 'Unit':
       return ''
     default:
@@ -63,17 +63,24 @@ const compileExpr = (compiler: Compiler, expr: Syntax.Expr): string => {
 }
 
 const compileFn = (compiler: Compiler, fn: Syntax.Fn): string => {
-  return `function(${fn.params[0].value}) { ${compileBody(compiler, fn.value)}; }`
+  const param = fn.params[0].value
+  const body  = compileBody(compiler, fn.value)
+
+  return `function(${param}) { ${body}; }`
 }
 
 const compileBody = (compiler: Compiler, body: Syntax.Expr): string => {
-  let value = compileExpr(compiler, body)
+
+  let value = compileExpr(compiler, body, false)
 
   switch (body.kind) {
-    case 'Def': break
-    case 'Set': break
+    case 'Def':
+    case 'Set':
+    case 'Cond':
+    case 'Block': break
     case 'Raise':
-      value = `throw ${value}`; break
+      value = `throw ${value}`
+      break
     default:
       value = `return ${value}`
   }
@@ -116,41 +123,51 @@ const compileApply = (compiler: Compiler, app: Syntax.Apply): string => {
   return `${fn}(${arg})`
 }
 
-const compileBlock = (compiler: Compiler, block: Syntax.Block): string => {
-  const items = block.items.map(item => `${compileExpr(compiler, item)};`)
+const compileBlock = (compiler: Compiler, block: Syntax.Block, full = true): string => {
+  const items = block.items.map(item => `${compileExpr(compiler, item)}`)
   const last  = items.pop()
   items.push(`return ${last}`)
 
-  return `(function() { ${items.join(' ')} })()`
+  if (full) {
+    return `(function() { ${items.join('; ')} })()`
+  } else {
+    return items.join('; ')
+  }
 }
 
-const compileCond = (compiler: Compiler, cond: Syntax.Cond): string => {
+const compileCond = (compiler: Compiler, cond: Syntax.Cond, full = true): string => {
   const conditions = cond
     .clauses
     .map(clause => {
-      const test = compileExpr(compiler, clause.condition)
-      const then = compileExpr(compiler, clause.result)
+      const cond = compileExpr(compiler, clause.condition)
+      const value = compileExpr(compiler, clause.result, false)
 
-      if (clause.result.kind === 'Raise') {
-        return `if (${test}) { throw ${then}; }`
-      } else {
-        return `if (${test}) { return ${then}; }`
+      switch (clause.result.kind) {
+        case 'Cond':
+        case 'Block':
+          return `if (${cond}) { ${value} }`
+        case 'Raise':
+          return `if (${cond}) {throw ${value} }`
+        default:
+          return `if (${cond}) { return ${value} }`
       }
-
     })
     .join(' else ')
 
-  if (cond.otherwise === undefined) {
-    return `(function() { ${conditions} })()`
+  const otherwise = compileExpr(compiler, cond.otherwise, false)
+
+  let final
+  switch (cond.otherwise.kind) {
+    case 'Cond':
+    case 'Block':
+      final = `${conditions} else { ${otherwise} }`; break
+    case 'Raise':
+      final = `${conditions} else { throw ${otherwise} }`; break
+    default:
+      final = `${conditions} else { return ${otherwise} }`; break
   }
 
-  const otherwise = compileExpr(compiler, cond.otherwise)
-
-  if (cond.otherwise.kind === 'Raise') {
-    return `(function() { ${conditions} else { throw ${otherwise}; } })()`
-  } else {
-    return `(function() { ${conditions} else { return ${otherwise}; } })()`
-  }
+  return full ? `(function() { ${final} })()` : final
 }
 
 const compileVariant = (compiler: Compiler, variant: Syntax.Variant): string => {
@@ -172,7 +189,7 @@ const compileList = (compiler: Compiler, list: Syntax.List): string => {
       return compileExpr(compiler, item)
     })
     .join(', ')
-  
+
   return `[${items}]`
 }
 

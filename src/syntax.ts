@@ -142,7 +142,7 @@ export interface Match extends Node {
 export interface Cond extends Node {
   readonly kind: 'Cond'
   clauses: { condition: Expr, result: Expr }[]
-  otherwise?: Expr
+  otherwise: Expr
 }
 
 
