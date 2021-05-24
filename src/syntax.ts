@@ -18,7 +18,6 @@ export type Expr =
   | Partial
   | If
   | Match
-  | Cond
   | For
   | Block
   | Group
@@ -138,13 +137,6 @@ export interface Match extends Node {
   value: Expr
   cases: { pattern: Pattern, result: Expr }[]
 }
-
-export interface Cond extends Node {
-  readonly kind: 'Cond'
-  clauses: { condition: Expr, result: Expr }[]
-  otherwise: Expr
-}
-
 
 export interface For extends Node {
   readonly kind: 'For'

@@ -159,58 +159,50 @@ const checkGroup = (analyzer: Analyzer, group: Syntax.Group): Syntax.Expr => {
   return check(analyzer, group.inner)
 }
 
-const checkIf = (analyzer: Analyzer, conditional: Syntax.If): Syntax.Cond => {
-  const clauses = []
+const checkIf = (analyzer: Analyzer, conditional: Syntax.If): Syntax.If => {
+  conditional.test = check(analyzer, conditional.test)
+  conditional.then = check(analyzer, conditional.then)
+  conditional.otherwise = check(analyzer, conditional.otherwise)
 
-  clauses.push({
-    condition: check(analyzer, conditional.test), result: check(analyzer, conditional.then),
-  })
-
-  let otherwise = conditional.otherwise
-
-  while (otherwise.kind === 'If') {
-    clauses.push({
-      condition: check(analyzer, otherwise.test), result: check(analyzer, otherwise.then),
-    })
-
-    otherwise = otherwise.otherwise
-  }
-
-  otherwise = check(analyzer, otherwise)
-
-  return node('Cond', { clauses, otherwise }, conditional.meta)
+  return conditional
 }
 
-const checkMatch = (analyzer: Analyzer, match: Syntax.Match): Syntax.Cond => {
-  const clauses = match.cases.map(item => {
+const checkMatch = (analyzer: Analyzer, match: Syntax.Match): Syntax.Expr => {
+  const cases = match.cases.map(item => {
 
     const { conditions
           , definitions } = checkPattern(analyzer, match.value, item.pattern)
 
-    let condition: Syntax.Expr
-    if (conditions.length !== 1) {
-      condition = node('Native', { operation: 'And', values: conditions })
+    let test: Syntax.Expr
+    if (conditions.length > 1) {
+      test = node('Native', { operation: 'And', values: conditions })
     } else {
-      condition = conditions[0]
+      test = conditions[0]
     }
 
-    const bindings = definitions.map(({ name, value }) => {
-      return node('Def', { name, value, })
-    })
+    const bindings = definitions
+      .map(def => node('Def', { name: def.name, value: def.value })) as Syntax.Def[]
 
-    const result = node('Block', { items: [...bindings, item.result] }) as Syntax.Block
+    const then = node('Block', { items: [...bindings, item.result] }) as Syntax.Block
 
     return {
-      condition: check(analyzer, condition), result: check(analyzer, result),
+      test: check(analyzer, test),
+      then: check(analyzer, then),
     }
   })
 
-  const last = clauses.pop()
+  if (cases.length === 0) {
+    return error(analyzer, match.meta, 'Internal Compiler Error: `match` expression without cases')
+  }
+
+  const last = cases.pop()!
 
   let otherwise: Syntax.Expr
-  if (last != undefined && last.condition.kind === 'True') {
-    otherwise = last.result
+  if (last.test.kind === 'True') {
+    otherwise = last.then
   } else {
+    cases.push(last) // return to list of cases
+
     otherwise = node('Raise', {
       error: node('String', {
         value: 'Could not match any of the patterns'
@@ -218,7 +210,19 @@ const checkMatch = (analyzer: Analyzer, match: Syntax.Match): Syntax.Cond => {
     }, match.value.meta)
   }
 
-  return node('Cond', { clauses, otherwise }, match.meta)
+  if (cases.length === 0) {
+    return otherwise
+  }
+
+  const first = cases.shift()!
+
+  const conditional = node('If', { test: first.test, then: first.then, otherwise }) as Syntax.If
+
+  return cases
+    .reduce((cond: Syntax.If, item) => {
+      cond.otherwise = node('If', { test: item.test, then: item.then, otherwise }) as Syntax.If
+      return cond
+    }, conditional)
 }
 
 interface PatternResult {
@@ -406,7 +410,7 @@ const variantPattern = (analyzer: Analyzer, value: Syntax.Expr, pattern: Syntax.
     values: [
       node('Get', {
         main: value,
-        name: node('Name', { value: '$$' })
+        member: node('Name', { value: '$$' })
       }),
       node('String', {
         value: pattern.name.value
@@ -432,7 +436,7 @@ const variantPattern = (analyzer: Analyzer, value: Syntax.Expr, pattern: Syntax.
 
     const element = node('Get', {
       main: value,
-      name: node('Name', { value: `$${index.toString()}` })
+      member: node('Name', { value: `$${index.toString()}` })
     })
 
     const result = checkPattern(analyzer, element, item)
