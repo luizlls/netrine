@@ -7,7 +7,7 @@
 ## STATUS
 
 - [X] Lexer
-- [X] Parser
+- [ ] Parser
 - [ ] JS Transpiler
 - [ ] Type Checker?
 - [ ] IR

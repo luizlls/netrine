@@ -1,0 +1,8 @@
+sort = list ->
+  match list
+    case [pivot & tail] -> do {
+      less = filter (<  pivot) tail
+      more = filter (>= pivot) tail
+
+      (sort less) ++ [pivot] ++ (sort more)
+    }111

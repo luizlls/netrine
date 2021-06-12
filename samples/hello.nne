@@ -1,3 +1,2 @@
-greet = fn name {
-  print "Hi, {name}!"
-}
+greet = name ->
+  print "Hello, " + name

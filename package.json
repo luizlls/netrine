@@ -1,18 +1,10 @@
 {
-  "name": "netrine",
-  "version": "0.0.1",
-  "description": "A small, functional, programming language",
-  "main": "src/netrine.ts",
   "scripts": {
-    "build": "tsc",
-    "start": "tsc && node dist/netrine.js",
-    "test": "mocha"
+    "build": "clj -M -m cljs.main --target node --output-to dist/main.js -c netrine.cljs.core",
+    "start": "npm run build && node dist/main",
+    "release": "clj -M -m cljs.main --target node --output-to dist/main.js --optimizations advanced -c netrine.cljs.core"
   },
-  "author": "Luiz Lopes (luizlopedev@gmail.com)",
-  "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^15.6.0",
-    "mocha": "^8.3.0",
-    "typescript": "^4.2.4"
+  "dependencies": {
+    "source-map-support": "^0.5.19"
   }
 }

@@ -1,8 +1,7 @@
-counter = fn {
-  total = mut 0
-  div [
-    button "+" [ click: fn (total := total + 1) ],
-    p "total " (strong total),
-    button "-" [ click: fn (total := total - 1) ],
-  ]
-}
+counter = mut 0
+
+div [
+  button "+" { click = () -> counter := counter + 1 },
+  span "total {counter}",
+  button "-" { click = () -> counter := counter - 1 },
+]
