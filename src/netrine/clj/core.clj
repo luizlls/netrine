@@ -5,8 +5,8 @@
 
 
 (defn -main []
-  (let [source "hello = name ->
-                print (\"Hello, \" + name)"
+  (let [source "hello = fn name ->
+                print ('Hello, ' + name)"
         tokens (tokenize source)]
     (pprint tokens)))
 

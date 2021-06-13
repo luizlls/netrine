@@ -1,15 +1,9 @@
 (ns netrine.lexer)
 
 (def keywords
-  #{"if"
-    "then"
-    "else"
-    "and"
-    "or"
-    "not"
-    "is"
-    "do"
-    "mut"})
+  #{"if" "then" "else"
+    "and" "or" "not" "is"
+    "fn" "do" "mut"})
 
 (def symbols
   #{\% \: \= \!
@@ -17,24 +11,26 @@
     \< \> \|})
 
 (def operators
-  {"="  :tk/def
-   ":=" :tk/set
-   ":"  :tk/colon
-   "->" :tk/arrow
-   "+"  :op/add
-   "-"  :op/sub
-   "*"  :op/mul
-   "/"  :op/div
-   "%"  :op/mod
-   "==" :op/eq
-   "!=" :op/ne
-   "<"  :op/lt
-   "<=" :op/le
-   ">"  :op/gt
-   ">=" :op/ge
-   "++" :op/concat
-   ">>" :op/compose
-   "|>" :op/pipe})
+  {"="   :tk/def
+   ":="  :tk/set
+   ":"   :tk/colon
+   "->"  :tk/arrow
+   "+"   :op/add
+   "-"   :op/sub
+   "*"   :op/mul
+   "/"   :op/div
+   "%"   :op/mod
+   "=="  :op/eq
+   "!="  :op/ne
+   "<"   :op/lt
+   "<="  :op/le
+   ">"   :op/gt
+   ">="  :op/ge
+   "|>"  :op/pipe
+   "and" :op/and
+   "or"  :op/or
+   "is"  :op/is
+   "not" :op/not})
 
 
 (defn new-lexer
@@ -45,9 +41,9 @@
    :pos    0
    :token  nil})
 
-(defn- new-token
+(defn- token
   ([lexer kind]
-   (new-token lexer kind nil))
+   (token lexer kind nil))
   ([lexer kind value]
    (let [token {:kind  kind
                 :value value
@@ -66,7 +62,7 @@
 
 (defn- curr
   [lexer]
-  (nth (:source lexer) (:pos lexer)))
+  (nth (:source lexer) (:pos lexer) nil))
 
 (defn- done?
   [lexer]
@@ -98,42 +94,44 @@
 
 (defn- bump-while
   [lexer pred]
-  (if (or (done? lexer) (not (pred (curr lexer))))
+  (if (or (done? lexer)
+          (not (pred (curr lexer))))
     lexer
     (recur (bump lexer) pred)))
 
 (defn- string
-  [lexer]
-  (let [lexer (bump lexer)
-        lexer (bump-while lexer #(and (not= % \")
-                                      (not= % \newline)))]
+  [lexer kind]
+  (let [lexer (bump-while (bump lexer) #(and (not= % kind)
+                                             (not= % \newline)))]
     (if (or (= \newline (curr lexer))
             (done? lexer))
-      (new-token lexer :tk/error "Unterminated string")
+      (token lexer :tk/error "Unterminated string")
       (let [lexer (bump lexer)
             value (slice lexer)]
-        (new-token lexer :tk/string value)))))
+        (token lexer :tk/string value)))))
 
 (defn- number
   [lexer]
   (let [lexer (bump-while lexer digit?)
-        lexer (if (= \. (curr lexer))
+        lexer (if (= (curr lexer) \.)
                 (bump-while (bump lexer) digit?)
                 lexer)
         value (slice lexer)]
-    (new-token lexer :tk/number value)))
+    (token lexer :tk/number value)))
 
 (defn- ident
   [lexer]
   (let [lexer (bump-while lexer alpha?)
         value (slice lexer)]
     (cond
+      (contains? operators value)
+        (token lexer (keyword "op" value))
       (contains? keywords value)
-        (new-token lexer (keyword "tk" value) value)
+        (token lexer (keyword "kw" value))
       (lower? (first value))
-        (new-token lexer :tk/lower value)
+        (token lexer :tk/lower value)
       :else
-        (new-token lexer :tk/upper value))))
+        (token lexer :tk/upper value))))
 
 (defn- operator
   [lexer]
@@ -141,42 +139,42 @@
         value (slice lexer)
         operator (get operators value)]
     (if operator
-      (new-token lexer operator value)
-      (new-token lexer :tk/error "Not a valid operator"))))
+      (token lexer operator)
+      (token lexer :tk/error "Not a valid operator"))))
 
-(declare next)
-
-(defn- next-token
+(defn next-token
   [lexer]
-  (let [char (curr lexer)]
+  (let [lexer (assoc lexer :prev (:pos lexer))
+        char (curr lexer)]
     (case char
-      \( (new-token (bump lexer) :tk/lparen)
-      \) (new-token (bump lexer) :tk/rparen)
-      \{ (new-token (bump lexer) :tk/lbrace)
-      \} (new-token (bump lexer) :tk/rbrace)
-      \[ (new-token (bump lexer) :tk/lbracket)
-      \] (new-token (bump lexer) :tk/rbracket)
-      \, (new-token (bump lexer) :tk/comma)
-      \; (new-token (bump lexer) :tk/semicolon)
-      \& (new-token (bump lexer) :tk/amp)
-      \_ (new-token (bump lexer) :tk/any)
-      \space  (next (bump-while lexer #(= % \space)))
-      \tab    (next (bump-while lexer #(= % \tab)))
-      \return (next (bump-while lexer #(= % \return)))
+      \( (token (bump lexer) :tk/lparen)
+      \) (token (bump lexer) :tk/rparen)
+      \{ (token (bump lexer) :tk/lbrace)
+      \} (token (bump lexer) :tk/rbrace)
+      \[ (token (bump lexer) :tk/lbracket)
+      \] (token (bump lexer) :tk/rbracket)
+      \, (token (bump lexer) :tk/comma)
+      \. (token (bump lexer) :tk/dot)
+      \; (token (bump lexer) :tk/semi)
+      \& (token (bump lexer) :tk/amp)
+      \_ (token (bump lexer) :tk/any)
+      \space  (recur (bump-while lexer #(= % \space)))
+      \tab    (recur (bump-while lexer #(= % \tab)))
+      \return (recur (bump-while lexer #(= % \return)))
       \newline (let [lexer (bump lexer)
                      lexer (update lexer :line inc)]
-                 (next lexer))
-      \# (next (bump-while lexer #(not= % \newline)))
-      \" (string lexer)
+                 (recur lexer))
+      \# (recur (bump-while lexer #(not= % \newline)))
+      \" (string lexer \")
+      \' (string lexer \')
+      nil (token (bump lexer) :tk/eof)
       (cond
         (digit? char) (number lexer)
         (alpha? char) (ident lexer)
         (symbolic? char) (operator lexer)
-        :else (new-token lexer :tk/error "unexpected character")))))
-
-(defn next
-  [lexer]
-  (next-token (assoc lexer :prev (:pos lexer))))
+        :else (token (bump lexer)
+                     :tk/error
+                     (str "unexpected character `" char "`"))))))
 
 (defn tokenize
   [source]
@@ -184,6 +182,6 @@
          tokens []]
     (if (done? lexer)
       tokens
-      (let [lexer (next lexer)
+      (let [lexer (next-token lexer)
             tokens (conj tokens (:token lexer))]
         (recur lexer tokens)))))

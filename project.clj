@@ -4,4 +4,5 @@
             :url "https://opensource.org/licenses/MIT"}
   :main netrine.clj.core
   :dependencies [[org.clojure/clojure "1.10.3"]]
-  :profiles {:dev {:resource-paths ["test/resources"]}})
+  :profiles {:dev {:dependencies [[midje "1.10.3"]]
+                   :plugins [[lein-midje "3.2.1"]]}})
