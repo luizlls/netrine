@@ -11,22 +11,22 @@
     \< \> \|})
 
 (def operators
-  {"="   :tk/def
-   ":="  :tk/set
-   ":"   :tk/colon
-   "->"  :tk/arrow
-   "+"   :op/add
-   "-"   :op/sub
-   "*"   :op/mul
-   "/"   :op/div
-   "%"   :op/mod
-   "=="  :op/eq
-   "!="  :op/ne
-   "<"   :op/lt
-   "<="  :op/le
-   ">"   :op/gt
-   ">="  :op/ge
-   "|>"  :op/pipe
+  {"="  :tk/equals
+   ":=" :tk/walrus
+   "->" :tk/arrow
+   ":"  :op/range
+   "+"  :op/add
+   "-"  :op/sub
+   "*"  :op/mul
+   "/"  :op/div
+   "%"  :op/mod
+   "==" :op/eq
+   "!=" :op/ne
+   "<"  :op/lt
+   "<=" :op/le
+   ">"  :op/gt
+   ">=" :op/ge
+   "|>" :op/pipe
    "and" :op/and
    "or"  :op/or
    "is"  :op/is
