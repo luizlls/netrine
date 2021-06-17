@@ -6,7 +6,7 @@
 
 
 (defn -main []
-  (let [source "hello = fn name -> print name"
+  (let [source "hello = fn name -> print ('Hello ' + name)"
         output (->> source
                     tokenize
                     parse)]

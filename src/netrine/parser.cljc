@@ -96,12 +96,6 @@
             nodes  (conj nodes node)]
         (recur parser nodes)))))
 
-(defn- parse-literal
-  [parser kind node-kind]
-  (let [parser (eat parser kind)
-        value  (-> parser :prev :value)]
-    (node parser node-kind value)))
-
 (defn- parse-string
   [parser]
   (let [parser (eat parser :tk/string)
@@ -123,12 +117,12 @@
 (defn- start-term?
   [parser]
   (case (-> parser :token :kind)
-    (:tk/lower :tk/upper
+     (:tk/lower :tk/upper
       :tk/string :tk/number
       :tk/lparen :tk/lbrace :tk/lbracket) true
     false))
 
-(defn- parse-arguments
+(defn- parse-values
   [parser]
   (parse-while parser parse-term #(and (start-term? %)
                                        (match-lines? %))))
@@ -137,7 +131,7 @@
   [parser]
   (let [parser (eat parser :tk/upper)
         name   (-> parser :prev :value)
-        parser (parse-arguments parser)
+        parser (parse-values parser)
         values (:node parser)]
     (case name
       "True"  (node parser :true)
@@ -189,9 +183,11 @@
 
 (defn- parse-apply
   [parser]
-  (let [parser (parse-arguments parser)
+  (let [parser (parse-values parser)
         [callee & args] (:node parser)]
-    (apply node parser :call callee args)))
+    (if (empty? args)
+      (assoc parser :node callee)
+      (apply node parser :call callee args))))
 
 (def precedence
   {:op/mul   [6, :left]
@@ -217,7 +213,18 @@
 
 (defn- parse-binary
   [parser minimum]
-  (parse-apply parser))
+  (loop [parser (parse-apply parser)
+         left   (:node parser)]
+    (let [operator        (-> parser :token :kind)
+          [precedence, _] (get precedence operator)]
+      (if (or (nil? precedence)
+              (< precedence minimum))
+        (assoc parser :node left)
+        (let [minimum (inc minimum)
+              parser  (bump parser)
+              parser  (parse-binary parser minimum)
+              right   (:node parser)]
+          (recur parser [operator left right]))))))
 
 (defn- parse-term
   [parser]
@@ -227,6 +234,7 @@
       :tk/upper  (parse-symbol parser)
       :tk/string (parse-string parser)
       :tk/number (parse-number parser)
+      :tk/lparen (parse-block-of parser parse-expr :tk/lparen :tk/rparen :tk/comma)
       (error parser (str "Unexpected " (name token))))))
 
 (defn- parse-expr
