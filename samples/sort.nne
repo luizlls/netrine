@@ -1,0 +1,9 @@
+// functional quicksort
+sort(list) {
+  if list is (pivot & rest) then do
+    less = filter (<  pivot) rest;
+    more = filter (>= pivot) rest;
+    (sort less) + [pivot] + (sort more)
+  else
+    []
+}

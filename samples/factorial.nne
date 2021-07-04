@@ -1,6 +1,5 @@
-factorial = fn n {
-  match n {
-    1 -> 1
-    n -> n * factorial (n - 1)
-  }
+factorial(num) {
+  if num == 1
+    then 1
+    else num * factorial (num - 1)
 }

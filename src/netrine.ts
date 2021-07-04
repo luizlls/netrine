@@ -1,20 +1,15 @@
 import * as readline from 'readline'
 import * as filesystem from 'fs'
 
-import { tokenize } from './lexer'
-import { parse } from './parser'
-import { analyze } from './analysis'
-import { compile } from './compiler'
+import { tokenize } from './syntax/lexer'
 
-
-const file = (path: string) => {
+function file(path: string) {
   filesystem.readFile(path, null, (err, data) => {
     console.log(evaluate(data.toString('utf8')))
   })
 }
 
-
-const repl = () => {
+function repl() {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -37,25 +32,22 @@ const repl = () => {
   })
 }
 
-
-const pretty = (node: string): string =>
-  JSON.stringify(node, null, 4)
+function pretty(node: string): string {
+  return JSON.stringify(node, null, 4)
+}
 
 const pipeline = [
   tokenize,
-  parse,
-  analyze,
-  compile,
-  //pretty,
+  pretty,
 ]
 
-const evaluate = (source: string) => {
+function evaluate(source: string) {
   return pipeline.reduce((partial: any, pass) => pass(partial), source)
 }
 
 try {
   const args = process.argv.slice(2)
-  if (args.length != 0) {
+  if (args.length) {
     file(args[0])
   } else {
     repl()

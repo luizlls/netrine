@@ -1,7 +1,5 @@
-fibonacci = fn n {
-  match n {
-    0 -> 0
-    1 -> 1
-    n -> fibonacci (n - 1) + fibonacci (n - 2)
-  }
+fibonacci(num) {
+  if num <= 1
+    then 1
+    else fibonacci(n - 1) + fibonacci(n - 2)
 }
