@@ -1,6 +1,6 @@
 # NETRINE
 
-*Netrine* is a minimalistic, dynamically typed and functional programming language. With great focus in simplicity.
+*Netrine* is a minimalistic, gradually typed and functional programming language, with great focus on simplicity.
 
 &nbsp;
 
