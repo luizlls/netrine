@@ -3,6 +3,7 @@
 #![macro_use]
 
 pub mod syntax;
+pub mod error;
 
 use std::{ops::Range, path::PathBuf};
 
