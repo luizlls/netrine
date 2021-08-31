@@ -226,10 +226,6 @@ impl Token {
         )
     }
 
-    pub fn is_unary(&self) -> bool {
-        self.kind == TokenKind::Not
-    }
-
     pub fn precedence(&self) -> Option<Precedence> {
         match self.kind {
             TokenKind::Div   => Some(7),
