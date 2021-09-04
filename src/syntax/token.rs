@@ -131,6 +131,7 @@ pub enum TokenError {
     InvalidOperator,
     InvalidEscapeCharacter,
     UnterminatedString,
+    UnterminatedIdentifier,
 }
 
 impl fmt::Display for TokenError {
@@ -140,6 +141,7 @@ impl fmt::Display for TokenError {
             TokenError::InvalidEscapeCharacter => write!(f, "invalid escape"),
             TokenError::InvalidOperator => write!(f, "invalid operator"),
             TokenError::UnterminatedString => write!(f, "unterminated string"),
+            TokenError::UnterminatedIdentifier => write!(f, "unterminated identifier"),
         }
     }
 }
