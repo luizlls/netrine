@@ -120,6 +120,9 @@ impl<'src> Lexer<'src> {
             Some(';') => {
                 self.single(TokenKind::Semi)
             }
+            Some('#') => {
+                self.single(TokenKind::Hash)
+            }
             Some('_') => {
                 self.single(TokenKind::Underscore)
             }
