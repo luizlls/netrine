@@ -24,6 +24,7 @@ pub enum TokenKind {
     Arrow,      // =>
     Equals,     // =
     Warlus,     // :=
+    Hash,       // #
     Underscore, // _
 
     If,
@@ -81,6 +82,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Arrow => write!(f, "=>"),
             TokenKind::Equals => write!(f, "="),
             TokenKind::Warlus => write!(f, ":="),
+            TokenKind::Hash => write!(f, "#"),
             TokenKind::Underscore => write!(f, "_"),
 
             TokenKind::If => write!(f, "if"),
@@ -227,24 +229,25 @@ impl Token {
     }
 
     pub fn precedence(&self) -> Option<Precedence> {
-        match self.kind {
-            TokenKind::Div   => Some(7),
-            TokenKind::Mul   => Some(7),
-            TokenKind::Rem   => Some(7),
-            TokenKind::Add   => Some(6),
-            TokenKind::Sub   => Some(6),
-            TokenKind::Is    => Some(5),
-            TokenKind::Lt    => Some(5),
-            TokenKind::Le    => Some(5),
-            TokenKind::Gt    => Some(5),
-            TokenKind::Ge    => Some(5),
-            TokenKind::Ne    => Some(5),
-            TokenKind::Eq    => Some(5),
-            TokenKind::And   => Some(4),
-            TokenKind::Or    => Some(3),
-            TokenKind::Range => Some(2),
-            TokenKind::Pipe  => Some(1),
-            _ => None
-        }
+        let precedence = match self.kind {
+            TokenKind::Div   => 7,
+            TokenKind::Mul   => 7,
+            TokenKind::Rem   => 7,
+            TokenKind::Add   => 6,
+            TokenKind::Sub   => 6,
+            TokenKind::Is    => 5,
+            TokenKind::Lt    => 5,
+            TokenKind::Le    => 5,
+            TokenKind::Gt    => 5,
+            TokenKind::Ge    => 5,
+            TokenKind::Ne    => 5,
+            TokenKind::Eq    => 5,
+            TokenKind::And   => 4,
+            TokenKind::Or    => 3,
+            TokenKind::Range => 2,
+            TokenKind::Pipe  => 1,
+            _ => return None
+        };
+        Some(precedence)
     }
 }

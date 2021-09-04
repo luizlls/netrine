@@ -21,6 +21,8 @@ pub enum Expr {
 
     Get(Box<Get>),
 
+    Lambda(Box<Lambda>),
+
     Binary(Box<Binary>),
 
     Unary(Box<Unary>),
@@ -30,6 +32,12 @@ pub enum Expr {
     Call(Box<Call>),
 
     Block(Box<Block>),
+    
+    List(Box<List>),
+
+    Seq(Box<Seq>),
+
+    Record(Box<Record>),
 
     If(Box<If>),
 
@@ -71,6 +79,13 @@ pub struct Fn {
 }
 
 #[derive(Debug, Clone)]
+pub struct Lambda {
+    pub parameters: Vec<Parameter>,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub struct Def {
     pub name: Name,
     pub value: Expr,
@@ -94,14 +109,7 @@ pub struct Set {
 #[derive(Debug, Clone)]
 pub struct Get {
     pub source: Expr,
-    pub element: Expr,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct Argument {
-    pub value: Expr,
-    pub name: Option<Name>,
+    pub value : Expr,
     pub span: Span,
 }
 
@@ -109,6 +117,13 @@ pub struct Argument {
 pub struct Call {
     pub callee: Expr,
     pub arguments: Vec<Argument>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Argument {
+    pub value: Expr,
+    pub name: Option<Name>,
     pub span: Span,
 }
 
@@ -146,6 +161,24 @@ pub struct If {
 #[derive(Debug, Clone)]
 pub struct Block {
     pub items: Vec<Expr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Seq {
+    pub values: Vec<Expr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct List {
+    pub values: Vec<Expr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Record {
+    pub properties: Vec<(Expr, Option<Expr>)>,
     pub span: Span,
 }
 
@@ -198,21 +231,21 @@ pub struct Operator {
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.kind {
-            OperatorKind::And => write!(f, "and"),
-            OperatorKind::Or  => write!(f, "or"),
-            OperatorKind::Is  => write!(f, "is"),
-            OperatorKind::Not => write!(f, "not"),
-            OperatorKind::Add => write!(f, "+"),
-            OperatorKind::Sub => write!(f, "-"),
-            OperatorKind::Mul => write!(f, "*"),
-            OperatorKind::Div => write!(f, "/"),
-            OperatorKind::Rem => write!(f, "%"),
-            OperatorKind::Eq  => write!(f, "=="),
-            OperatorKind::Ne  => write!(f, "!="),
-            OperatorKind::Lt  => write!(f, "<"),
-            OperatorKind::Le  => write!(f, "<="),
-            OperatorKind::Gt  => write!(f, ">"),
-            OperatorKind::Ge  => write!(f, ">="),
+            OperatorKind::And   => write!(f, "and"),
+            OperatorKind::Or    => write!(f, "or"),
+            OperatorKind::Is    => write!(f, "is"),
+            OperatorKind::Not   => write!(f, "not"),
+            OperatorKind::Add   => write!(f, "+"),
+            OperatorKind::Sub   => write!(f, "-"),
+            OperatorKind::Mul   => write!(f, "*"),
+            OperatorKind::Div   => write!(f, "/"),
+            OperatorKind::Rem   => write!(f, "%"),
+            OperatorKind::Eq    => write!(f, "=="),
+            OperatorKind::Ne    => write!(f, "!="),
+            OperatorKind::Lt    => write!(f, "<"),
+            OperatorKind::Le    => write!(f, "<="),
+            OperatorKind::Gt    => write!(f, ">"),
+            OperatorKind::Ge    => write!(f, ">="),
             OperatorKind::Pipe  => write!(f, "|>"),
             OperatorKind::Range => write!(f, ".."),
         }
@@ -234,11 +267,15 @@ impl Expr {
             Expr::Mut(e) => e.span,
             Expr::Set(e) => e.span,
             Expr::Get(e) => e.span,
+            Expr::Lambda(e) => e.span,
             Expr::Binary(e) => e.span,
             Expr::Unary(e) => e.span,
             Expr::Partial(e) => e.span,
             Expr::Call(e) => e.span,
             Expr::Block(e) => e.span,
+            Expr::List(e) => e.span,
+            Expr::Seq(e) => e.span,
+            Expr::Record(e) => e.span,
             Expr::If(e) => e.span,
             Expr::Number(e) => e.span,
             Expr::String(e) => e.span,

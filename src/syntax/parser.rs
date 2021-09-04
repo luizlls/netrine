@@ -21,8 +21,12 @@ enum Parsing {
     Definition,
     Function,
     FunctionCall,
+    Lambda,
+    Parens,
+    Brackets,
     If,
     Do,
+    Get,
 }
 
 impl<'s> Parser<'s> {
@@ -76,10 +80,17 @@ impl<'s> Parser<'s> {
     fn parse_term(&mut self) -> Result<Expr> {
         match self.token.kind {
             TokenKind::Lower => {
-                Ok(Expr::Name(self.parse_name()?))
+                if self.match_peek(TokenKind::Arrow)
+                && self.match_lines() {
+                    self.parse_lambda()
+                } else {
+                    Ok(Expr::Name(self.parse_name()?))
+                }
             }
             TokenKind::Number => self.parse_number(),
             TokenKind::String => self.parse_string(),
+            TokenKind::LParen => self.parse_parens(),
+            TokenKind::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.handle_unexpected())
             }
@@ -104,6 +115,57 @@ impl<'s> Parser<'s> {
         Ok(Expr::String(Literal { value, span }))
     }
 
+    fn parse_parens(&mut self) -> Result<Expr> {
+        let start = self.token.span;
+
+        self.start(Parsing::Parens);
+
+        let mut values = self.parse_sequence_of(
+            TokenKind::LParen,
+            TokenKind::RParen,
+            Self::parse_expr)?;
+
+        let span = Span::combine(start, self.last_span());
+
+        self.finish(Parsing::Parens);
+
+        if self.match_token(TokenKind::Arrow)
+        && self.match_lines() {
+            return self.into_lambda(values, span);
+        }
+
+        match values.len() {
+            0 => {
+                Ok(Expr::Unit(span))
+            }
+            1 => {
+                Ok(values.pop().unwrap())
+            }
+            _ => {
+                Ok(Expr::Seq(
+                    box Seq { values, span }))
+            }
+        }
+    }
+
+    fn parse_brackets(&mut self) -> Result<Expr> {
+        let start = self.token.span;
+
+        self.start(Parsing::Brackets);
+
+        let values = self.parse_sequence_of(
+            TokenKind::LBracket,
+            TokenKind::RBracket,
+            Self::parse_expr)?;
+
+        let span = Span::combine(start, self.last_span());
+
+        self.finish(Parsing::Brackets);
+
+        Ok(Expr::List(
+            box List { values, span }))
+    }
+
     fn parse_def(&mut self) -> Result<Expr> {
         self.start(Parsing::Definition);
 
@@ -123,11 +185,14 @@ impl<'s> Parser<'s> {
         self.start(Parsing::Function);
 
         let name = self.parse_name()?;
+
         let parameters = self.parse_sequence_of(
             TokenKind::LParen,
             TokenKind::RParen,
             Self::parse_parameter)?;
+
         self.eat(TokenKind::Equals)?;
+
         let value = self.parse_expr()?;
         
         let span = Span::combine(name.span, value.span());
@@ -155,6 +220,60 @@ impl<'s> Parser<'s> {
         Ok(Parameter { name, value, span })
     }
 
+    fn parse_lambda(&mut self) -> Result<Expr> {
+        self.start(Parsing::Lambda);
+
+        let name = self.parse_name()?;
+        self.eat(TokenKind::Arrow)?;
+        let value = self.parse_expr()?;
+        
+        let span = Span::combine(name.span, value.span());
+
+        self.finish(Parsing::Lambda);
+
+        let parameters = vec![
+            Parameter { name, value: None, span }
+        ];
+
+        Ok(Expr::Lambda(
+            box Lambda { parameters, value, span }))
+    }
+
+    fn into_lambda(&mut self, values: Vec<Expr>, start: Span) -> Result<Expr> {
+        self.start(Parsing::Lambda);
+
+        let parameters = values
+            .into_iter()
+            .map(|value| {
+                let span = value.span();
+                match value {
+                    Expr::Name(name) => {
+                        Ok(Parameter { name, value: None, span })
+                    }
+                    Expr::Def(box Def { name, value, .. }) => {
+                        Ok(Parameter { name, value: Some(value), span })
+                    }
+                    _ => {
+                        Err(NetrineError::error(
+                            span,
+                            "Invalid pattern for lambda argument".into()))
+                    }
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        self.eat(TokenKind::Arrow)?;
+
+        let value = self.parse_expr()?;
+        
+        let span = Span::combine(start, value.span());
+
+        self.finish(Parsing::Lambda);
+        
+        Ok(Expr::Lambda(
+            box Lambda { parameters, value, span }))
+    }
+
     fn parse_if(&mut self) -> Result<Expr> {
         self.start(Parsing::If);
 
@@ -162,10 +281,8 @@ impl<'s> Parser<'s> {
 
         self.eat(TokenKind::If)?;
         let predicate = self.parse_expr()?;
-
         self.eat(TokenKind::Then)?;
         let value_then = self.parse_expr()?;
-
         self.eat(TokenKind::Else)?;
         let value_else = self.parse_expr()?;
 
@@ -200,27 +317,69 @@ impl<'s> Parser<'s> {
             box Block { items, span }))
     }
 
-    fn parse_function_call(&mut self) -> Result<Expr> {
-        let callee = self.parse_term()?;
+    fn parse_initial_expr(&mut self) -> Result<Expr> {
+        let mut expression = self.parse_term()?;
 
-        if !self.match_lines()
-        || !self.match_token(TokenKind::LParen) {
-           return Ok(callee);
+        while !self.done() && self.match_lines() {
+            match self.token.kind {
+                TokenKind::LParen => {
+                    expression = self.parse_call(expression)?;
+                }
+                TokenKind::Dot => {
+                    expression = self.parse_dot(expression)?;
+                }
+                TokenKind::Hash => {
+                    expression = self.parse_hash(expression)?;
+                }
+                _ => return Ok(expression)
+            }
         }
 
-        self.start(Parsing::FunctionCall);
+        Ok(expression)
+    }
 
+    fn parse_call(&mut self, callee: Expr) -> Result<Expr> {
+        self.start(Parsing::FunctionCall);
+            
         let arguments = self.parse_sequence_of(
             TokenKind::LParen,
             TokenKind::RParen,
             Self::parse_argument)?;
 
-        self.finish(Parsing::FunctionCall);
-
         let span = Span::combine(callee.span(), self.last_span());
+
+        self.finish(Parsing::FunctionCall);
 
         Ok(Expr::Call(
             box Call { callee, arguments, span }))
+    }
+
+    fn parse_dot(&mut self, source: Expr) -> Result<Expr> {
+        self.start(Parsing::Get);
+
+        self.eat(TokenKind::Dot)?;
+
+        let value = Expr::Name(self.parse_name()?);
+        let span = Span::combine(source.span(), self.last_span());
+
+        self.finish(Parsing::Get);
+
+        Ok(Expr::Get(
+            box Get { source, value, span }))
+    }
+
+    fn parse_hash(&mut self, source: Expr) -> Result<Expr> {
+        self.start(Parsing::Get);
+
+        self.eat(TokenKind::Hash)?;
+
+        let value = self.parse_expr()?;
+        let span = Span::combine(source.span(), self.last_span());
+
+        self.finish(Parsing::Get);
+
+        Ok(Expr::Get(
+            box Get { source, value, span }))
     }
 
     fn parse_argument(&mut self) -> Result<Argument> {
@@ -248,7 +407,7 @@ impl<'s> Parser<'s> {
 
     fn parse_unary_expr(&mut self) -> Result<Expr> {
         if !self.token.is_operator() {
-            return self.parse_function_call();
+            return self.parse_initial_expr();
         }
 
         let operator = self.parse_operator()?;
@@ -257,7 +416,7 @@ impl<'s> Parser<'s> {
         && self.peek.is_delimiter() {
             let span = operator.span;
             return Ok(Expr::Partial(
-                box Partial { operator, left: None, right: None, span, }))
+                box Partial { operator, left: None, right: None, span, }));
         }
 
         self.bump();
@@ -268,7 +427,7 @@ impl<'s> Parser<'s> {
                 "Unary or partial operators must be in the same line as the operand".into()));
         }
 
-        let right = self.parse_function_call()?;
+        let right = self.parse_expr()?;
 
         let span = Span::combine(operator.span, right.span());
 
@@ -292,15 +451,15 @@ impl<'s> Parser<'s> {
                 }
 
                 let operator = self.parse_operator()?;
-                self.bump();
 
                 // partial application of operators
-                if self.token.is_delimiter() {
+                if self.peek.is_delimiter() {
                     let span = Span::combine(expr.span(), operator.span);
-
                     return Ok(Expr::Partial(
-                        box Partial { operator, left: Some(expr), right: None, span }))
+                        box Partial { operator, left: Some(expr), right: None, span }));
                 }
+                
+                self.bump();
 
                 let right = self.parse_binary_expr(precedence + 1)?;
                 let left  = expr;
@@ -318,28 +477,31 @@ impl<'s> Parser<'s> {
         let span = self.token.span;
 
         let kind = match self.token.kind {
-            TokenKind::Add => OperatorKind::Add,
-          | TokenKind::Sub => OperatorKind::Sub,
-          | TokenKind::Mul => OperatorKind::Mul,
-          | TokenKind::Div => OperatorKind::Div,
-          | TokenKind::Rem => OperatorKind::Rem,
-          | TokenKind::And => OperatorKind::And,
-          | TokenKind::Or  => OperatorKind::Or,
-          | TokenKind::Is  => OperatorKind::Is,
-          | TokenKind::Not => OperatorKind::Not,
-          | TokenKind::Eq  => OperatorKind::Eq,
-          | TokenKind::Ne  => OperatorKind::Ne,
-          | TokenKind::Lt  => OperatorKind::Lt,
-          | TokenKind::Le  => OperatorKind::Le,
-          | TokenKind::Gt  => OperatorKind::Gt,
-          | TokenKind::Ge  => OperatorKind::Ge,
+            TokenKind::Add   => OperatorKind::Add,
+          | TokenKind::Sub   => OperatorKind::Sub,
+          | TokenKind::Mul   => OperatorKind::Mul,
+          | TokenKind::Div   => OperatorKind::Div,
+          | TokenKind::Rem   => OperatorKind::Rem,
+          | TokenKind::And   => OperatorKind::And,
+          | TokenKind::Or    => OperatorKind::Or,
+          | TokenKind::Is    => OperatorKind::Is,
+          | TokenKind::Not   => OperatorKind::Not,
+          | TokenKind::Eq    => OperatorKind::Eq,
+          | TokenKind::Ne    => OperatorKind::Ne,
+          | TokenKind::Lt    => OperatorKind::Lt,
+          | TokenKind::Le    => OperatorKind::Le,
+          | TokenKind::Gt    => OperatorKind::Gt,
+          | TokenKind::Ge    => OperatorKind::Ge,
           | TokenKind::Pipe  => OperatorKind::Pipe,
           | TokenKind::Range => OperatorKind::Range,
-            _ => return Err(NetrineError::error(
-                span,
-                format!("`{}` is not a valid operator", self.token.kind)))
+            _ => {
+                return Err(NetrineError::error(
+                    span,
+                    format!("`{}` is not a valid operator", self.token.kind)));
+            }
         };
-        return Ok(Operator { kind, span })
+
+        Ok(Operator { kind, span })
     }
 
     fn parse_sequence_of<T, F>(
