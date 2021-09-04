@@ -89,6 +89,9 @@ impl<'src> Lexer<'src> {
           | Some('-') if self.is_number(self.peek) => {
                 Some(self.number(true))
             }
+            Some('`') => {
+                Some(self.anything())
+            }
             Some('"') => {
                 self.template(true)
             }
@@ -269,6 +272,27 @@ impl<'src> Lexer<'src> {
         TokenKind::Upper
     }
 
+    fn anything(&mut self) -> TokenKind {
+        self.bump();
+
+        loop {
+            match self.curr {
+                Some('\n')
+              | None => {
+                    return TokenKind::Error(TokenError::UnterminatedIdentifier);
+                }
+                Some('`') => {
+                    self.bump();
+                    break;
+                }
+                _ => {
+                    self.bump();
+                }
+            }
+        }
+        TokenKind::Lower
+    }
+
     fn operator(&mut self) -> TokenKind {
         while self.is_symbol(self.curr) { self.bump(); }
 
@@ -424,5 +448,13 @@ mod tests {
         assert_eq!(lexer.next().unwrap().kind, TokenKind::RBrace);
         lexer.next(); // closing "
         assert_eq!(lexer.mode, Mode::Regular);
+    }
+
+    #[test]
+    fn lex_catchall_identifier() {
+        let mut lexer = Lexer::new("`anything+you-want`");
+
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Lower);
+        assert_eq!(lexer.value(), "`anything+you-want`");
     }
 }

@@ -23,6 +23,7 @@ enum Parsing {
     FunctionCall,
     Lambda,
     Parens,
+    Braces,
     Brackets,
     If,
     Do,
@@ -90,6 +91,7 @@ impl<'s> Parser<'s> {
             TokenKind::Number => self.parse_number(),
             TokenKind::String => self.parse_string(),
             TokenKind::LParen => self.parse_parens(),
+            TokenKind::LBrace => self.parse_braces(),
             TokenKind::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.handle_unexpected())
@@ -166,6 +168,44 @@ impl<'s> Parser<'s> {
             box List { values, span }))
     }
 
+    fn parse_braces(&mut self) -> Result<Expr> {
+        let start = self.token.span;
+
+        self.start(Parsing::Braces);
+
+        let properties = self.parse_sequence_of(
+            TokenKind::LBrace,
+            TokenKind::RBrace,
+            Self::parse_property)?;
+
+        let span = Span::combine(start, self.last_span());
+
+        self.finish(Parsing::Braces);
+
+        Ok(Expr::Record(
+            box Record { properties, span }))
+    }
+
+    fn parse_property(&mut self) -> Result<(Name, Option<Expr>)> {
+        let key = self.parse_name()?;
+
+        let val = match self.token.kind {
+            TokenKind::Equals => {
+                self.bump();
+                Some(self.parse_expr()?)
+            }
+            TokenKind::LBrace => {
+                Some(self.parse_braces()?)
+            }
+            TokenKind::LParen => {
+                Some(self.parse_anonymous_fn()?)
+            }
+            _ => None
+        };
+
+        Ok((key, val))
+    }
+
     fn parse_def(&mut self) -> Result<Expr> {
         self.start(Parsing::Definition);
 
@@ -218,6 +258,28 @@ impl<'s> Parser<'s> {
         let span = Span::combine(name.span, self.last_span());
         
         Ok(Parameter { name, value, span })
+    }
+
+    fn parse_anonymous_fn(&mut self) -> Result<Expr> {
+        let start = self.last_span();
+
+        self.start(Parsing::Function);
+        
+        let parameters = self.parse_sequence_of(
+            TokenKind::LParen,
+            TokenKind::RParen,
+            Self::parse_parameter)?;
+
+        self.eat(TokenKind::Equals)?;
+
+        let value = self.parse_expr()?;
+
+        let span = Span::combine(start, self.last_span());
+
+        self.finish(Parsing::Function);
+
+        Ok(Expr::Lambda(
+            box Lambda { parameters, value, span }))
     }
 
     fn parse_lambda(&mut self) -> Result<Expr> {

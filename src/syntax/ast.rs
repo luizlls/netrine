@@ -178,7 +178,7 @@ pub struct List {
 
 #[derive(Debug, Clone)]
 pub struct Record {
-    pub properties: Vec<(Expr, Option<Expr>)>,
+    pub properties: Vec<(Name, Option<Expr>)>,
     pub span: Span,
 }
 
