@@ -32,10 +32,10 @@ pub enum Expr {
     Call(Box<Call>),
 
     Block(Box<Block>),
+
+    Tuple(Box<Tuple>),
     
     List(Box<List>),
-
-    Seq(Box<Seq>),
 
     Record(Box<Record>),
 
@@ -46,8 +46,6 @@ pub enum Expr {
     Number(Literal),
 
     String(Literal),
-
-    Unit(Span),
 
     True(Span),
 
@@ -65,8 +63,8 @@ pub struct Name {
 
 #[derive(Debug, Clone)]
 pub struct Parameter {
-    pub name: Name,
-    pub value: Option<Expr>,
+    pub patt: Expr,
+    pub default: Option<Expr>,
     pub span: Span,
 }
 
@@ -165,7 +163,7 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone)]
-pub struct Seq {
+pub struct Tuple {
     pub values: Vec<Expr>,
     pub span: Span,
 }
@@ -197,7 +195,7 @@ pub struct Template {
 #[derive(Debug, Clone)]
 pub struct Variant {
     pub name: Name,
-    pub values: Vec<Expr>,
+    pub value: Option<Expr>,
     pub span: Span,
 }
 
@@ -259,6 +257,19 @@ impl Operator {
 }
 
 impl Expr {
+    pub fn is_pattern(&self) -> bool {
+        matches!(self,
+            Expr::Name(_)
+          | Expr::List(_)
+          | Expr::Record(_)
+          | Expr::String(_)
+          | Expr::Number(_)
+          | Expr::Variant(_)
+          | Expr::True(_)
+          | Expr::False(_)
+          | Expr::Anything(_))
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Expr::Name(e) => e.span,
@@ -273,14 +284,13 @@ impl Expr {
             Expr::Partial(e) => e.span,
             Expr::Call(e) => e.span,
             Expr::Block(e) => e.span,
+            Expr::Tuple(e) => e.span,
             Expr::List(e) => e.span,
-            Expr::Seq(e) => e.span,
             Expr::Record(e) => e.span,
             Expr::If(e) => e.span,
             Expr::Number(e) => e.span,
             Expr::String(e) => e.span,
             Expr::Variant(e) => e.span,
-            Expr::Unit(span) => *span,
             Expr::True(span) => *span,
             Expr::False(span) => *span,
             Expr::Anything(span) => *span,
