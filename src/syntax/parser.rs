@@ -33,37 +33,39 @@ impl<'s> Parser<'s> {
         let mut expressions = vec![];
 
         while !self.done() {
-            expressions.push(self.parse_expr()?);
+            expressions.push(self.parse_top_level()?);
         }
 
         Ok(Module { expressions })
     }
 
-    fn parse_expr(&mut self) -> Result<Expr> {
+    fn parse_top_level(&mut self) -> Result<Expr> {
         match self.token.kind {
-            TokenKind::If => self.parse_if(),
-            TokenKind::Do => self.parse_do(),
             TokenKind::Lower => {
                 match self.peek.kind {
-                    TokenKind::Equals => self.parse_def(),
-                    TokenKind::LParen => self.parse_fn(),
+                    TokenKind::Equals => self.parse_define(),
+                    TokenKind::LParen => self.parse_function(),
+                    _ => Err(self.unexpected())
+                }
+            }
+            _ => Err(self.unexpected())
+        }
+    }
+
+    fn parse_expr(&mut self) -> Result<Expr> {
+        match self.token.kind {
+            TokenKind::Match => self.parse_match(),
+            TokenKind::Lower => {
+                match self.peek.kind {
+                    TokenKind::Equals => self.parse_define(),
                     TokenKind::Arrow  => self.parse_lambda(),
-                    _ => self.parse_lower()
+                    _ => {
+                        self.parse_binary_expr(0)
+                    }
                 }
             }
             _ => self.parse_binary_expr(0)
         }
-    }
-
-    fn start_term(&self) -> bool {
-        matches!(self.token.kind,
-            TokenKind::Lower
-          | TokenKind::Upper
-          | TokenKind::Number
-          | TokenKind::String
-          | TokenKind::LParen
-          | TokenKind::LBrace
-          | TokenKind::LBracket)
     }
 
     fn parse_term(&mut self) -> Result<Expr> {
@@ -76,7 +78,7 @@ impl<'s> Parser<'s> {
             TokenKind::LBrace => self.parse_braces(),
             TokenKind::LBracket => self.parse_brackets(),
             _ => {
-                Err(self.handle_unexpected())
+                Err(self.unexpected())
             }
         }
     }
@@ -105,20 +107,29 @@ impl<'s> Parser<'s> {
             _ => ()
         }
 
-        let name  = Name { value, span };
+        let name = Name { value, span };
 
-        let value = if self.start_term()
-                    && self.match_lines() {
-            Some(self.parse_term()?)
+        let arguments = if self.match_token(TokenKind::LParen)
+                     && self.match_lines() {
+            self.parse_sequence_of(
+                TokenKind::LParen,
+                TokenKind::RParen,
+                Self::parse_argument)?
+        } else if self.match_token(TokenKind::LBrace)
+               && self.match_lines() {
+            let value = self.parse_brackets()?;
+            let span  = value.span();
+            vec![
+                Argument { value, name: None, span }
+            ]
         } else {
-            None
+            vec![]
         };
 
         let span = Span::combine(span, self.last_span());
 
         Ok(Expr::Variant(
-            box Variant { name, value, span }
-        ))
+            box Variant { name, arguments, span }))
     }
 
     fn parse_number(&mut self) -> Result<Expr> {
@@ -136,7 +147,7 @@ impl<'s> Parser<'s> {
     fn parse_parens(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        let (mut values, trailing) = self.parse_sequence_of(
+        let values = self.parse_sequence_of(
             TokenKind::LParen,
             TokenKind::RParen,
             Self::parse_expr)?;
@@ -148,14 +159,11 @@ impl<'s> Parser<'s> {
             return self.into_lambda(values, span);
         }
 
-        match values.len() {
-            1 if !trailing => {
-                Ok(values.pop().unwrap())
-            }
-            _ => {
-                Ok(Expr::Tuple(
-                    box Tuple { values, span }))
-            }
+        if values.len() == 1 {
+            Ok(values.into_iter().next().unwrap())
+        } else {
+            Ok(Expr::Tuple(
+                box Tuple { values, span }))
         }
     }
 
@@ -165,7 +173,7 @@ impl<'s> Parser<'s> {
         let values = self.parse_sequence_of(
             TokenKind::LBracket,
             TokenKind::RBracket,
-            Self::parse_expr)?.0;
+            Self::parse_expr)?;
 
         let span = Span::combine(start, self.last_span());
 
@@ -179,7 +187,7 @@ impl<'s> Parser<'s> {
         let properties = self.parse_sequence_of(
             TokenKind::LBrace,
             TokenKind::RBrace,
-            Self::parse_property)?.0;
+            Self::parse_property)?;
 
         let span = Span::combine(start, self.last_span());
 
@@ -198,16 +206,17 @@ impl<'s> Parser<'s> {
             TokenKind::LBrace => {
                 Some(self.parse_braces()?)
             }
-            TokenKind::LParen => {
-                Some(self.parse_anonymous_fn()?)
+            TokenKind::Comma
+          | TokenKind::RParen => {
+                None
             }
-            _ => None
+            _ => return Err(self.unexpected())
         };
 
         Ok((key, val))
     }
 
-    fn parse_def(&mut self) -> Result<Expr> {
+    fn parse_define(&mut self) -> Result<Expr> {
 
         let name = self.parse_name()?;
         self.eat(TokenKind::Equals)?;
@@ -219,18 +228,14 @@ impl<'s> Parser<'s> {
             box Def { name, value, span }))
     }
 
-    fn parse_fn(&mut self) -> Result<Expr> {
+    fn parse_function(&mut self) -> Result<Expr> {
 
         let name = self.parse_name()?;
 
         let parameters = self.parse_sequence_of(
             TokenKind::LParen,
             TokenKind::RParen,
-            Self::parse_parameter)?.0;
-
-        if !self.match_token(TokenKind::Equals) {
-            return self.into_call(name, parameters);
-        }
+            Self::parse_parameter)?;
 
         self.eat(TokenKind::Equals)?;
 
@@ -243,38 +248,25 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_parameter(&mut self) -> Result<Parameter> {
-        let patt = self.parse_term()?;
+        let mut vararg = false;
+        let mut kwargs = false;
 
-        let default = if self.match_lines()
-                      && self.match_token(TokenKind::Equals) {
-            self.eat(TokenKind::Equals)?;
+        if self.match_token(TokenKind::Mul) {
+            self.bump();
             
-            Some(self.parse_expr()?)
-        } else {
-            None
-        };
+            if self.match_token(TokenKind::Mul) {
+                self.bump();
+                kwargs = true;
+            } else {
+                vararg = true;
+            }
+        }
+
+        let patt = self.parse_term()?;
         
         let span = Span::combine(patt.span(), self.last_span());
         
-        Ok(Parameter { patt, default, span })
-    }
-
-    fn parse_anonymous_fn(&mut self) -> Result<Expr> {
-        let start = self.last_span();
-
-        let parameters = self.parse_sequence_of(
-            TokenKind::LParen,
-            TokenKind::RParen,
-            Self::parse_parameter)?.0;
-
-        self.eat(TokenKind::Equals)?;
-
-        let value = self.parse_expr()?;
-
-        let span = Span::combine(start, self.last_span());
-
-        Ok(Expr::Lambda(
-            box Lambda { parameters, value, span }))
+        Ok(Parameter { patt, vararg, kwargs, span })
     }
 
     fn parse_lambda(&mut self) -> Result<Expr> {
@@ -287,7 +279,7 @@ impl<'s> Parser<'s> {
         let patt = Expr::Name(name);
 
         let parameters = vec![
-            Parameter { patt, default: None, span: start }
+            Parameter { patt, vararg: false, kwargs: false, span: start }
         ];
 
         let span = Span::combine(start, value.span());
@@ -301,20 +293,13 @@ impl<'s> Parser<'s> {
             .into_iter()
             .map(|value| {
                 let span = value.span();
-                match value {
-                    Expr::Def(box Def { name, value, .. }) => {
-                        let patt = Expr::Name(name);
-                        Ok(Parameter { patt, default: Some(value), span })
-                    }
-                    _ if value.is_pattern() => {
-                        let patt = value;
-                        Ok(Parameter { patt, default: None, span })
-                    }
-                    _ => {
-                        Err(NetrineError::error(
-                            span,
-                            "Invalid pattern for lambda argument".into()))
-                    }
+                
+                if value.is_pattern() {
+                    Ok(Parameter { patt: value, vararg: false, kwargs: false, span })
+                } else {
+                    Err(NetrineError::error(
+                        span,
+                        "is not a valid pattern for a lambda argument".into()))
                 }
             })
             .collect::<Result<Vec<_>>>()?;
@@ -329,39 +314,27 @@ impl<'s> Parser<'s> {
             box Lambda { parameters, value, span }))
     }
 
-    fn parse_if(&mut self) -> Result<Expr> {
+    fn parse_match(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        self.eat(TokenKind::If)?;
-        let predicate = self.parse_expr()?;
-        self.eat(TokenKind::Then)?;
-        let value_then = self.parse_expr()?;
-        self.eat(TokenKind::Else)?;
-        let value_else = self.parse_expr()?;
+        self.eat(TokenKind::Match)?;
+
+        let pred = self.parse_term()?;
+
+        let cases = self.parse_sequence_of(
+            TokenKind::LBrace,
+            TokenKind::RBrace, 
+            |this| {
+                let cond = this.parse_expr()?;
+                this.eat(TokenKind::Arrow)?;
+                let then = this.parse_expr()?;
+                Ok((cond, then))
+            })?;
 
         let span = Span::combine(start, self.last_span());
 
-        Ok(Expr::If(
-            box If { predicate, value_then, value_else, span, }))
-    }
-
-    fn parse_do(&mut self) -> Result<Expr> {
-        let start = self.token.span;
-
-        let mut items = vec![];
-        
-        self.eat(TokenKind::Do)?;
-
-        while !self.match_token(TokenKind::End) {
-            items.push(self.parse_expr()?);
-        }
-
-        self.eat(TokenKind::End)?;
-
-        let span = Span::combine(start, self.last_span());
-
-        Ok(Expr::Block(
-            box Block { items, span }))
+        Ok(Expr::Match(
+            box Match { pred, cases, span, }))
     }
 
     fn parse_initial_expr(&mut self) -> Result<Expr> {
@@ -375,9 +348,6 @@ impl<'s> Parser<'s> {
                 TokenKind::Dot => {
                     expression = self.parse_dot(expression)?;
                 }
-                TokenKind::Hash => {
-                    expression = self.parse_hash(expression)?;
-                }
                 _ => return Ok(expression)
             }
         }
@@ -389,44 +359,10 @@ impl<'s> Parser<'s> {
         let arguments = self.parse_sequence_of(
             TokenKind::LParen,
             TokenKind::RParen,
-            Self::parse_argument)?.0;
+            Self::parse_argument)?;
 
         let span = Span::combine(callee.span(), self.last_span());
 
-        Ok(Expr::Call(
-            box Call { callee, arguments, span }))
-    }
-
-    fn into_call(&mut self, callee: Name, parameters: Vec<Parameter>) -> Result<Expr> {
-        let callee = Expr::Name(callee);
-
-        let arguments = parameters
-            .into_iter()
-            .map(|parameter| {
-                let Parameter { patt, default, span } = parameter;
-                match patt {
-                    Expr::Name(name) => {
-                        if let Some(value) = default {
-                            Ok(Argument { name: Some(name), value, span })
-                        } else {
-                            Ok(Argument { name: None,
-                                          value: Expr::Name(name), span })
-                        }
-                    }
-                    _ if default.is_none() => {
-                        Ok(Argument { name: None, value: patt, span })
-                    }
-                    _ => {
-                        Err(NetrineError::error(
-                            span,
-                            "Pattern arguments cannot have a default value".into()))
-                    }
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
-
-        let span = Span::combine(callee.span(), self.last_span());
-        
         Ok(Expr::Call(
             box Call { callee, arguments, span }))
     }
@@ -457,18 +393,8 @@ impl<'s> Parser<'s> {
     fn parse_dot(&mut self, source: Expr) -> Result<Expr> {
         self.eat(TokenKind::Dot)?;
 
-        let value = Expr::Name(self.parse_name()?);
-        let span = Span::combine(source.span(), self.last_span());
-
-        Ok(Expr::Get(
-            box Get { source, value, span }))
-    }
-
-    fn parse_hash(&mut self, source: Expr) -> Result<Expr> {
-        self.eat(TokenKind::Hash)?;
-
-        let value = self.parse_expr()?;
-        let span = Span::combine(source.span(), self.last_span());
+        let value = self.parse_term()?;
+        let span  = Span::combine(source.span(), self.last_span());
 
         Ok(Expr::Get(
             box Get { source, value, span }))
@@ -519,15 +445,7 @@ impl<'s> Parser<'s> {
                     break;
                 }
 
-                let operator = self.parse_operator()?;
-
-                // partial application of operators
-                if self.peek.is_delimiter() {
-                    let span = Span::combine(expr.span(), operator.span);
-                    return Ok(Expr::Partial(
-                        box Partial { operator, left: Some(expr), right: None, span }));
-                }
-                
+                let operator = self.parse_operator()?;                
                 self.bump();
 
                 let right = self.parse_binary_expr(precedence + 1)?;
@@ -535,7 +453,8 @@ impl<'s> Parser<'s> {
 
                 let span = Span::combine(left.span(), right.span());
 
-                expr = Expr::Binary(box Binary { operator, left, right, span });
+                expr = Expr::Binary(
+                    box Binary { operator, left, right, span });
             }
         }
 
@@ -577,31 +496,25 @@ impl<'s> Parser<'s> {
         &mut self,
         open: TokenKind,
         close: TokenKind,
-        mut f: F) -> Result<(Vec<T>, bool)>
+        mut f: F) -> Result<Vec<T>>
     where
         F: FnMut(&mut Self) -> Result<T>
     {
         let mut result = vec![];
 
-        let mut trailing = false;
-
         self.eat(open)?;
 
         while !self.match_token(close) {
-            trailing = false;
-
             result.push(f(self)?);
 
             if !self.maybe_eat(TokenKind::Comma) {
                 break;
             }
-
-            trailing = true;
         }
 
         self.eat(close)?;
 
-        Ok((result, trailing))
+        Ok(result)
     }
 
     fn bump(&mut self) -> Span {
@@ -661,7 +574,7 @@ impl<'s> Parser<'s> {
         self.token.span.line == self.prev.span.line
     }
 
-    fn handle_unexpected(&mut self) -> NetrineError {
+    fn unexpected(&mut self) -> NetrineError {
         let msg = match self.token.kind {
             TokenKind::Error(_) => {
                 format!("{}", self.token.kind)
@@ -714,7 +627,7 @@ mod tests {
                 assert_eq!(value.value, "name".to_string());
                 assert_eq!(parameters.len(), 1);
                 match &parameters[0] {
-                    Parameter { patt: Expr::Name(name), default: None, .. } => {
+                    Parameter { patt: Expr::Name(name), .. } => {
                         assert_eq!(name.value, "name".to_string());
                     }
                     _ => assert!(false)
