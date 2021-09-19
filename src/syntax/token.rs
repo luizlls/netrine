@@ -17,38 +17,31 @@ pub enum TokenKind {
     LBracket,
     RBracket,
 
-    Dot,        // .
-    Comma,      // ,
-    Colon,      // :
-    Semi,       // ;
-    Arrow,      // =>
-    Equals,     // =
-    Warlus,     // :=
-    Hash,       // #
-    Underscore, // _
+    Dot,    // .
+    Comma,  // ,
+    Colon,  // :
+    Semi,   // ;
+    Arrow,  // =>
+    Equals, // =
 
-    If,
-    Then,
-    Else,
-    Do,
-    End,
-    
-    Add,  // +
-    Sub,  // -
-    Mul,  // *
-    Div,  // /
-    Rem,  // %
-    And,  // and
-    Or,   // or
-    Is,   // is
-    Not,  // not
-    Eq,   // ==
-    Ne,   // !=
-    Lt,   // <
-    Le,   // <=
-    Gt,   // >
-    Ge,   // >=
-    Pipe, // |>
+    Match,
+
+    And,   // and
+    Or,    // or
+    Is,    // is
+    Not,   // not
+    Add,   // +
+    Sub,   // -
+    Mul,   // *
+    Div,   // /
+    Rem,   // %
+    Eq,    // ==
+    Ne,    // !=
+    Lt,    // <
+    Le,    // <=
+    Gt,    // >
+    Ge,    // >=
+    Pipe,  // |>
     Range, // ..
 
     Lower,
@@ -81,15 +74,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Semi  => write!(f, ";"),
             TokenKind::Arrow => write!(f, "=>"),
             TokenKind::Equals => write!(f, "="),
-            TokenKind::Warlus => write!(f, ":="),
-            TokenKind::Hash => write!(f, "#"),
-            TokenKind::Underscore => write!(f, "_"),
 
-            TokenKind::If => write!(f, "if"),
-            TokenKind::Then => write!(f, "then"),
-            TokenKind::Else => write!(f, "else"),
-            TokenKind::Do => write!(f, "do"),
-            TokenKind::End => write!(f, "end"),
+            TokenKind::Match => write!(f, "if"),
 
             TokenKind::And => write!(f, "and"),
             TokenKind::Or  => write!(f, "or"),
@@ -154,40 +140,12 @@ impl Default for TokenKind {
 
 pub fn get_keyword(key: &str) -> Option<TokenKind> {
     match key {
-        "if"   => Some(TokenKind::If),
-        "then" => Some(TokenKind::Then),
-        "else" => Some(TokenKind::Else),
-        "and"  => Some(TokenKind::And),
-        "do"   => Some(TokenKind::Do),
-        "end"  => Some(TokenKind::End),
-        "or"   => Some(TokenKind::Or),
-        "is"   => Some(TokenKind::Is),
-        "not"  => Some(TokenKind::Not),
+        "and"   => Some(TokenKind::And),
+        "or"    => Some(TokenKind::Or),
+        "is"    => Some(TokenKind::Is),
+        "not"   => Some(TokenKind::Not),
+        "match" => Some(TokenKind::Match),
         _ => None,
-    }
-}
-
-pub fn get_operator(key: &str) -> Option<TokenKind> {
-    match key {
-        ":"  => Some(TokenKind::Colon),
-        "."  => Some(TokenKind::Dot),
-        "="  => Some(TokenKind::Equals),
-        ":=" => Some(TokenKind::Warlus),
-        "=>" => Some(TokenKind::Arrow),
-        "+"  => Some(TokenKind::Add),
-        "-"  => Some(TokenKind::Sub),
-        "*"  => Some(TokenKind::Mul),
-        "/"  => Some(TokenKind::Div),
-        "%"  => Some(TokenKind::Rem),
-        "==" => Some(TokenKind::Eq),
-        "!=" => Some(TokenKind::Ne),
-        "<"  => Some(TokenKind::Lt),
-        "<=" => Some(TokenKind::Le),
-        ">"  => Some(TokenKind::Gt),
-        ">=" => Some(TokenKind::Ge),
-        "|>" => Some(TokenKind::Pipe),
-        ".." => Some(TokenKind::Range),
-        _ => None
     }
 }
 

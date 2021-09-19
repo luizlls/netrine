@@ -123,12 +123,6 @@ impl<'src> Lexer<'src> {
             Some(';') => {
                 self.single(TokenKind::Semi)
             }
-            Some('#') => {
-                self.single(TokenKind::Hash)
-            }
-            Some('_') => {
-                self.single(TokenKind::Underscore)
-            }
             Some('/') if self.peek == Some('/') => {
                 self.comment()
             }
@@ -141,7 +135,7 @@ impl<'src> Lexer<'src> {
                 self.line()
             }
             Some(_) if self.is_symbol(self.curr) => {
-                Some(self.operator())
+                self.operator()
             }
             None => {
                 None
@@ -149,6 +143,81 @@ impl<'src> Lexer<'src> {
             Some(_) => {
                 Some(TokenKind::Error(TokenError::InvalidCharacter))
             }
+        }
+    }
+
+    fn operator(&mut self) -> Option<TokenKind> {
+        match self.curr {
+            Some('.') => {
+                if self.peek == Some('.') {
+                    self.bump();
+                    self.single(TokenKind::Range)
+                } else {
+                    self.single(TokenKind::Dot)
+                }
+            }
+            Some('=') => {
+                if self.peek == Some('>') {
+                    self.bump();
+                    self.single(TokenKind::Arrow)
+                } else if self.peek == Some('=') {
+                    self.bump();
+                    self.single(TokenKind::Eq)
+                } else {
+                    self.single(TokenKind::Equals)
+                }
+            }
+            Some('<') => {
+                if self.peek == Some('=') {
+                    self.bump();
+                    self.single(TokenKind::Le)
+                } else {
+                    self.single(TokenKind::Lt)
+                }
+            }
+            Some('>') => {
+                if self.peek == Some('=') {
+                    self.bump();
+                    self.single(TokenKind::Ge)
+                } else {
+                    self.single(TokenKind::Gt)
+                }
+            }
+            Some('!') => {
+                if self.peek == Some('=') {
+                    self.bump();
+                    self.single(TokenKind::Ne)
+                } else {
+                    Some(TokenKind::Error(TokenError::InvalidOperator))
+                }
+            }
+            Some('|') => {
+                if self.peek == Some('>') {
+                    self.bump();
+                    self.single(TokenKind::Pipe)
+                } else {
+                    Some(TokenKind::Error(TokenError::InvalidOperator))
+                }
+            }
+            Some('+') => {
+                self.single(TokenKind::Add)
+            }
+            Some('-') => {
+                self.single(TokenKind::Sub)
+            }
+            Some('*') => {
+                self.single(TokenKind::Mul)
+            }
+            Some('/') => {
+                self.single(TokenKind::Div)
+            }
+            Some('%') => {
+                self.single(TokenKind::Rem)
+            }
+            Some(':') => {
+                self.single(TokenKind::Colon)
+            },
+            _ => None
         }
     }
 
@@ -293,16 +362,6 @@ impl<'src> Lexer<'src> {
         TokenKind::Lower
     }
 
-    fn operator(&mut self) -> TokenKind {
-        while self.is_symbol(self.curr) { self.bump(); }
-
-        if let Some(operator) = get_operator(self.value()) {
-            operator
-        } else {
-            TokenKind::Error(TokenError::InvalidOperator)
-        }
-    }
-
     fn number(&mut self, prefix: bool) -> TokenKind {
         if prefix {
             self.bump();
@@ -388,19 +447,32 @@ mod tests {
 
     #[test]
     fn lex_keyword() {
-        let mut lexer = Lexer::new("if x > y then X else Y");
+        let mut lexer = Lexer::new("match");
 
-        assert_eq!(lexer.next().unwrap().kind, TokenKind::If);
-        assert_eq!(lexer.value(), "if");
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Match);
+        assert_eq!(lexer.value(), "match");
     }
 
     #[test]
     fn lex_operator() {
-       let mut lexer = Lexer::new("a + b");
+       let mut lexer = Lexer::new(": . .. = => == != + - * / % > < >= <=");
 
-       assert_eq!(lexer.next().unwrap().kind, TokenKind::Lower);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Colon);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Dot);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Range);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Equals);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Arrow);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Eq);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Ne);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Add);
-       assert_eq!(lexer.next().unwrap().kind, TokenKind::Lower);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Sub);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Mul);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Div);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Rem);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Gt);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Lt);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Ge);
+       assert_eq!(lexer.next().unwrap().kind, TokenKind::Le);
     }
 
     #[test]

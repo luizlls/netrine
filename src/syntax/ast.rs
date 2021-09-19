@@ -15,10 +15,6 @@ pub enum Expr {
 
     Def(Box<Def>),
 
-    Mut(Box<Mut>),
-
-    Set(Box<Set>),
-
     Get(Box<Get>),
 
     Lambda(Box<Lambda>),
@@ -32,14 +28,14 @@ pub enum Expr {
     Call(Box<Call>),
 
     Block(Box<Block>),
-
-    Tuple(Box<Tuple>),
     
+    Tuple(Box<Tuple>),
+
     List(Box<List>),
 
     Record(Box<Record>),
 
-    If(Box<If>),
+    Match(Box<Match>),
 
     Variant(Box<Variant>),
 
@@ -50,8 +46,6 @@ pub enum Expr {
     True(Span),
 
     False(Span),
-
-    Anything(Span),
 }
 
 
@@ -64,7 +58,8 @@ pub struct Name {
 #[derive(Debug, Clone)]
 pub struct Parameter {
     pub patt: Expr,
-    pub default: Option<Expr>,
+    pub vararg: bool,
+    pub kwargs: bool,
     pub span: Span,
 }
 
@@ -85,20 +80,6 @@ pub struct Lambda {
 
 #[derive(Debug, Clone)]
 pub struct Def {
-    pub name: Name,
-    pub value: Expr,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct Mut {
-    pub name: Name,
-    pub value: Expr,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct Set {
     pub name: Name,
     pub value: Expr,
     pub span: Span,
@@ -149,10 +130,9 @@ pub struct Partial {
 }
 
 #[derive(Debug, Clone)]
-pub struct If {
-    pub predicate: Expr,
-    pub value_then: Expr,
-    pub value_else: Expr,
+pub struct Match {
+    pub pred: Expr,
+    pub cases: Vec<(Expr, Expr)>,
     pub span: Span,
 }
 
@@ -195,7 +175,7 @@ pub struct Template {
 #[derive(Debug, Clone)]
 pub struct Variant {
     pub name: Name,
-    pub value: Option<Expr>,
+    pub arguments: Vec<Argument>,
     pub span: Span,
 }
 
@@ -266,8 +246,7 @@ impl Expr {
           | Expr::Number(_)
           | Expr::Variant(_)
           | Expr::True(_)
-          | Expr::False(_)
-          | Expr::Anything(_))
+          | Expr::False(_))
     }
 
     pub fn span(&self) -> Span {
@@ -275,8 +254,6 @@ impl Expr {
             Expr::Name(e) => e.span,
             Expr::Fn(e) => e.span,
             Expr::Def(e) => e.span,
-            Expr::Mut(e) => e.span,
-            Expr::Set(e) => e.span,
             Expr::Get(e) => e.span,
             Expr::Lambda(e) => e.span,
             Expr::Binary(e) => e.span,
@@ -287,13 +264,12 @@ impl Expr {
             Expr::Tuple(e) => e.span,
             Expr::List(e) => e.span,
             Expr::Record(e) => e.span,
-            Expr::If(e) => e.span,
+            Expr::Match(e) => e.span,
             Expr::Number(e) => e.span,
             Expr::String(e) => e.span,
             Expr::Variant(e) => e.span,
             Expr::True(span) => *span,
             Expr::False(span) => *span,
-            Expr::Anything(span) => *span,
         }
     }
 }
