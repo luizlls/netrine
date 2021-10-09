@@ -3,7 +3,7 @@ use std::str::Chars;
 use super::token::*;
 use crate::Span;
 
-const SYMBOLS: &str = "=.+-<>*/%^&|~:!?";
+const SYMBOLS: &str = ".!=+-<>*/%|";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Mode {
@@ -21,9 +21,9 @@ pub struct Lexer<'src> {
     chars: Chars<'src>,
     curr: Option<char>,
     peek: Option<char>,
-    start:  u32,
-    offset: u32,
-    line: u32,
+    start: usize,
+    offset: usize,
+    line: usize,
     mode: Mode,
 }
 
@@ -47,7 +47,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn span(&self) -> Span {
-        Span::new(self.line, self.start, self.offset)
+        Span::new(self.start, self.offset)
     }
 
     fn value(&self) -> &str {
@@ -59,7 +59,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn bump(&mut self) {
-        let length = self.curr.map(char::len_utf8).unwrap_or(0) as u32;
+        let length = self.curr.map(char::len_utf8).unwrap_or(0);
         self.offset += length;
         self.curr = self.peek;
         self.peek = self.chars.next();
@@ -122,6 +122,12 @@ impl<'src> Lexer<'src> {
             }
             Some(';') => {
                 self.single(TokenKind::Semi)
+            }
+            Some(':') => {
+                self.single(TokenKind::Colon)
+            }
+            Some('#') => {
+                self.single(TokenKind::Hash)
             }
             Some('/') if self.peek == Some('/') => {
                 self.comment()
@@ -214,9 +220,6 @@ impl<'src> Lexer<'src> {
             Some('%') => {
                 self.single(TokenKind::Rem)
             }
-            Some(':') => {
-                self.single(TokenKind::Colon)
-            },
             _ => None
         }
     }
@@ -392,7 +395,7 @@ impl<'src> Lexer<'src> {
     fn line(&mut self) -> Option<TokenKind> {
         self.line += 1;
         self.bump();
-        self.next_token()
+        Some(TokenKind::Line)
     }
 
     fn comment(&mut self) -> Option<TokenKind> {

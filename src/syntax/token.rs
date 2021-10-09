@@ -21,14 +21,18 @@ pub enum TokenKind {
     Comma,  // ,
     Colon,  // :
     Semi,   // ;
+    Hash,   // #
     Arrow,  // =>
     Equals, // =
 
     Match,
+    Case,
+    Else,
+    Do,
+    End,
 
     And,   // and
     Or,    // or
-    Is,    // is
     Not,   // not
     Add,   // +
     Sub,   // -
@@ -55,7 +59,8 @@ pub enum TokenKind {
 
     Error(TokenError),
 
-    EOS,    
+    Line,
+    EOF, 
 }
 
 impl fmt::Display for TokenKind {
@@ -72,14 +77,18 @@ impl fmt::Display for TokenKind {
             TokenKind::Comma => write!(f, ","),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi  => write!(f, ";"),
+            TokenKind::Hash  => write!(f, "#"),
             TokenKind::Arrow => write!(f, "=>"),
             TokenKind::Equals => write!(f, "="),
 
-            TokenKind::Match => write!(f, "if"),
+            TokenKind::Match => write!(f, "match"),
+            TokenKind::Case => write!(f, "case"),
+            TokenKind::Else => write!(f, "else"),
+            TokenKind::Do  => write!(f, "do"),
+            TokenKind::End => write!(f, "end"),
 
             TokenKind::And => write!(f, "and"),
             TokenKind::Or  => write!(f, "or"),
-            TokenKind::Is  => write!(f, "is"),
             TokenKind::Not => write!(f, "not"),
             TokenKind::Add => write!(f, "+"),
             TokenKind::Sub => write!(f, "-"),
@@ -106,7 +115,8 @@ impl fmt::Display for TokenKind {
 
             TokenKind::Error(error) => write!(f, "{}", error),
 
-            TokenKind::EOS => write!(f, "end of source")
+            TokenKind::Line => write!(f, "new line"),
+            TokenKind::EOF  => write!(f, "end of file")
         }
     }
 }
@@ -134,7 +144,7 @@ impl fmt::Display for TokenError {
 
 impl Default for TokenKind {
     fn default() -> Self {
-        TokenKind::EOS
+        TokenKind::EOF
     }
 }
 
@@ -142,9 +152,12 @@ pub fn get_keyword(key: &str) -> Option<TokenKind> {
     match key {
         "and"   => Some(TokenKind::And),
         "or"    => Some(TokenKind::Or),
-        "is"    => Some(TokenKind::Is),
         "not"   => Some(TokenKind::Not),
         "match" => Some(TokenKind::Match),
+        "case"  => Some(TokenKind::Case),
+        "else"  => Some(TokenKind::Else),
+        "do"    => Some(TokenKind::Do),
+        "end"   => Some(TokenKind::End),
         _ => None,
     }
 }
@@ -157,7 +170,6 @@ impl Token {
         matches!(self.kind,
             TokenKind::And
           | TokenKind::Or
-          | TokenKind::Is
           | TokenKind::Not
           | TokenKind::Add
           | TokenKind::Sub
@@ -195,7 +207,6 @@ impl Token {
             TokenKind::Rem   => 7,
             TokenKind::Add   => 6,
             TokenKind::Sub   => 6,
-            TokenKind::Is    => 5,
             TokenKind::Lt    => 5,
             TokenKind::Le    => 5,
             TokenKind::Gt    => 5,
