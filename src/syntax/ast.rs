@@ -13,11 +13,13 @@ pub enum Expr {
 
     Fn(Box<Fn>),
 
+    Ctor(Box<Fn>),
+
     Def(Box<Def>),
 
     Get(Box<Get>),
 
-    Lambda(Box<Lambda>),
+    Block(Box<Block>),
 
     Binary(Box<Binary>),
 
@@ -26,8 +28,6 @@ pub enum Expr {
     Partial(Box<Partial>),
 
     Call(Box<Call>),
-
-    Block(Box<Block>),
     
     Tuple(Box<Tuple>),
 
@@ -58,8 +58,7 @@ pub struct Name {
 #[derive(Debug, Clone)]
 pub struct Parameter {
     pub patt: Expr,
-    pub vararg: bool,
-    pub kwargs: bool,
+    pub value: Option<Expr>,
     pub span: Span,
 }
 
@@ -67,14 +66,7 @@ pub struct Parameter {
 pub struct Fn {
     pub name: Name,
     pub parameters: Vec<Parameter>,
-    pub value: Expr,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct Lambda {
-    pub parameters: Vec<Parameter>,
-    pub value: Expr,
+    pub block: Block,
     pub span: Span,
 }
 
@@ -131,14 +123,16 @@ pub struct Partial {
 
 #[derive(Debug, Clone)]
 pub struct Match {
-    pub pred: Expr,
+    pub predicate: Expr,
     pub cases: Vec<(Expr, Expr)>,
+    pub otherwise: Option<Expr>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
-    pub items: Vec<Expr>,
+    pub parameters: Option<Vec<Parameter>>,
+    pub expressions: Vec<Expr>,
     pub span: Span,
 }
 
@@ -175,7 +169,7 @@ pub struct Template {
 #[derive(Debug, Clone)]
 pub struct Variant {
     pub name: Name,
-    pub arguments: Vec<Argument>,
+    pub value: Option<Expr>,
     pub span: Span,
 }
 
@@ -194,7 +188,6 @@ pub enum OperatorKind {
     Ge,
     And,
     Or,
-    Is,
     Not,
     Pipe,
     Range,
@@ -211,7 +204,6 @@ impl std::fmt::Display for Operator {
         match self.kind {
             OperatorKind::And   => write!(f, "and"),
             OperatorKind::Or    => write!(f, "or"),
-            OperatorKind::Is    => write!(f, "is"),
             OperatorKind::Not   => write!(f, "not"),
             OperatorKind::Add   => write!(f, "+"),
             OperatorKind::Sub   => write!(f, "-"),
@@ -253,9 +245,9 @@ impl Expr {
         match self {
             Expr::Name(e) => e.span,
             Expr::Fn(e) => e.span,
+            Expr::Ctor(e) => e.span,
             Expr::Def(e) => e.span,
             Expr::Get(e) => e.span,
-            Expr::Lambda(e) => e.span,
             Expr::Binary(e) => e.span,
             Expr::Unary(e) => e.span,
             Expr::Partial(e) => e.span,
