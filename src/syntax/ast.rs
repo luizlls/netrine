@@ -13,7 +13,7 @@ pub enum Expr {
 
     Fn(Box<Fn>),
 
-    Ctor(Box<Fn>),
+    Constructor(Box<Fn>),
 
     Def(Box<Def>),
 
@@ -245,7 +245,7 @@ impl Expr {
         match self {
             Expr::Name(e) => e.span,
             Expr::Fn(e) => e.span,
-            Expr::Ctor(e) => e.span,
+            Expr::Constructor(e) => e.span,
             Expr::Def(e) => e.span,
             Expr::Get(e) => e.span,
             Expr::Binary(e) => e.span,

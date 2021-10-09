@@ -34,7 +34,7 @@ impl<'src> Lexer<'src> {
             chars: src.chars(),
             curr: None,
             peek: None,
-            start:  0,
+            start: 0,
             offset: 0,
             line: 1,
             mode: Mode::Regular
@@ -163,10 +163,7 @@ impl<'src> Lexer<'src> {
                 }
             }
             Some('=') => {
-                if self.peek == Some('>') {
-                    self.bump();
-                    self.single(TokenKind::Arrow)
-                } else if self.peek == Some('=') {
+                if self.peek == Some('=') {
                     self.bump();
                     self.single(TokenKind::Eq)
                 } else {
@@ -451,22 +448,28 @@ mod tests {
     }
 
     #[test]
-    fn lex_keyword() {
-        let mut lexer = Lexer::new("match");
+    fn lex_keywords() {
+        let mut lexer = Lexer::new("match case then else do end and or not");
 
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Do);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::End);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Match);
-        assert_eq!(lexer.value(), "match");
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Case);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Then);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Else);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::And);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Or);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Not);
     }
 
     #[test]
     fn lex_operator() {
-       let mut lexer = Lexer::new(": . .. = => == != + - * / % > < >= <=");
+       let mut lexer = Lexer::new(": . .. = == != + - * / % > < >= <=");
 
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Colon);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Dot);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Range);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Equals);
-       assert_eq!(lexer.next().unwrap().kind, TokenKind::Arrow);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Eq);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Ne);
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Add);
