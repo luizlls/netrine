@@ -23,7 +23,7 @@ pub struct Lexer<'src> {
     peek: Option<char>,
     start: usize,
     offset: usize,
-    line: usize,
+    line: u32,
     mode: Mode,
 }
 
@@ -47,7 +47,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn span(&self) -> Span {
-        Span::new(self.start, self.offset)
+        Span::new(self.line, self.start as u32, self.offset as u32)
     }
 
     fn value(&self) -> &str {
@@ -393,9 +393,11 @@ impl<'src> Lexer<'src> {
     }
 
     fn line(&mut self) -> Option<TokenKind> {
-        self.line += 1;
-        self.bump();
-        Some(TokenKind::Line)
+        while let Some('\n') = self.curr {
+            self.bump();
+            self.line += 1;
+        }
+        self.next_token()
     }
 
     fn comment(&mut self) -> Option<TokenKind> {

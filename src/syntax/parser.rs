@@ -281,9 +281,11 @@ impl<'s> Parser<'s> {
             None
         };
 
-        let expressions = self.parse_while(
-            Self::parse_expr,
-            |this| !this.match_token(TokenKind::End))?;
+        let mut expressions = vec![];
+
+        while !self.done() && !self.match_token(TokenKind::End) {
+            expressions.push(self.parse_expr()?);
+        }
 
         self.expect_exactly(TokenKind::End)?;
 
@@ -295,7 +297,7 @@ impl<'s> Parser<'s> {
 
         self.expect(TokenKind::Match)?;
 
-        let predicate = self.parse_term()?;
+        let predicate = self.parse_expr()?;
 
         let mut cases = vec![];
         
@@ -493,7 +495,8 @@ impl<'s> Parser<'s> {
 
         self.expect(open)?;
 
-        while !self.match_token(close) {
+        while !self.done()
+           && !self.match_token(close) {
 
             result.push(f(self)?);
 
@@ -507,36 +510,16 @@ impl<'s> Parser<'s> {
         Ok(result)
     }
 
-    fn parse_while<T, P, F>(&mut self, mut f: F, pred: P)
-    -> Result<Vec<T>>
-    where
-        P: core::ops::Fn(&Self) -> bool, F: FnMut(&mut Self) -> Result<T>
-    {
-        let mut result = vec![];
-
-        while pred(&self) {
-            result.push(f(self)?);
-        }
-
-        Ok(result)
-    }
-
     fn bump(&mut self) -> Span {
         let span = self.token.span;
 
-        loop {
-            self.prev  = self.token;
-            self.token = self.peek;
-            self.peek  = if let Some(token) = self.lexer.next() {
-                token
-            } else {
-                Token::default()
-            };
-
-            if self.token.kind != TokenKind::Line {
-                break
-            }
-        }
+        self.prev  = self.token;
+        self.token = self.peek;
+        self.peek  = if let Some(token) = self.lexer.next() {
+            token
+        } else {
+            Token::default()
+        };
 
         span
     }
@@ -589,7 +572,7 @@ impl<'s> Parser<'s> {
     }
 
     fn match_lines(&self) -> bool {
-        self.prev.kind != TokenKind::Line
+        self.prev.span.line == self.token.span.line
     }
 
     fn unexpected(&mut self) -> NetrineError {

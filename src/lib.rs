@@ -5,7 +5,7 @@
 pub mod syntax;
 pub mod error;
 
-use std::{fmt, ops::Range, path::PathBuf};
+use std::{ops::Range, path::PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct Source {
@@ -26,42 +26,35 @@ impl Source {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq)]
 pub struct Span {
-    start: usize, end: usize
+    line: u32,
+    start: u32,
+    end: u32,
 }
 
 impl Default for Span {
     fn default() -> Span {
         Span {
-            start: 0, end: 0
+            line: 0, start: 0, end: 0
         }
     }
 }
 
 impl Span {
-    pub const fn new(start: usize, end: usize) -> Span {
+    pub const fn new(line: u32, start: u32, end: u32) -> Span {
         Span {
-            start, end
+            line, start, end
         }
     }
 
     pub const fn from(left: Span, right: Span) -> Span {
         Span {
-            start: left.start, end: right.end
+            end: right.end, ..left
         }
     }
 
     pub const fn range(self) -> Range<usize> {
         (self.start as usize) .. (self.end as usize)
-    }
-}
-
-impl fmt::Debug for Span {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.start.fmt(fmt)?;
-        write!(fmt, "..")?;
-        self.end.fmt(fmt)?;
-        Ok(())
     }
 }

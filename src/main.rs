@@ -58,7 +58,9 @@ fn exec(source: Source) {
             println!("{:#?}", code)
         }
         Err(error) => {
-            eprintln!("{}", error);
+            let mut buffer = String::new();
+            error.report(&source, &mut buffer).unwrap();
+            eprintln!("{}", buffer);
         }
     }
 }

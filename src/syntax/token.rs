@@ -59,7 +59,6 @@ pub enum TokenKind {
 
     Error(TokenError),
 
-    Line,
     EOF, 
 }
 
@@ -72,23 +71,20 @@ impl fmt::Display for TokenKind {
             TokenKind::RBrace => write!(f, "}}"),
             TokenKind::LBracket => write!(f, "["),
             TokenKind::RBracket => write!(f, "]"),
-
             TokenKind::Dot => write!(f, "."),
             TokenKind::Comma => write!(f, ","),
             TokenKind::Colon => write!(f, ":"),
-            TokenKind::Semi  => write!(f, ";"),
-            TokenKind::Hash  => write!(f, "#"),
+            TokenKind::Semi => write!(f, ";"),
+            TokenKind::Hash => write!(f, "#"),
             TokenKind::Arrow => write!(f, "=>"),
             TokenKind::Equals => write!(f, "="),
-
             TokenKind::Match => write!(f, "match"),
             TokenKind::Case => write!(f, "case"),
             TokenKind::Else => write!(f, "else"),
-            TokenKind::Do  => write!(f, "do"),
+            TokenKind::Do => write!(f, "do"),
             TokenKind::End => write!(f, "end"),
-
             TokenKind::And => write!(f, "and"),
-            TokenKind::Or  => write!(f, "or"),
+            TokenKind::Or => write!(f, "or"),
             TokenKind::Not => write!(f, "not"),
             TokenKind::Add => write!(f, "+"),
             TokenKind::Sub => write!(f, "-"),
@@ -101,22 +97,17 @@ impl fmt::Display for TokenKind {
             TokenKind::Le => write!(f, "<="),
             TokenKind::Gt => write!(f, ">"),
             TokenKind::Ge => write!(f, ">="),
-            TokenKind::Pipe  => write!(f, "|>"),
+            TokenKind::Pipe => write!(f, "|>"),
             TokenKind::Range => write!(f, ".."),
-
-            TokenKind::Lower => write!(f, "lowercase identifier"),
-            TokenKind::Upper => write!(f, "uppercase identifier"),
+            TokenKind::Lower => write!(f, "identifier"),
+            TokenKind::Upper => write!(f, "constructor"),
             TokenKind::Number => write!(f, "number"),
             TokenKind::String => write!(f, "string"),
-
             TokenKind::StringStart => write!(f, "start of string template"),
             TokenKind::StringEnd => write!(f, "end of string template"),
             TokenKind::StringSlice => write!(f, "slice of string template"),
-
-            TokenKind::Error(error) => write!(f, "{}", error),
-
-            TokenKind::Line => write!(f, "new line"),
-            TokenKind::EOF  => write!(f, "end of file")
+            TokenKind::EOF => write!(f, "end of file"),
+            TokenKind::Error(err) => write!(f, "{}", err),
         }
     }
 }
