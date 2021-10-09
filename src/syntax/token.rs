@@ -22,11 +22,11 @@ pub enum TokenKind {
     Colon,  // :
     Semi,   // ;
     Hash,   // #
-    Arrow,  // =>
     Equals, // =
 
     Match,
     Case,
+    Then,
     Else,
     Do,
     End,
@@ -76,10 +76,10 @@ impl fmt::Display for TokenKind {
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Hash => write!(f, "#"),
-            TokenKind::Arrow => write!(f, "=>"),
             TokenKind::Equals => write!(f, "="),
             TokenKind::Match => write!(f, "match"),
             TokenKind::Case => write!(f, "case"),
+            TokenKind::Then => write!(f, "then"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::Do => write!(f, "do"),
             TokenKind::End => write!(f, "end"),
@@ -146,6 +146,7 @@ pub fn get_keyword(key: &str) -> Option<TokenKind> {
         "not"   => Some(TokenKind::Not),
         "match" => Some(TokenKind::Match),
         "case"  => Some(TokenKind::Case),
+        "then"  => Some(TokenKind::Then),
         "else"  => Some(TokenKind::Else),
         "do"    => Some(TokenKind::Do),
         "end"   => Some(TokenKind::End),
@@ -187,7 +188,9 @@ impl Token {
           | TokenKind::LBracket
           | TokenKind::RBracket
           | TokenKind::Comma
-          | TokenKind::Semi
+          | TokenKind::End
+          | TokenKind::Case
+          | TokenKind::Then
         )
     }
 

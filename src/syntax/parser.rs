@@ -53,7 +53,7 @@ impl<'s> Parser<'s> {
             }
             TokenKind::Upper => {
                 match self.peek.kind {
-                    TokenKind::LParen => self.parse_ctor(),
+                    TokenKind::LParen => self.parse_constructor(),
                     _ => {
                         return Err(self.unexpected())
                     }
@@ -216,7 +216,7 @@ impl<'s> Parser<'s> {
             box Def { name, value, span: self.span(start) }))
     }
 
-    fn parse_ctor(&mut self) -> Result<Expr> {
+    fn parse_constructor(&mut self) -> Result<Expr> {
         let start = self.expect(TokenKind::Upper)?;
 
         let value = self.source.content[start.range()].to_string();
@@ -229,7 +229,7 @@ impl<'s> Parser<'s> {
 
         let block = self.parse_inner_block()?;
 
-        Ok(Expr::Ctor(
+        Ok(Expr::Constructor(
             box Fn { name, parameters, block, span: self.span(start) }))
     }
 
@@ -254,7 +254,8 @@ impl<'s> Parser<'s> {
 
         let patt = self.parse_expr()?;
 
-        let value = if self.match_lines() && self.maybe_eat(TokenKind::Equals) {
+        let value = if self.maybe_eat(TokenKind::Equals)
+                    && self.match_lines() {
             Some(self.parse_expr()?)
         } else {
             None
@@ -272,7 +273,9 @@ impl<'s> Parser<'s> {
 
         let block = self.maybe_eat(TokenKind::Do);
 
-        let parameters = if block && self.match_token(TokenKind::LParen) && self.match_lines() {
+        let parameters = if block
+                         && self.match_token(TokenKind::LParen)
+                         && self.match_lines() {
             Some(self.parse_sequence_of(
                     TokenKind::LParen,
                     TokenKind::RParen,
@@ -283,11 +286,12 @@ impl<'s> Parser<'s> {
 
         let mut expressions = vec![];
 
-        while !self.done() && !self.match_token(TokenKind::End) {
+        while !self.match_token(TokenKind::End)
+           && !self.done() {
             expressions.push(self.parse_expr()?);
         }
-
-        self.expect_exactly(TokenKind::End)?;
+        
+        self.end()?;
 
         Ok(Block { parameters, expressions, span: self.span(start) })
     }
@@ -303,10 +307,10 @@ impl<'s> Parser<'s> {
         
         while self.match_token(TokenKind::Case) {
             self.expect(TokenKind::Case)?;
-            let cond = self.parse_expr()?;
-            self.expect(TokenKind::Arrow)?;
+            let case = self.parse_expr()?;
+            self.expect(TokenKind::Then)?;
             let then = self.parse_expr()?;
-            cases.push((cond, then));
+            cases.push((case, then));
         }
 
         let otherwise = if self.maybe_eat(TokenKind::Else) {
@@ -314,11 +318,24 @@ impl<'s> Parser<'s> {
         } else {
             None
         };
-
-        self.expect(TokenKind::End)?;
+        
+        self.end()?;
 
         Ok(Expr::Match(
             box Match { predicate, cases, otherwise, span: self.span(start), }))
+    }
+
+    fn end(&mut self) -> Result<()> {
+        match self.expect(TokenKind::End) {
+            Ok(_)      => Ok(()),
+            Err(error) => {
+                if self.prev.kind == TokenKind::End {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            }
+        }
     }
 
     fn parse_initial(&mut self) -> Result<Expr> {
@@ -511,17 +528,19 @@ impl<'s> Parser<'s> {
     }
 
     fn bump(&mut self) -> Span {
-        let span = self.token.span;
-
         self.prev  = self.token;
         self.token = self.peek;
         self.peek  = if let Some(token) = self.lexer.next() {
             token
         } else {
-            Token::default()
+            let span = self.token.span;
+            Token {
+                kind: TokenKind::EOF,
+                span: Span::new(span.line, span.end, span.end)
+            }
         };
 
-        span
+        self.prev.span
     }
 
     fn done(&self) -> bool {
@@ -534,19 +553,7 @@ impl<'s> Parser<'s> {
         } else {
             Err(NetrineError::error(
                 self.token.span,
-                format!("Expected `{}`, but found `{}`", expected, self.token.kind)))
-        }
-    }
-
-    fn expect_exactly(&mut self, expected: TokenKind) -> Result<Span> {
-        if self.token.kind == expected {
-            Ok(self.bump())
-        } else if self.prev.kind == expected {
-            Ok(self.prev.span)
-        } else {
-            Err(NetrineError::error(
-                self.token.span,
-                format!("Expected `{}`, but found `{}`", expected, self.token.kind)))
+                format!("Expected `{}` but found `{}`", expected, self.token.kind)))
         }
     }
 

@@ -57,35 +57,40 @@ impl NetrineError {
         let mut right = right.split("\n");
         let right_main = right.next().unwrap();
 
-        let wall_padding = " ".repeat(span.line.to_string().len());
-        let pointer_padding = " ".repeat(left_main.len());
-        let pointer_arrows  = "^".repeat((span.end - span.start) as usize);
+        let number_padding_length = (span.line.to_string().len() + 1) as usize;
+        let number_padding = " ".repeat(number_padding_length);
+        let pointer_padding = " ".repeat(left_main.len().max(1));
+        let pointer_arrows = "^".repeat((span.end - span.start).max(1) as usize);
+
+        let format_line = |n: u32| {
+            format!("{:>length$}", n, length=number_padding_length)
+        };
 
         write!(buf,"\n")?;
         write!(buf, "error: {}", self.text)?;
         write!(buf,"\n")?;
 
-        write!(buf, "{}--> {} at line {}", wall_padding, path, span.line)?;
+        write!(buf, "{}--> {} at line {}", number_padding, path, span.line)?;
         write!(buf, "\n")?;
-        write!(buf, "{} |", wall_padding)?;
+        write!(buf, "{} |", number_padding)?;
         write!(buf, "\n")?;
         
         if let Some(prev_line) = left.next() {
-            write!(buf, "{} | {}", span.line - 1, prev_line)?;
+            write!(buf, "{} | {}", format_line(span.line - 1), prev_line)?;
             write!(buf, "\n")?;
         }
 
-        write!(buf, "{} | {}{}", span.line, left_main, right_main)?;
+        write!(buf, "{} | {}{}", format_line(span.line), left_main, right_main)?;
         write!(buf, "\n")?;
-        write!(buf, "{} | {}{}", wall_padding, pointer_padding, pointer_arrows)?;
+        write!(buf, "{} | {}{}", number_padding, pointer_padding, pointer_arrows)?;
         write!(buf, "\n")?;
 
         if let Some(next_line) = right.next() {
-            write!(buf, "{} | {}", span.line + 1, next_line)?;
+            write!(buf, "{} | {}", format_line(span.line + 1), next_line)?;
             write!(buf, "\n")?;
         }
 
-        write!(buf, "{} |", wall_padding)?;
+        write!(buf, "{} |", number_padding)?;
 
         write!(buf, "\n\n")?;
         write!(buf, "error: could not compile {}", path)?;
