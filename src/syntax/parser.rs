@@ -47,7 +47,7 @@ impl<'s> Parser<'s> {
                     TokenKind::LParen => self.parse_fn(),
                     TokenKind::Do     => self.parse_block(),
                     _ => {
-                        return Err(self.unexpected())
+                        Err(self.unexpected())
                     }
                 }
             }
@@ -55,7 +55,7 @@ impl<'s> Parser<'s> {
                 match self.peek.kind {
                     TokenKind::LParen => self.parse_constructor(),
                     _ => {
-                        return Err(self.unexpected())
+                        Err(self.unexpected())
                     }
                 }
             }
@@ -100,6 +100,21 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn parse_patt(&mut self) -> Result<Expr> {
+        match self.token.kind {
+            TokenKind::Lower => self.parse_lower(),
+            TokenKind::Upper => self.parse_upper(),
+            TokenKind::Number => self.parse_number(),
+            TokenKind::String => self.parse_string(),
+            TokenKind::LParen => self.parse_parens(),
+            TokenKind::LBrace => self.parse_braces(),
+            TokenKind::LBracket => self.parse_brackets(),
+            _ => {
+                Err(self.unexpected())
+            }
+        }
+    }
+
     fn parse_name(&mut self) -> Result<Name> {
         let span  = self.expect(TokenKind::Lower)?;
         let value = self.source.content[span.range()].into();
@@ -122,7 +137,8 @@ impl<'s> Parser<'s> {
 
         let name = Name { value, span: start };
 
-        let value = if self.match_term() && self.match_lines() {
+        let value = if self.match_term()
+                    && self.match_lines() {
             Some(self.parse_expr()?)
         } else {
             None
@@ -131,7 +147,7 @@ impl<'s> Parser<'s> {
         Ok(Expr::Variant(
             box Variant { name, value, span: self.span(start) }))
     }
-
+    
     fn parse_number(&mut self) -> Result<Expr> {
         let span  = self.expect(TokenKind::Number)?;
         let value = self.source.content[span.range()].into();
@@ -252,7 +268,7 @@ impl<'s> Parser<'s> {
     fn parse_parameter(&mut self) -> Result<Parameter> {
         let start = self.token.span;
 
-        let patt = self.parse_expr()?;
+        let patt = self.parse_patt()?;
 
         let value = if self.maybe_eat(TokenKind::Equals)
                     && self.match_lines() {
@@ -291,7 +307,7 @@ impl<'s> Parser<'s> {
             expressions.push(self.parse_expr()?);
         }
         
-        self.end()?;
+        self.expect_forgiving(TokenKind::End)?;
 
         Ok(Block { parameters, expressions, span: self.span(start) })
     }
@@ -307,10 +323,10 @@ impl<'s> Parser<'s> {
         
         while self.match_token(TokenKind::Case) {
             self.expect(TokenKind::Case)?;
-            let case = self.parse_expr()?;
+            let patt = self.parse_patt()?;
             self.expect(TokenKind::Then)?;
             let then = self.parse_expr()?;
-            cases.push((case, then));
+            cases.push((patt, then));
         }
 
         let otherwise = if self.maybe_eat(TokenKind::Else) {
@@ -319,23 +335,10 @@ impl<'s> Parser<'s> {
             None
         };
         
-        self.end()?;
+        self.expect_forgiving(TokenKind::End)?;
 
         Ok(Expr::Match(
             box Match { predicate, cases, otherwise, span: self.span(start), }))
-    }
-
-    fn end(&mut self) -> Result<()> {
-        match self.expect(TokenKind::End) {
-            Ok(_)      => Ok(()),
-            Err(error) => {
-                if self.prev.kind == TokenKind::End {
-                    Ok(())
-                } else {
-                    Err(error)
-                }
-            }
-        }
     }
 
     fn parse_initial(&mut self) -> Result<Expr> {
@@ -408,8 +411,8 @@ impl<'s> Parser<'s> {
 
         let operator = self.parse_operator()?;
 
-        if self.prev.is_delimiter()
-        && self.peek.is_delimiter() {
+        if self.prev.is_opening_delimiter()
+        && self.peek.is_closing_delimiter() {
             let span = operator.span;
             return Ok(Expr::Partial(
                 box Partial { operator, left: None, right: None, span, }));
@@ -450,7 +453,7 @@ impl<'s> Parser<'s> {
                 self.bump();
 
                 // partial application of operators
-                if self.token.is_delimiter() {
+                if self.token.is_closing_delimiter() {
                     let span = Span::from(expr.span(), operator.span);
 
                     return Ok(Expr::Partial(
@@ -554,6 +557,19 @@ impl<'s> Parser<'s> {
             Err(NetrineError::error(
                 self.token.span,
                 format!("Expected `{}` but found `{}`", expected, self.token.kind)))
+        }
+    }
+
+    fn expect_forgiving(&mut self, expected: TokenKind) -> Result<()> {
+        match self.expect(expected) {
+            Ok(_)      => Ok(()),
+            Err(error) => {
+                if self.prev.kind == expected {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            }
         }
     }
 

@@ -179,13 +179,20 @@ impl Token {
         )
     }
 
-    pub fn is_delimiter(&self) -> bool {
+    pub fn is_opening_delimiter(&self) -> bool {
         matches!(self.kind,
             TokenKind::LParen
-          | TokenKind::RParen
           | TokenKind::LBrace
-          | TokenKind::RBrace
           | TokenKind::LBracket
+          | TokenKind::Case
+          | TokenKind::Then
+        )
+    }
+
+    pub fn is_closing_delimiter(&self) -> bool {
+        matches!(self.kind,
+            TokenKind::RParen
+          | TokenKind::RBrace
           | TokenKind::RBracket
           | TokenKind::Comma
           | TokenKind::End
