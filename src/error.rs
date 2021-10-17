@@ -44,7 +44,7 @@ impl Display for NetrineError {
 impl NetrineError {
     pub fn report(&self, source: &Source, buf: &mut String) -> fmt::Result {
         if self.span.is_none() {
-            return write!(buf, "{}", self.text);
+            return writeln!(buf, "error: {}", self.text)
         }
 
         let path = source.path.as_path().display().to_string();
@@ -52,48 +52,39 @@ impl NetrineError {
 
         let (left, right) = source.content.split_at(span.start as usize);
 
-        let mut left = left.rsplit("\n");
+        let mut left = left.rsplit('\n');
         let left_main = left.next().unwrap();
-        let mut right = right.split("\n");
+        let mut right = right.split('\n');
         let right_main = right.next().unwrap();
 
-        let number_padding_length = (span.line.to_string().len() + 1) as usize;
+        let number_padding_length = (span.line  + 1).to_string().len() as usize;
         let number_padding = " ".repeat(number_padding_length);
-        let pointer_padding = " ".repeat(left_main.len().max(1));
+        let pointer_padding = " ".repeat(left_main.len());
         let pointer_arrows = "^".repeat((span.end - span.start).max(1) as usize);
 
         let format_line = |n: u32| {
             format!("{:>length$}", n, length=number_padding_length)
         };
 
-        write!(buf,"\n")?;
-        write!(buf, "error: {}", self.text)?;
-        write!(buf,"\n")?;
+        writeln!(buf, "\nerror: {}", self.text)?;
 
-        write!(buf, "{}--> {} at line {}", number_padding, path, span.line)?;
-        write!(buf, "\n")?;
-        write!(buf, "{} |", number_padding)?;
-        write!(buf, "\n")?;
+        writeln!(buf, "{}--> {} at line {}", number_padding, path, span.line)?;
+        writeln!(buf, "{} |", number_padding)?;
         
         if let Some(prev_line) = left.next() {
-            write!(buf, "{} | {}", format_line(span.line - 1), prev_line)?;
-            write!(buf, "\n")?;
+            writeln!(buf, "{} | {}", format_line(span.line - 1), prev_line)?;
         }
 
-        write!(buf, "{} | {}{}", format_line(span.line), left_main, right_main)?;
-        write!(buf, "\n")?;
-        write!(buf, "{} | {}{}", number_padding, pointer_padding, pointer_arrows)?;
-        write!(buf, "\n")?;
+        writeln!(buf, "{} | {}{}", format_line(span.line), left_main, right_main)?;
+        writeln!(buf, "{} | {}{}", number_padding, pointer_padding, pointer_arrows)?;
 
         if let Some(next_line) = right.next() {
-            write!(buf, "{} | {}", format_line(span.line + 1), next_line)?;
-            write!(buf, "\n")?;
+            writeln!(buf, "{} | {}", format_line(span.line + 1), next_line)?;
         }
 
-        write!(buf, "{} |", number_padding)?;
+        writeln!(buf, "{} |", number_padding)?;
 
-        write!(buf, "\n\n")?;
-        write!(buf, "error: could not compile {}", path)?;
-        write!(buf, "\n\n")
+        writeln!(buf, "\n")?;
+        writeln!(buf, "error: could not compile {}", path)
     }
 }

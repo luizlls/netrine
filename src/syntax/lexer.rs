@@ -449,10 +449,8 @@ mod tests {
 
     #[test]
     fn lex_keywords() {
-        let mut lexer = Lexer::new("match case then else do end and or not");
+        let mut lexer = Lexer::new("match case then else and or not do end");
 
-        assert_eq!(lexer.next().unwrap().kind, TokenKind::Do);
-        assert_eq!(lexer.next().unwrap().kind, TokenKind::End);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Match);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Case);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Then);
@@ -460,6 +458,8 @@ mod tests {
         assert_eq!(lexer.next().unwrap().kind, TokenKind::And);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Or);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Not);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::Do);
+        assert_eq!(lexer.next().unwrap().kind, TokenKind::End);
     }
 
     #[test]
