@@ -127,6 +127,9 @@ impl<'src> Lexer<'src> {
             Some(';') => {
                 self.single(TokenKind::Semi)
             }
+            Some('#') => {
+                self.single(TokenKind::Hash)
+            }
             Some('/') if self.peek == Some('/') => {
                 self.comment()
             }

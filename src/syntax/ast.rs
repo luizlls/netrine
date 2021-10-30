@@ -37,6 +37,8 @@ pub enum Expr {
 
     Dict(Box<Dict>),
 
+    Record(Box<Record>),
+
     If(Box<If>),
 
     Variant(Box<Variant>),
@@ -172,6 +174,12 @@ pub struct Dict {
 }
 
 #[derive(Debug, Clone)]
+pub struct Record {
+    pub properties: Vec<(Name, Option<Expr>)>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub struct Literal {
     pub value: String,
     pub span: Span,
@@ -274,6 +282,7 @@ impl Expr {
             Expr::Tuple(e) => e.span,
             Expr::List(e) => e.span,
             Expr::Dict(e) => e.span,
+            Expr::Record(e) => e.span,
             Expr::If(e) => e.span,
             Expr::Number(e) => e.span,
             Expr::String(e) => e.span,

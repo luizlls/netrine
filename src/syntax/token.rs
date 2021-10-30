@@ -24,6 +24,7 @@ pub enum TokenKind {
     Equals, // =
     Walrus, // :=
     Pipe,   // |
+    Hash,   // #
 
     Case,
     If,
@@ -78,6 +79,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Equals => write!(f, "="),
             TokenKind::Walrus => write!(f, ":="),
             TokenKind::Pipe => write!(f, "|"),
+            TokenKind::Hash => write!(f, "#"),
             TokenKind::Case => write!(f, "case"),
             TokenKind::If   => write!(f, "if"),
             TokenKind::Then => write!(f, "then"),
@@ -178,7 +180,7 @@ impl Token {
         )
     }
 
-    pub fn is_opening_delimiter(&self) -> bool {
+    pub fn is_opening(&self) -> bool {
         matches!(self.kind,
             TokenKind::LParen
           | TokenKind::LBrace
@@ -190,7 +192,7 @@ impl Token {
         )
     }
 
-    pub fn is_closing_delimiter(&self) -> bool {
+    pub fn is_closing(&self) -> bool {
         matches!(self.kind,
             TokenKind::RParen
           | TokenKind::RBrace

@@ -73,19 +73,21 @@ impl<'s> Parser<'s> {
           | TokenKind::String
           | TokenKind::LParen
           | TokenKind::LBrace
-          | TokenKind::LBracket)
+          | TokenKind::LBracket
+          | TokenKind::Hash)
     }
 
     fn parse_term(&mut self) -> Result<Expr> {
         match self.token.kind {
+            TokenKind::It => self.parse_it(),
             TokenKind::Lower => self.parse_lower(),
             TokenKind::Upper => self.parse_upper(),
             TokenKind::Number => self.parse_number(),
             TokenKind::String => self.parse_string(),
             TokenKind::LParen => self.parse_parens(),
             TokenKind::LBrace => self.parse_braces(),
-            TokenKind::LBracket => self.parse_brackets(),
-            TokenKind::It => self.parse_it(),
+            TokenKind::LBracket => self.parse_lambda(),
+            TokenKind::Hash => self.parse_record(true),
             _ => {
                 Err(self.unexpected())
             }
@@ -100,7 +102,7 @@ impl<'s> Parser<'s> {
             TokenKind::String => self.parse_string(),
             TokenKind::LParen => self.parse_parens(),
             TokenKind::LBrace => self.parse_braces(),
-            TokenKind::LBracket => self.parse_brackets(),
+            TokenKind::Hash   => self.parse_record(true),
             _ => {
                 Err(self.unexpected())
             }
@@ -130,7 +132,18 @@ impl<'s> Parser<'s> {
         let name = Name { value, span: start };
 
         let value = if self.match_lines() && self.match_term() {
-            Some(self.parse_expr()?)
+            match self.token.kind {
+                TokenKind::LParen => {
+                    Some(self.parse_parens()?)
+                }
+                TokenKind::LBrace => {
+                    Some(self.parse_record(false)?)
+                }
+                TokenKind::Lower => {
+                    Some(self.parse_term()?)
+                }
+                _ => return Err(self.unexpected())
+            }
         } else {
             None
         };
@@ -198,7 +211,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn parse_brackets(&mut self) -> Result<Expr> {
+    fn parse_lambda(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
         let values = self.parse_sequence_of(
@@ -230,6 +243,43 @@ impl<'s> Parser<'s> {
 
         Ok(Expr::Lambda(
             box Lambda { parameters, value, span: self.span(start) } ))
+    }
+
+    fn parse_record(&mut self, anonymous: bool) -> Result<Expr> {
+        let start = self.token.span;
+
+        if anonymous {
+            self.expect(TokenKind::Hash)?;
+        }
+
+        let properties = self.parse_sequence_of(
+            TokenKind::LBrace,
+            TokenKind::RBrace,
+            Self::parse_property)?;
+
+        Ok(Expr::Record(
+            box Record { properties, span: self.span(start) }))
+    }
+
+    fn parse_property(&mut self) -> Result<(Name, Option<Expr>)> {
+        let key = self.parse_name()?;
+
+        let val = match self.token.kind {
+            TokenKind::Equals => {
+                self.bump();
+                Some(self.parse_expr()?)
+            }
+            TokenKind::LBrace => {
+                Some(self.parse_braces()?)
+            }
+            TokenKind::Comma
+          | TokenKind::RBrace => {
+                None
+            }
+            _ => return Err(self.unexpected())
+        };
+
+        Ok((key, val))
     }
 
     fn parse_def(&mut self) -> Result<Expr> {
@@ -380,8 +430,8 @@ impl<'s> Parser<'s> {
 
         let operator = self.parse_operator()?;
 
-        if self.prev.is_opening_delimiter()
-        && self.peek.is_closing_delimiter() {
+        if self.prev.is_opening()
+        && self.peek.is_closing() {
             let span = operator.span;
             return Ok(Expr::Partial(
                 box Partial { operator, left: None, right: None, span, }));
@@ -422,7 +472,7 @@ impl<'s> Parser<'s> {
                 self.bump();
 
                 // partial application of operators
-                if self.token.is_closing_delimiter() {
+                if self.token.is_closing() {
                     let span = Span::from(expr.span(), operator.span);
 
                     return Ok(Expr::Partial(
