@@ -309,6 +309,9 @@ impl<'s> Parser<'s> {
                 TokenKind::Dot => {
                     expression = self.parse_dot(expression)?;
                 }
+                TokenKind::LBrace => {
+                    expression = self.parse_trailling(expression)?;
+                }
                 _ => return Ok(expression)
             }
         }
@@ -342,6 +345,32 @@ impl<'s> Parser<'s> {
 
         Ok(Expr::Get(
             box Get { source, value, span: self.span(start) }))
+    }
+
+    fn parse_trailling(&mut self, callee: Expr) -> Result<Expr> {
+        let start = callee.span();
+        match callee {
+            Expr::Name(_) => {
+                let value = self.parse_braces()?;
+                let arguments = vec![
+                    Argument { name: None, value, span: self.span(start) }
+                ];
+
+                Ok(Expr::Call(
+                    box Call { callee, arguments, span: self.span(start) }))
+            }
+            Expr::Call(box Call { callee, mut arguments, .. }) => {
+                let value = self.parse_braces()?;
+                arguments.push(
+                    Argument { name: None, value, span: self.span(start) });
+
+                Ok(Expr::Call(
+                    box Call { callee, arguments, span: self.span(start) }))
+            }
+            _ => {
+                return Err(self.unexpected());
+            }
+        }
     }
 
     fn parse_unary(&mut self) -> Result<Expr> {
