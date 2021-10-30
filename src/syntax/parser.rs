@@ -45,15 +45,6 @@ impl<'s> Parser<'s> {
                 match self.peek.kind {
                     TokenKind::Equals => self.parse_def(),
                     TokenKind::LParen => self.parse_fn(),
-                    TokenKind::Do     => self.parse_block(),
-                    _ => {
-                        Err(self.unexpected())
-                    }
-                }
-            }
-            TokenKind::Upper => {
-                match self.peek.kind {
-                    TokenKind::LParen => self.parse_constructor(),
                     _ => {
                         Err(self.unexpected())
                     }
@@ -65,9 +56,9 @@ impl<'s> Parser<'s> {
 
     fn parse_expr(&mut self) -> Result<Expr> {
         match self.token.kind {
-            TokenKind::Match => self.parse_match(),
-            TokenKind::Do    => self.parse_block(),
-            TokenKind::Lower if self.match_peek(TokenKind::Equals) => {
+            TokenKind::If => self.parse_if(),
+            TokenKind::Lower
+            if self.match_peek(TokenKind::Equals) => {
                 self.parse_def()
             }
             _ => self.parse_binary(0)
@@ -94,6 +85,7 @@ impl<'s> Parser<'s> {
             TokenKind::LParen => self.parse_parens(),
             TokenKind::LBrace => self.parse_braces(),
             TokenKind::LBracket => self.parse_brackets(),
+            TokenKind::It => self.parse_it(),
             _ => {
                 Err(self.unexpected())
             }
@@ -137,8 +129,7 @@ impl<'s> Parser<'s> {
 
         let name = Name { value, span: start };
 
-        let value = if self.match_term()
-                    && self.match_lines() {
+        let value = if self.match_lines() && self.match_term() {
             Some(self.parse_expr()?)
         } else {
             None
@@ -158,6 +149,37 @@ impl<'s> Parser<'s> {
         let span  = self.expect(TokenKind::String)?;
         let value = self.source.content[span.range()].into();
         Ok(Expr::String(Literal { value, span }))
+    }
+    
+    fn parse_it(&mut self) -> Result<Expr> {
+        let span  = self.expect(TokenKind::It)?;
+        Ok(Expr::It(span))
+    }
+
+    fn parse_block(&mut self) -> Result<Expr> {
+        let start = self.token.span;
+
+        let expressions = self.parse_sequence_of(
+            TokenKind::LBrace,
+            TokenKind::RBrace,
+            Self::parse_expr)?;
+
+        Ok(Expr::Block(
+            box Block { expressions, span: self.span(start) }))
+    }
+
+    fn parse_inner(&mut self) -> Result<Expr> {
+        let start = self.token.span;
+
+        let mut expressions = vec![];
+
+        while !self.match_token(TokenKind::RBrace)
+           && !self.done() {
+            expressions.push(self.parse_expr()?);
+        }
+
+        Ok(Expr::Block(
+            box Block { expressions, span: self.span(start) }))
     }
 
     fn parse_parens(&mut self) -> Result<Expr> {
@@ -191,34 +213,23 @@ impl<'s> Parser<'s> {
     fn parse_braces(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        let properties = self.parse_sequence_of(
-            TokenKind::LBrace,
-            TokenKind::RBrace,
-            Self::parse_property)?;
+        self.expect(TokenKind::LBrace)?;
 
-        Ok(Expr::Record(
-            box Record { properties, span: self.span(start) }))
-    }
-
-    fn parse_property(&mut self) -> Result<(Name, Option<Expr>)> {
-        let key = self.parse_name()?;
-
-        let val = match self.token.kind {
-            TokenKind::Equals => {
-                self.bump();
-                Some(self.parse_expr()?)
-            }
-            TokenKind::LBrace => {
-                Some(self.parse_braces()?)
-            }
-            TokenKind::Comma
-          | TokenKind::RParen => {
-                None
-            }
-            _ => return Err(self.unexpected())
+        let parameters = if self.match_token(TokenKind::Pipe) {
+            self.parse_sequence_of(
+                TokenKind::Pipe,
+                TokenKind::Pipe,
+                Self::parse_parameter)?
+        } else {
+            vec![]
         };
 
-        Ok((key, val))
+        let value = self.parse_inner()?;
+
+        self.expect(TokenKind::RBrace)?;
+
+        Ok(Expr::Lambda(
+            box Lambda { parameters, value, span: self.span(start) } ))
     }
 
     fn parse_def(&mut self) -> Result<Expr> {
@@ -232,23 +243,6 @@ impl<'s> Parser<'s> {
             box Def { name, value, span: self.span(start) }))
     }
 
-    fn parse_constructor(&mut self) -> Result<Expr> {
-        let start = self.expect(TokenKind::Upper)?;
-
-        let value = self.source.content[start.range()].to_string();
-        let name  = Name { value, span: start };
-
-        let parameters = self.parse_sequence_of(
-            TokenKind::LParen,
-            TokenKind::RParen,
-            Self::parse_parameter)?;
-
-        let block = self.parse_inner_block()?;
-
-        Ok(Expr::Constructor(
-            box Fn { name, parameters, block, span: self.span(start) }))
-    }
-
     fn parse_fn(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
@@ -259,10 +253,19 @@ impl<'s> Parser<'s> {
             TokenKind::RParen,
             Self::parse_parameter)?;
 
-        let block = self.parse_inner_block()?;
+        let value = match self.token.kind {
+            TokenKind::Equals => {
+                self.expect(TokenKind::Equals)?;
+                self.parse_expr()?
+            }
+            TokenKind::LBrace => {
+                self.parse_block()?
+            }
+            _ => return Err(self.unexpected())
+        };
 
         Ok(Expr::Fn(
-            box Fn { name, parameters, block, span: self.span(start) }))
+            box Fn { name, parameters, value, span: self.span(start) }))
     }
 
     fn parse_parameter(&mut self) -> Result<Parameter> {
@@ -270,8 +273,7 @@ impl<'s> Parser<'s> {
 
         let patt = self.parse_patt()?;
 
-        let value = if self.maybe_eat(TokenKind::Equals)
-                    && self.match_lines() {
+        let value = if self.match_lines() && self.maybe_eat(TokenKind::Colon) {
             Some(self.parse_expr()?)
         } else {
             None
@@ -280,65 +282,20 @@ impl<'s> Parser<'s> {
         Ok(Parameter { patt, value, span: self.span(start) })
     }
 
-    fn parse_block(&mut self) -> Result<Expr> {
-        Ok(Expr::Block(box self.parse_inner_block()?))
-    }
-
-    fn parse_inner_block(&mut self) -> Result<Block> {
+    fn parse_if(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        let block = self.maybe_eat(TokenKind::Do);
+        self.expect(TokenKind::If)?;
+        let pred = self.parse_expr()?;
 
-        let parameters = if block
-                         && self.match_token(TokenKind::LParen)
-                         && self.match_lines() {
-            Some(self.parse_sequence_of(
-                    TokenKind::LParen,
-                    TokenKind::RParen,
-                    Self::parse_parameter)?)
-        } else {
-            None
-        };
-
-        let mut expressions = vec![];
-
-        while !self.match_token(TokenKind::End)
-           && !self.done() {
-            expressions.push(self.parse_expr()?);
-        }
+        self.expect(TokenKind::Then)?;
+        let then = self.parse_expr()?;
         
-        self.expect_forgiving(TokenKind::End)?;
+        self.expect(TokenKind::Else)?;
+        let otherwise = Some(self.parse_expr()?);
 
-        Ok(Block { parameters, expressions, span: self.span(start) })
-    }
-
-    fn parse_match(&mut self) -> Result<Expr> {
-        let start = self.token.span;
-
-        self.expect(TokenKind::Match)?;
-
-        let predicate = self.parse_expr()?;
-
-        let mut cases = vec![];
-        
-        while self.match_token(TokenKind::Case) {
-            self.expect(TokenKind::Case)?;
-            let patt = self.parse_patt()?;
-            self.expect(TokenKind::Then)?;
-            let then = self.parse_expr()?;
-            cases.push((patt, then));
-        }
-
-        let otherwise = if self.maybe_eat(TokenKind::Else) {
-            Some(self.parse_expr()?)
-        } else {
-            None
-        };
-        
-        self.expect_forgiving(TokenKind::End)?;
-
-        Ok(Expr::Match(
-            box Match { predicate, cases, otherwise, span: self.span(start), }))
+        Ok(Expr::If(
+            box If { pred, then, otherwise, span: self.span(start), }))
     }
 
     fn parse_initial(&mut self) -> Result<Expr> {
@@ -373,25 +330,8 @@ impl<'s> Parser<'s> {
 
     fn parse_argument(&mut self) -> Result<Argument> {
         let start = self.token.span;
-
-        let mut name = if self.match_token(TokenKind::Lower)
-                        && self.match_peek(TokenKind::Colon) {
-            let name = self.parse_name()?;
-            self.expect(TokenKind::Colon)?;
-            Some(name)
-        } else {
-            None
-        };
-        
         let value = self.parse_expr()?;
-        
-        if let Expr::Fn(box Fn { name: function_name, .. }) = &value {
-            if name.is_none() {
-                name = Some(function_name.clone());
-            }
-        }
-        
-        Ok(Argument { name, value, span: self.span(start) })
+        Ok(Argument { name: None, value, span: self.span(start) })
     }
 
     fn parse_dot(&mut self, source: Expr) -> Result<Expr> {
@@ -477,22 +417,22 @@ impl<'s> Parser<'s> {
         let span = self.token.span;
 
         let kind = match self.token.kind {
-            TokenKind::Add   => OperatorKind::Add,
-          | TokenKind::Sub   => OperatorKind::Sub,
-          | TokenKind::Mul   => OperatorKind::Mul,
-          | TokenKind::Div   => OperatorKind::Div,
-          | TokenKind::Rem   => OperatorKind::Rem,
-          | TokenKind::And   => OperatorKind::And,
-          | TokenKind::Or    => OperatorKind::Or,
-          | TokenKind::Not   => OperatorKind::Not,
-          | TokenKind::Eq    => OperatorKind::Eq,
-          | TokenKind::Ne    => OperatorKind::Ne,
-          | TokenKind::Lt    => OperatorKind::Lt,
-          | TokenKind::Le    => OperatorKind::Le,
-          | TokenKind::Gt    => OperatorKind::Gt,
-          | TokenKind::Ge    => OperatorKind::Ge,
-          | TokenKind::Pipe  => OperatorKind::Pipe,
-          | TokenKind::Range => OperatorKind::Range,
+            TokenKind::Add => OperatorKind::Add,
+          | TokenKind::Sub => OperatorKind::Sub,
+          | TokenKind::Mul => OperatorKind::Mul,
+          | TokenKind::Div => OperatorKind::Div,
+          | TokenKind::Rem => OperatorKind::Rem,
+          | TokenKind::And => OperatorKind::And,
+          | TokenKind::Or  => OperatorKind::Or,
+          | TokenKind::Not => OperatorKind::Not,
+          | TokenKind::Eq  => OperatorKind::Eq,
+          | TokenKind::Ne  => OperatorKind::Ne,
+          | TokenKind::Lt  => OperatorKind::Lt,
+          | TokenKind::Le  => OperatorKind::Le,
+          | TokenKind::Gt  => OperatorKind::Gt,
+          | TokenKind::Ge  => OperatorKind::Ge,
+          | TokenKind::Thread => OperatorKind::Thread,
+          | TokenKind::Range  => OperatorKind::Range,
             _ => {
                 return Err(NetrineError::error(
                     span,
@@ -539,7 +479,7 @@ impl<'s> Parser<'s> {
             let span = self.token.span;
             Token {
                 kind: TokenKind::EOF,
-                span: Span::new(span.line, span.end, span.end)
+                span: Span::new(span.line, span.end, span.end),
             }
         };
 
@@ -557,19 +497,6 @@ impl<'s> Parser<'s> {
             Err(NetrineError::error(
                 self.token.span,
                 format!("Expected `{}` but found `{}`", expected, self.token.kind)))
-        }
-    }
-
-    fn expect_forgiving(&mut self, expected: TokenKind) -> Result<()> {
-        match self.expect(expected) {
-            Ok(_)      => Ok(()),
-            Err(error) => {
-                if self.prev.kind == expected {
-                    Ok(())
-                } else {
-                    Err(error)
-                }
-            }
         }
     }
 
