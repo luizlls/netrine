@@ -21,32 +21,32 @@ pub enum TokenKind {
     Comma,  // ,
     Colon,  // :
     Semi,   // ;
-    Hash,   // #
     Equals, // =
+    Walrus, // :=
+    Pipe,   // |
 
-    Match,
     Case,
+    If,
     Then,
     Else,
-    Do,
-    End,
+    It,
 
-    And,   // and
-    Or,    // or
-    Not,   // not
-    Add,   // +
-    Sub,   // -
-    Mul,   // *
-    Div,   // /
-    Rem,   // %
-    Eq,    // ==
-    Ne,    // !=
-    Lt,    // <
-    Le,    // <=
-    Gt,    // >
-    Ge,    // >=
-    Pipe,  // |>
-    Range, // ..
+    And,    // and
+    Or,     // or
+    Not,    // not
+    Add,    // +
+    Sub,    // -
+    Mul,    // *
+    Div,    // /
+    Rem,    // %
+    Eq,     // ==
+    Ne,     // !=
+    Lt,     // <
+    Le,     // <=
+    Gt,     // >
+    Ge,     // >=
+    Thread, // |>
+    Range,  // ..
 
     Lower,
     Upper,
@@ -75,14 +75,14 @@ impl fmt::Display for TokenKind {
             TokenKind::Comma => write!(f, ","),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
-            TokenKind::Hash => write!(f, "#"),
             TokenKind::Equals => write!(f, "="),
-            TokenKind::Match => write!(f, "match"),
+            TokenKind::Walrus => write!(f, ":="),
+            TokenKind::Pipe => write!(f, "|"),
             TokenKind::Case => write!(f, "case"),
+            TokenKind::If   => write!(f, "if"),
             TokenKind::Then => write!(f, "then"),
             TokenKind::Else => write!(f, "else"),
-            TokenKind::Do => write!(f, "do"),
-            TokenKind::End => write!(f, "end"),
+            TokenKind::It => write!(f, "it"),
             TokenKind::And => write!(f, "and"),
             TokenKind::Or => write!(f, "or"),
             TokenKind::Not => write!(f, "not"),
@@ -97,7 +97,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Le => write!(f, "<="),
             TokenKind::Gt => write!(f, ">"),
             TokenKind::Ge => write!(f, ">="),
-            TokenKind::Pipe => write!(f, "|>"),
+            TokenKind::Thread => write!(f, "|>"),
             TokenKind::Range => write!(f, ".."),
             TokenKind::Lower => write!(f, "identifier"),
             TokenKind::Upper => write!(f, "constructor"),
@@ -144,12 +144,11 @@ pub fn get_keyword(key: &str) -> Option<TokenKind> {
         "and"   => Some(TokenKind::And),
         "or"    => Some(TokenKind::Or),
         "not"   => Some(TokenKind::Not),
-        "match" => Some(TokenKind::Match),
         "case"  => Some(TokenKind::Case),
+        "if"    => Some(TokenKind::If),
         "then"  => Some(TokenKind::Then),
         "else"  => Some(TokenKind::Else),
-        "do"    => Some(TokenKind::Do),
-        "end"   => Some(TokenKind::End),
+        "it"    => Some(TokenKind::It),
         _ => None,
     }
 }
@@ -174,7 +173,7 @@ impl Token {
           | TokenKind::Le
           | TokenKind::Gt
           | TokenKind::Ge
-          | TokenKind::Pipe
+          | TokenKind::Thread
           | TokenKind::Range
         )
     }
@@ -185,7 +184,9 @@ impl Token {
           | TokenKind::LBrace
           | TokenKind::LBracket
           | TokenKind::Case
+          | TokenKind::If
           | TokenKind::Then
+          | TokenKind::Else
         )
     }
 
@@ -195,29 +196,30 @@ impl Token {
           | TokenKind::RBrace
           | TokenKind::RBracket
           | TokenKind::Comma
-          | TokenKind::End
           | TokenKind::Case
+          | TokenKind::If
           | TokenKind::Then
+          | TokenKind::Else
         )
     }
 
     pub fn precedence(&self) -> Option<Precedence> {
         let precedence = match self.kind {
-            TokenKind::Div   => 7,
-            TokenKind::Mul   => 7,
-            TokenKind::Rem   => 7,
-            TokenKind::Add   => 6,
-            TokenKind::Sub   => 6,
-            TokenKind::Lt    => 5,
-            TokenKind::Le    => 5,
-            TokenKind::Gt    => 5,
-            TokenKind::Ge    => 5,
-            TokenKind::Ne    => 5,
-            TokenKind::Eq    => 5,
-            TokenKind::And   => 4,
-            TokenKind::Or    => 3,
-            TokenKind::Range => 2,
-            TokenKind::Pipe  => 1,
+            TokenKind::Div => 7,
+            TokenKind::Mul => 7,
+            TokenKind::Rem => 7,
+            TokenKind::Add => 6,
+            TokenKind::Sub => 6,
+            TokenKind::Lt  => 5,
+            TokenKind::Le  => 5,
+            TokenKind::Gt  => 5,
+            TokenKind::Ge  => 5,
+            TokenKind::Ne  => 5,
+            TokenKind::Eq  => 5,
+            TokenKind::And => 4,
+            TokenKind::Or  => 3,
+            TokenKind::Range  => 2,
+            TokenKind::Thread => 1,
             _ => return None
         };
         Some(precedence)

@@ -31,7 +31,7 @@ fn repl() {
             input.push_str(&line);
             input.push('\n');
         } else {
-            exec(Source::source(&input));
+            exec(Source::new(&input, PathBuf::from("repl")));
             input.clear();
         }
     }
@@ -39,7 +39,7 @@ fn repl() {
 
 fn read_line() -> Result<String, ()> {
     let mut line = String::new();
-    print!(">>>>");
+    print!(">>>> ");
     stdout().flush().unwrap();
     match stdin().read_line(&mut line) {
         Ok(_) => {

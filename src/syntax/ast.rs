@@ -13,11 +13,13 @@ pub enum Expr {
 
     Fn(Box<Fn>),
 
-    Constructor(Box<Fn>),
-
     Def(Box<Def>),
 
+    Set(Box<Set>),
+
     Get(Box<Get>),
+
+    Lambda(Box<Lambda>),
 
     Block(Box<Block>),
 
@@ -33,9 +35,9 @@ pub enum Expr {
 
     List(Box<List>),
 
-    Record(Box<Record>),
+    Dict(Box<Dict>),
 
-    Match(Box<Match>),
+    If(Box<If>),
 
     Variant(Box<Variant>),
 
@@ -46,6 +48,8 @@ pub enum Expr {
     True(Span),
 
     False(Span),
+
+    It(Span),
 }
 
 
@@ -66,12 +70,19 @@ pub struct Parameter {
 pub struct Fn {
     pub name: Name,
     pub parameters: Vec<Parameter>,
-    pub block: Block,
+    pub value: Expr,
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct Def {
+    pub name: Name,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Set {
     pub name: Name,
     pub value: Expr,
     pub span: Span,
@@ -99,6 +110,19 @@ pub struct Argument {
 }
 
 #[derive(Debug, Clone)]
+pub struct Lambda {
+    pub parameters: Vec<Parameter>,
+    pub value: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub expressions: Vec<Expr>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub struct Unary {
     pub operator: Operator,
     pub right: Expr,
@@ -122,17 +146,10 @@ pub struct Partial {
 }
 
 #[derive(Debug, Clone)]
-pub struct Match {
-    pub predicate: Expr,
-    pub cases: Vec<(Expr, Expr)>,
+pub struct If {
+    pub pred: Expr,
+    pub then: Expr,
     pub otherwise: Option<Expr>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub parameters: Option<Vec<Parameter>>,
-    pub expressions: Vec<Expr>,
     pub span: Span,
 }
 
@@ -149,8 +166,8 @@ pub struct List {
 }
 
 #[derive(Debug, Clone)]
-pub struct Record {
-    pub properties: Vec<(Name, Option<Expr>)>,
+pub struct Dict {
+    pub properties: Vec<(Expr, Expr)>,
     pub span: Span,
 }
 
@@ -189,7 +206,7 @@ pub enum OperatorKind {
     And,
     Or,
     Not,
-    Pipe,
+    Thread,
     Range,
 }
 
@@ -202,22 +219,22 @@ pub struct Operator {
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.kind {
-            OperatorKind::And   => write!(f, "and"),
-            OperatorKind::Or    => write!(f, "or"),
-            OperatorKind::Not   => write!(f, "not"),
-            OperatorKind::Add   => write!(f, "+"),
-            OperatorKind::Sub   => write!(f, "-"),
-            OperatorKind::Mul   => write!(f, "*"),
-            OperatorKind::Div   => write!(f, "/"),
-            OperatorKind::Rem   => write!(f, "%"),
-            OperatorKind::Eq    => write!(f, "=="),
-            OperatorKind::Ne    => write!(f, "!="),
-            OperatorKind::Lt    => write!(f, "<"),
-            OperatorKind::Le    => write!(f, "<="),
-            OperatorKind::Gt    => write!(f, ">"),
-            OperatorKind::Ge    => write!(f, ">="),
-            OperatorKind::Pipe  => write!(f, "|>"),
-            OperatorKind::Range => write!(f, ".."),
+            OperatorKind::And => write!(f, "and"),
+            OperatorKind::Or  => write!(f, "or"),
+            OperatorKind::Not => write!(f, "not"),
+            OperatorKind::Add => write!(f, "+"),
+            OperatorKind::Sub => write!(f, "-"),
+            OperatorKind::Mul => write!(f, "*"),
+            OperatorKind::Div => write!(f, "/"),
+            OperatorKind::Rem => write!(f, "%"),
+            OperatorKind::Eq  => write!(f, "=="),
+            OperatorKind::Ne  => write!(f, "!="),
+            OperatorKind::Lt  => write!(f, "<"),
+            OperatorKind::Le  => write!(f, "<="),
+            OperatorKind::Gt  => write!(f, ">"),
+            OperatorKind::Ge  => write!(f, ">="),
+            OperatorKind::Thread => write!(f, "|>"),
+            OperatorKind::Range  => write!(f, ".."),
         }
     }
 }
@@ -233,7 +250,7 @@ impl Expr {
         matches!(self,
             Expr::Name(_)
           | Expr::List(_)
-          | Expr::Record(_)
+          | Expr::Dict(_)
           | Expr::String(_)
           | Expr::Number(_)
           | Expr::Variant(_)
@@ -245,23 +262,25 @@ impl Expr {
         match self {
             Expr::Name(e) => e.span,
             Expr::Fn(e) => e.span,
-            Expr::Constructor(e) => e.span,
             Expr::Def(e) => e.span,
+            Expr::Set(e) => e.span,
             Expr::Get(e) => e.span,
+            Expr::Lambda(e) => e.span,
+            Expr::Block(e) => e.span,
             Expr::Binary(e) => e.span,
             Expr::Unary(e) => e.span,
             Expr::Partial(e) => e.span,
             Expr::Call(e) => e.span,
-            Expr::Block(e) => e.span,
             Expr::Tuple(e) => e.span,
             Expr::List(e) => e.span,
-            Expr::Record(e) => e.span,
-            Expr::Match(e) => e.span,
+            Expr::Dict(e) => e.span,
+            Expr::If(e) => e.span,
             Expr::Number(e) => e.span,
             Expr::String(e) => e.span,
             Expr::Variant(e) => e.span,
             Expr::True(span) => *span,
             Expr::False(span) => *span,
+            Expr::It(span) => *span,
         }
     }
 }

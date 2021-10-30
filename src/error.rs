@@ -57,13 +57,13 @@ impl NetrineError {
         let mut right = right.split('\n');
         let right_main = right.next().unwrap();
 
-        let number_padding_length = (span.line  + 1).to_string().len() as usize;
-        let number_padding = " ".repeat(number_padding_length);
+        let padding_length = (span.line  + 1).to_string().len() as usize;
+        let number_padding = " ".repeat(padding_length);
         let pointer_padding = " ".repeat(left_main.len());
         let pointer_arrows = "^".repeat((span.end - span.start).max(1) as usize);
 
         let format_line = |n: u32| {
-            format!("{:>length$}", n, length=number_padding_length)
+            format!("{:>length$}", n, length=padding_length)
         };
 
         writeln!(buf, "\nerror: {}", self.text)?;
@@ -72,14 +72,18 @@ impl NetrineError {
         writeln!(buf, "{} |", number_padding)?;
         
         if let Some(prev_line) = left.next() {
-            writeln!(buf, "{} | {}", format_line(span.line - 1), prev_line)?;
+            if !prev_line.trim().is_empty() {
+                writeln!(buf, "{} | {}", format_line(span.line - 1), prev_line)?;
+            }
         }
 
         writeln!(buf, "{} | {}{}", format_line(span.line), left_main, right_main)?;
         writeln!(buf, "{} | {}{}", number_padding, pointer_padding, pointer_arrows)?;
 
         if let Some(next_line) = right.next() {
-            writeln!(buf, "{} | {}", format_line(span.line + 1), next_line)?;
+            if !next_line.trim().is_empty() {
+                writeln!(buf, "{} | {}", format_line(span.line + 1), next_line)?;
+            }
         }
 
         writeln!(buf, "{} |", number_padding)?;
