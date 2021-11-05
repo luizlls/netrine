@@ -172,10 +172,16 @@ impl<'s> Parser<'s> {
     fn parse_block(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        let expressions = self.parse_sequence_of(
-            TokenKind::LBrace,
-            TokenKind::RBrace,
-            Self::parse_expr)?;
+        self.expect(TokenKind::LBrace)?;
+
+        let mut expressions = vec![];
+
+        while !self.match_token(TokenKind::RBrace)
+           && !self.done() {
+            expressions.push(self.parse_expr()?);
+        }
+
+        self.expect(TokenKind::RBrace)?;
 
         Ok(Expr::Block(
             box Block { expressions, span: self.span(start) }))
@@ -628,10 +634,272 @@ mod tests {
 
     use super::*;
 
-    fn parse(source: &str) -> Result<Expr> {
+    fn expr(source: &str) -> Expr {
         let source = Source {
             path: PathBuf::from("test"), content: source.into()
         };
-        Parser::new(&source).parse_expr()
+        Parser::new(&source).parse_expr().unwrap()
+    }
+
+    fn module(source: &str) -> Module {
+        let source = Source {
+            path: PathBuf::from("test"), content: source.into()
+        };
+        Parser::new(&source).parse_module().unwrap()
+    }
+
+    fn one(source: &str) -> Expr {
+        module(source).expressions.pop().expect("At least one expression in the module")
+    }
+
+    #[test]
+    fn test_empty_module() {
+        assert_eq!(
+            module(""),
+            Module {
+                expressions: Vec::new()
+            }
+        );
+
+        assert_eq!(
+            module("  "),
+            Module {
+                expressions: Vec::new()
+            }
+        );
+
+        assert_eq!(
+            module("\n\n\n"),
+            Module {
+                expressions: Vec::new()
+            }
+        );
+    }
+
+    #[test]
+    fn test_name() {
+        assert_eq!(
+            expr("netrine"),
+            Expr::Name(
+                Name {
+                    value: "netrine".into(), span: Span::new(1, 0, 7)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("maybe?"),
+            Expr::Name(
+                Name {
+                    value: "maybe?".into(), span: Span::new(1, 0, 6)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("dangerous!"),
+            Expr::Name(
+                Name {
+                    value: "dangerous!".into(), span: Span::new(1, 0, 10)
+                }
+            )
+        )
+    }
+
+    #[test]
+    fn test_literals() {
+        assert_eq!(
+            expr("42"),
+            Expr::Number(
+                Literal {
+                    value: "42".into(), span: Span::new(1, 0, 2)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("3.14"),
+            Expr::Number(
+                Literal {
+                    value: "3.14".into(), span: Span::new(1, 0, 4)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("\"hello\""),
+            Expr::String(
+                Literal {
+                    value: "\"hello\"".into(), span: Span::new(1, 0, 7)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("True"),
+            Expr::True(Span::new(1, 0, 4))
+        );
+
+        assert_eq!(
+            expr("False"),
+            Expr::False(Span::new(1, 0, 5))
+        );
+
+        assert_eq!(
+            expr("it"),
+            Expr::It(Span::new(1, 0, 2))
+        );
+    }
+
+    #[test]
+    fn test_basic_definition() {
+        assert_eq!(
+            expr("value = 10"),
+            Expr::Def(
+                box Def {
+                    name: Name {
+                        value: "value".into(), span: Span::new(1, 0, 5)
+                    },
+                    value: Expr::Number(
+                        Literal {
+                            value: "10".into(), span: Span::new(1, 8, 10)
+                        }
+                    ),
+                    span: Span::new(1, 0, 10)
+                }
+            )
+        )
+    }
+
+    #[test]
+    #[ignore = "not implemented yet"]
+    fn test_destructing_definition() {
+        unimplemented!()
+    }
+
+    #[test]
+    fn test_basic_function() {
+        assert_eq!(
+            one("fn() = 1"),
+            Expr::Fn(
+                box Fn {
+                    parameters: vec![],
+                    name: Name {
+                        value: "fn".into(), span: Span::new(1, 0, 2)
+                    },
+                    value: Expr::Number(
+                        Literal {
+                            value: "1".into(), span: Span::new(1, 7, 8)
+                        }
+                    ),
+                    span: Span::new(1, 0, 8)
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_basic_multiline_function() {
+        assert_eq!(
+            module("fn() =
+                        multiline").expressions.pop().unwrap(),
+            Expr::Fn(
+                box Fn {
+                    parameters: vec![],
+                    name: Name {
+                        value: "fn".into(), span: Span::new(1, 0, 2)
+                    },
+                    value: Expr::Name(
+                        Name {
+                            value: "multiline".into(), span: Span::new(2, 31, 40)
+                        }
+                    ),
+                    span: Span::new(1, 0, 40)
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_multiline_block_function() {
+        assert_eq!(
+            one("fn() {
+                   a = 1
+                   b = 2
+                 }"),
+            Expr::Fn(
+                box Fn {
+                    parameters: vec![],
+                    name: Name {
+                        value: "fn".into(), span: Span::new(1, 0, 2)
+                    },
+                    value: Expr::Block(
+                        box Block {
+                            expressions: vec![
+                                Expr::Def(
+                                    box Def {
+                                        name: Name {
+                                            value: "a".into(), span: Span::new(2, 26, 27)
+                                        },
+                                        value: Expr::Number(
+                                            Literal {
+                                                value: "1".into(), span: Span::new(2, 30, 31)
+                                            }
+                                        ),
+                                        span: Span::new(2, 26, 31)
+                                    }
+                                ),
+                                Expr::Def(
+                                    box Def {
+                                        name: Name {
+                                            value: "b".into(), span: Span::new(3, 51, 52)
+                                        },
+                                        value: Expr::Number(
+                                            Literal {
+                                                value: "2".into(), span: Span::new(3, 55, 56)
+                                            }
+                                        ),
+                                        span: Span::new(3, 51, 56)
+                                    }
+                                )
+                            ],
+                            span: Span::new(1, 5, 75)
+                        }
+                    ),
+                    span: Span::new(1, 0, 75)
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn test_basic_function_with_parameters() {
+        assert_eq!(
+            one("fn(x) = x"),
+            Expr::Fn(
+                box Fn {
+                    name: Name {
+                        value: "fn".into(), span: Span::new(1, 0, 2)
+                    },
+                    parameters: vec![
+                        Parameter {
+                            patt: Expr::Name(
+                                Name {
+                                    value: "x".into(), span: Span::new(1, 3, 4)
+                                }
+                            ),
+                            value: None,
+                            span: Span::new(1, 3, 4)
+                        }
+                    ],
+                    value: Expr::Name(
+                        Name {
+                            value: "x".into(), span: Span::new(1, 8, 9)
+                        }
+                    ),
+                    span: Span::new(1, 0, 9)
+                }
+            )
+        )
     }
 }

@@ -93,9 +93,6 @@ impl<'src> Lexer<'src> {
             Some('+' | '-') if self.is_number(self.peek) => {
                 Some(self.number(true))
             }
-            Some('`') => {
-                Some(self.anything())
-            }
             Some('"') => {
                 self.template(true)
             }
@@ -348,27 +345,6 @@ impl<'src> Lexer<'src> {
         TokenKind::Upper
     }
 
-    fn anything(&mut self) -> TokenKind {
-        self.bump();
-
-        loop {
-            match self.curr {
-                Some('\n')
-              | None => {
-                    return TokenKind::Error(TokenError::UnterminatedIdentifier);
-                }
-                Some('`') => {
-                    self.bump();
-                    break;
-                }
-                _ => {
-                    self.bump();
-                }
-            }
-        }
-        TokenKind::Lower
-    }
-
     fn number(&mut self, prefix: bool) -> TokenKind {
         if prefix {
             self.bump();
@@ -429,7 +405,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lex_identifier() {
+    fn test_identifier() {
         let mut lexer = Lexer::new("variable = 1");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Lower);
@@ -437,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_variant() {
+    fn test_variant() {
         let mut lexer = Lexer::new("True or False");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Upper);
@@ -450,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_keywords() {
+    fn test_keywords() {
         let mut lexer = Lexer::new("case if then else it and or not");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Case);
@@ -464,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_operator() {
+    fn test_operator() {
        let mut lexer = Lexer::new(": . .. | |> = := == != + - * / % > < >= <=");
 
        assert_eq!(lexer.next().unwrap().kind, TokenKind::Colon);
@@ -488,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn lexer_integer() {
+    fn test_integer() {
         let mut lexer = Lexer::new("42");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Number);
@@ -496,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_float() {
+    fn test_float() {
         let mut lexer = Lexer::new("3.14519");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Number);
@@ -504,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_simple_string() {
+    fn test_simple_string() {
         let mut lexer = Lexer::new("\"Hello, World\"");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::String);
@@ -512,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_complex_string() {
+    fn test_complex_string() {
         let mut lexer = Lexer::new(r#""src = \"y = 42\"""#);
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::String);
@@ -520,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn lex_string_template() {
+    fn test_string_template() {
         let mut lexer = Lexer::new(r#""Hello, {name}""#);
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::StringStart);
@@ -532,13 +508,5 @@ mod tests {
         assert_eq!(lexer.next().unwrap().kind, TokenKind::RBrace);
         lexer.next(); // closing "
         assert_eq!(lexer.mode, Mode::Regular);
-    }
-
-    #[test]
-    fn lex_catchall_identifier() {
-        let mut lexer = Lexer::new("`anything+you-want`");
-
-        assert_eq!(lexer.next().unwrap().kind, TokenKind::Lower);
-        assert_eq!(lexer.value(), "`anything+you-want`");
     }
 }
