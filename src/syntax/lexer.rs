@@ -355,7 +355,7 @@ impl<'src> Lexer<'src> {
         while self.is_number(self.curr) {
             self.bump();
 
-            if self.curr == Some('.') && !float {
+            if self.curr == Some('.') && !float && self.is_number(self.peek) {
                 float = true;
                 self.bump();
             }
