@@ -11,16 +11,18 @@ struct Parser<'s> {
     token: Token,
     peek:  Token,
     source: &'s Source,
+    comma: bool,
 }
 
 impl<'s> Parser<'s> {
     fn new(source: &'s Source) -> Parser {
         let mut parser = Parser {
+            source,
             lexer: Lexer::new(&source.content),
             prev : Token::default(),
             token: Token::default(),
             peek : Token::default(),
-            source,
+            comma: false,
         };
 
         parser.bump(); // token
@@ -80,14 +82,14 @@ impl<'s> Parser<'s> {
     fn parse_term(&mut self) -> Result<Expr> {
         match self.token.kind {
             TokenKind::It => self.parse_it(),
-            TokenKind::Lower => self.parse_lower(),
-            TokenKind::Upper => self.parse_upper(),
+            TokenKind::Lower  => self.parse_lower(),
+            TokenKind::Upper  => self.parse_upper(),
             TokenKind::Number => self.parse_number(),
             TokenKind::String => self.parse_string(),
             TokenKind::LParen => self.parse_parens(),
-            TokenKind::LBrace => self.parse_braces(),
-            TokenKind::LBracket => self.parse_lambda(),
-            TokenKind::Hash => self.parse_record(true),
+            TokenKind::LBrace => self.parse_lambda(),
+            TokenKind::Hash   => self.parse_record(true),
+            TokenKind::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.unexpected())
             }
@@ -96,13 +98,13 @@ impl<'s> Parser<'s> {
 
     fn parse_patt(&mut self) -> Result<Expr> {
         match self.token.kind {
-            TokenKind::Lower => self.parse_lower(),
-            TokenKind::Upper => self.parse_upper(),
+            TokenKind::Lower  => self.parse_lower(),
+            TokenKind::Upper  => self.parse_upper(),
             TokenKind::Number => self.parse_number(),
             TokenKind::String => self.parse_string(),
             TokenKind::LParen => self.parse_parens(),
-            TokenKind::LBrace => self.parse_braces(),
             TokenKind::Hash   => self.parse_record(true),
+            TokenKind::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.unexpected())
             }
@@ -165,7 +167,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_it(&mut self) -> Result<Expr> {
-        let span  = self.expect(TokenKind::It)?;
+        let span = self.expect(TokenKind::It)?;
         Ok(Expr::It(span))
     }
 
@@ -209,7 +211,7 @@ impl<'s> Parser<'s> {
             TokenKind::RParen,
             Self::parse_expr)?;
 
-        if values.len() == 1 {
+        if values.len() == 1 && !self.comma {
             Ok(values.pop().unwrap())
         } else {
             Ok(Expr::Tuple(
@@ -217,19 +219,83 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn parse_lambda(&mut self) -> Result<Expr> {
+    fn parse_brackets(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        let values = self.parse_sequence_of(
-            TokenKind::LBracket,
-            TokenKind::RBracket,
-            Self::parse_expr)?;
+        self.expect(TokenKind::LBracket)?;
 
-        Ok(Expr::List(
-            box List { values, span: self.span(start) }))
+        match self.token.kind {
+            TokenKind::RBracket => {
+                self.bump();
+                return Ok(Expr::List(
+                    box List { values: vec![], span: self.span(start) }))
+            }
+            TokenKind::Colon if self.match_peek(TokenKind::RBracket) => {
+                self.bump();
+                self.bump();
+                return Ok(Expr::Dict(
+                    box Dict { values: vec![], span: self.span(start) }))
+            }
+            _ => {}
+        }
+
+        let mut list_values = vec![];
+        let mut dict_values = vec![];
+
+        enum Mode {
+            List,
+            Dict,
+        }
+
+        let mut mode = None;
+
+        while !self.match_token(TokenKind::RBracket)
+           && !self.done() {
+
+            let val = self.parse_expr()?;
+
+            if mode.is_none() {
+                if self.match_token(TokenKind::Colon) {
+                    mode = Some(Mode::Dict);
+                } else {
+                    mode = Some(Mode::List);
+                }
+            }
+
+            match mode {
+                Some(Mode::List) => {
+                    list_values.push(val);
+                }
+                Some(Mode::Dict) => {
+                    self.expect(TokenKind::Colon)?;
+                    let key = val;
+                    let val = self.parse_expr()?;
+                    dict_values.push((key, val));
+                }
+                _ => unreachable!()
+            }
+
+            if !self.maybe_eat(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        self.expect(TokenKind::RBracket)?;
+
+        match mode {
+            Some(Mode::List) => {
+                Ok(Expr::List(
+                    box List { values: list_values, span: self.span(start) }))
+            }
+            Some(Mode::Dict) => {
+                Ok(Expr::Dict(
+                    box Dict { values: dict_values, span: self.span(start) }))
+            }
+            _ => unreachable!()
+        }
     }
 
-    fn parse_braces(&mut self) -> Result<Expr> {
+    fn parse_lambda(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
         self.expect(TokenKind::LBrace)?;
@@ -276,7 +342,7 @@ impl<'s> Parser<'s> {
                 Some(self.parse_expr()?)
             }
             TokenKind::LBrace => {
-                Some(self.parse_braces()?)
+                Some(self.parse_record(true)?)
             }
             TokenKind::Comma
           | TokenKind::RBrace => {
@@ -407,7 +473,7 @@ impl<'s> Parser<'s> {
         let start = callee.span();
         match callee {
             Expr::Name(_) => {
-                let value = self.parse_braces()?;
+                let value = self.parse_lambda()?;
                 let arguments = vec![
                     Argument { name: None, value, span: self.span(start) }
                 ];
@@ -416,7 +482,7 @@ impl<'s> Parser<'s> {
                     box Call { callee, arguments, span: self.span(start) }))
             }
             Expr::Call(box Call { callee, mut arguments, .. }) => {
-                let value = self.parse_braces()?;
+                let value = self.parse_lambda()?;
                 arguments.push(
                     Argument { name: None, value, span: self.span(start) });
 
@@ -480,7 +546,6 @@ impl<'s> Parser<'s> {
                 // partial application of operators
                 if self.token.is_closing() {
                     let span = Span::from(expr.span(), operator.span);
-
                     return Ok(Expr::Partial(
                         box Partial { operator, left: Some(expr), right: None, span }))
                 }
@@ -539,6 +604,8 @@ impl<'s> Parser<'s> {
         let mut result = vec![];
 
         self.expect(open)?;
+        
+        self.comma = false;
 
         while !self.done()
            && !self.match_token(close) {
@@ -546,8 +613,11 @@ impl<'s> Parser<'s> {
             result.push(f(self)?);
 
             if !self.maybe_eat(TokenKind::Comma) {
+                self.comma = false;
                 break;
             }
+
+            self.comma = true;
         }
 
         self.expect(close)?;
@@ -1108,5 +1178,349 @@ mod tests {
         );
 
         assert_error_expr!("a.");
+    }
+
+    #[test]
+    fn test_list() {
+        assert_eq!(
+            expr("[]"),
+            Expr::List(
+                box List {
+                    values: vec![], span: Span::new(1, 0, 2)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[1,]"),
+            Expr::List(
+                box List {
+                    values: vec![
+                        Expr::Number(
+                            Literal { value: "1".into(), span: Span::new(1, 1, 2) }
+                        ),
+                    ],
+                    span: Span::new(1, 0, 4)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[x, y, z]"),
+            Expr::List(
+                box List {
+                    values: vec![
+                        Expr::Name(
+                            Name { value: "x".into(), span: Span::new(1, 1, 2) }
+                        ),
+                        Expr::Name(
+                            Name { value: "y".into(), span: Span::new(1, 4, 5) }
+                        ),
+                        Expr::Name(
+                            Name { value: "z".into(), span: Span::new(1, 7, 8) }
+                        )
+                    ],
+                    span: Span::new(1, 0, 9)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[x,
+                   y
+                  ,z]"),
+            Expr::List(
+                box List {
+                    values: vec![
+                        Expr::Name(
+                            Name { value: "x".into(), span: Span::new(1, 1, 2) }
+                        ),
+                        Expr::Name(
+                            Name { value: "y".into(), span: Span::new(2, 23, 24) }
+                        ),
+                        Expr::Name(
+                            Name { value: "z".into(), span: Span::new(3, 44, 45) }
+                        )
+                    ],
+                    span: Span::new(1, 0, 46)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[1, \"a\", [3.14]]"),
+            Expr::List(
+                box List {
+                    values: vec![
+                        Expr::Number(
+                            Literal { value: "1".into(), span: Span::new(1, 1, 2) }
+                        ),
+                        Expr::String(
+                            Literal { value: "\"a\"".into(), span: Span::new(1, 4, 7) }
+                        ),
+                        Expr::List(
+                            box List {
+                                values: vec![
+                                    Expr::Number(
+                                        Literal { value: "3.14".into(), span: Span::new(1, 10, 14) }
+                                    ),
+                                ],
+                                span: Span::new(1, 9, 15)
+                            }
+                        )
+                    ],
+                    span: Span::new(1, 0, 16)
+                }
+            )
+        );
+
+        assert_error_expr!("[x y z]");
+
+        assert_error_expr!("[");
+
+        assert_error_expr!("]");
+    }
+
+    #[test]
+    fn test_tuple() {
+        assert_eq!(
+            expr("()"),
+            Expr::Tuple(
+                box Tuple {
+                    values: vec![], span: Span::new(1, 0, 2)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("(1)"),
+            Expr::Number(
+                Literal {
+                    value: "1".into(), span: Span::new(1, 1, 2)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("(1,)"),
+            Expr::Tuple(
+                box Tuple {
+                    values: vec![
+                        Expr::Number(
+                            Literal { value: "1".into(), span: Span::new(1, 1, 2) }
+                        ),
+                    ],
+                    span: Span::new(1, 0, 4)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("(x, y, z)"),
+            Expr::Tuple(
+                box Tuple {
+                    values: vec![
+                        Expr::Name(
+                            Name { value: "x".into(), span: Span::new(1, 1, 2) }
+                        ),
+                        Expr::Name(
+                            Name { value: "y".into(), span: Span::new(1, 4, 5) }
+                        ),
+                        Expr::Name(
+                            Name { value: "z".into(), span: Span::new(1, 7, 8) }
+                        )
+                    ],
+                    span: Span::new(1, 0, 9)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("(x,
+                   y
+                  ,z)"),
+            Expr::Tuple(
+                box Tuple {
+                    values: vec![
+                        Expr::Name(
+                            Name { value: "x".into(), span: Span::new(1, 1, 2) }
+                        ),
+                        Expr::Name(
+                            Name { value: "y".into(), span: Span::new(2, 23, 24) }
+                        ),
+                        Expr::Name(
+                            Name { value: "z".into(), span: Span::new(3, 44, 45) }
+                        )
+                    ],
+                    span: Span::new(1, 0, 46)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("(1, \"a\", ())"),
+            Expr::Tuple(
+                box Tuple {
+                    values: vec![
+                        Expr::Number(
+                            Literal { value: "1".into(), span: Span::new(1, 1, 2) }
+                        ),
+                        Expr::String(
+                            Literal { value: "\"a\"".into(), span: Span::new(1, 4, 7) }
+                        ),
+                        Expr::Tuple(
+                            box Tuple {
+                                values: vec![], span: Span::new(1, 9, 11)
+                            }
+                        )
+                    ],
+                    span: Span::new(1, 0, 12)
+                }
+            )
+        );
+
+        assert_error_expr!("(x y z)");
+
+        assert_error_expr!("(");
+
+        assert_error_expr!(")");
+    }
+
+    #[test]
+    fn test_dict() {
+        assert_eq!(
+            expr("[:]"),
+            Expr::Dict(
+                box Dict {
+                    values: vec![], span: Span::new(1, 0, 3)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[x : 1, y : 2, z : 3]"),
+            Expr::Dict(
+                box Dict {
+                    values: vec![
+                        (
+                            Expr::Name(
+                                Name { value: "x".into(), span: Span::new(1, 1, 2) }
+                            ),
+                            Expr::Number(
+                                Literal { value: "1".into(), span: Span::new(1, 5, 6) }
+                            ),
+                        ),
+                        (
+                            Expr::Name(
+                                Name { value: "y".into(), span: Span::new(1, 8, 9) }
+                            ),
+                            Expr::Number(
+                                Literal { value: "2".into(), span: Span::new(1, 12, 13) }
+                            ),
+                        ),
+                        (
+                            Expr::Name(
+                                Name { value: "z".into(), span: Span::new(1, 15, 16) }
+                            ),
+                            Expr::Number(
+                                Literal { value: "3".into(), span: Span::new(1, 19, 20) }
+                            ),
+                        ),
+                    ],
+                    span: Span::new(1, 0, 21)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[x: 1,
+                   y: 2
+                  ,z: 3]"),
+            Expr::Dict(
+                box Dict {
+                    values: vec![
+                        (
+                            Expr::Name(
+                                Name { value: "x".into(), span: Span::new(1, 1, 2) }
+                            ),
+                            Expr::Number(
+                                Literal { value: "1".into(), span: Span::new(1, 4, 5) }
+                            ),
+                        ),
+                        (
+                            Expr::Name(
+                                Name { value: "y".into(), span: Span::new(2, 26, 27) }
+                            ),
+                            Expr::Number(
+                                Literal { value: "2".into(), span: Span::new(2, 29, 30) }
+                            ),
+                        ),
+                        (
+                            Expr::Name(
+                                Name { value: "z".into(), span: Span::new(3, 50, 51) }
+                            ),
+                            Expr::Number(
+                                Literal { value: "3".into(), span: Span::new(3, 53, 54) }
+                            ),
+                        ),
+                    ],
+                    span: Span::new(1, 0, 55)
+                }
+            )
+        );
+
+        assert_eq!(
+            expr("[1 : \"a\", list : [[nested : \"values\"]]]"),
+            Expr::Dict(
+                box Dict {
+                    values: vec![
+                        (
+                            Expr::Number(
+                                Literal { value: "1".into(), span: Span::new(1, 1, 2) }
+                            ),
+                            Expr::String(
+                                Literal { value: "\"a\"".into(), span: Span::new(1, 5, 8) }
+                            ),
+                        ),
+                        (
+                            Expr::Name(
+                                Name { value: "list".into(), span: Span::new(1, 10, 14) }
+                            ),
+                            Expr::List(
+                                box List {
+                                    values: vec![
+                                        Expr::Dict(
+                                            box Dict {
+                                                values: vec![
+                                                    (
+                                                        Expr::Name(
+                                                            Name { value: "nested".into(), span: Span::new(1, 19, 25) }
+                                                        ),
+                                                        Expr::String(
+                                                            Literal { value: "\"values\"".into(), span: Span::new(1, 28, 36) }
+                                                        ),
+                                                    ),
+                                                ],
+                                                span: Span::new(1, 18, 37)
+                                            }
+                                        )
+                                    ],
+                                    span: Span::new(1, 17, 38)
+                                }
+                            ),
+                        ),
+                    ],
+                    span: Span::new(1, 0, 39)
+                }
+            )
+        );
+
+        assert_error_expr!("[x: 1 y: 2]");
+
+        assert_error_expr!("[x: ]");
+
+        assert_error_expr!("[:");
+
+        assert_error_expr!(":]");
     }
 }
