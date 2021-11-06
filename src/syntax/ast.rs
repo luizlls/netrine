@@ -30,7 +30,7 @@ pub enum Expr {
     Partial(Box<Partial>),
 
     Call(Box<Call>),
-    
+
     Tuple(Box<Tuple>),
 
     List(Box<List>),
