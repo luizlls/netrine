@@ -169,7 +169,7 @@ pub struct List {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dict {
-    pub properties: Vec<(Expr, Expr)>,
+    pub values: Vec<(Expr, Expr)>,
     pub span: Span,
 }
 
