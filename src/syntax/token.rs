@@ -23,10 +23,10 @@ pub enum TokenKind {
     Semi,   // ;
     Equals, // =
     Walrus, // :=
-    Pipe,   // |
+    Arrow,  // =>
     Hash,   // #
 
-    Case,
+    Fn,
     If,
     Then,
     Else,
@@ -46,7 +46,7 @@ pub enum TokenKind {
     Le,     // <=
     Gt,     // >
     Ge,     // >=
-    Thread, // |>
+    Pipe,   // |>
     Range,  // ..
 
     Lower,
@@ -78,10 +78,10 @@ impl fmt::Display for TokenKind {
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Equals => write!(f, "="),
             TokenKind::Walrus => write!(f, ":="),
-            TokenKind::Pipe => write!(f, "|"),
+            TokenKind::Arrow => write!(f, "=>"),
             TokenKind::Hash => write!(f, "#"),
-            TokenKind::Case => write!(f, "case"),
-            TokenKind::If   => write!(f, "if"),
+            TokenKind::Fn => write!(f, "function"),
+            TokenKind::If => write!(f, "if"),
             TokenKind::Then => write!(f, "then"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::It => write!(f, "it"),
@@ -99,7 +99,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Le => write!(f, "<="),
             TokenKind::Gt => write!(f, ">"),
             TokenKind::Ge => write!(f, ">="),
-            TokenKind::Thread => write!(f, "|>"),
+            TokenKind::Pipe => write!(f, "|>"),
             TokenKind::Range => write!(f, ".."),
             TokenKind::Lower => write!(f, "identifier"),
             TokenKind::Upper => write!(f, "constructor"),
@@ -141,14 +141,14 @@ impl Default for TokenKind {
 
 pub fn get_keyword(key: &str) -> Option<TokenKind> {
     match key {
-        "and"   => Some(TokenKind::And),
-        "or"    => Some(TokenKind::Or),
-        "not"   => Some(TokenKind::Not),
-        "case"  => Some(TokenKind::Case),
-        "if"    => Some(TokenKind::If),
-        "then"  => Some(TokenKind::Then),
-        "else"  => Some(TokenKind::Else),
-        "it"    => Some(TokenKind::It),
+        "function" => Some(TokenKind::Fn),
+        "and" => Some(TokenKind::And),
+        "or"  => Some(TokenKind::Or),
+        "not" => Some(TokenKind::Not),
+        "if"  => Some(TokenKind::If),
+        "then"=> Some(TokenKind::Then),
+        "else"=> Some(TokenKind::Else),
+        "it"  => Some(TokenKind::It),
         _ => None,
     }
 }
@@ -173,7 +173,7 @@ impl Token {
           | TokenKind::Le
           | TokenKind::Gt
           | TokenKind::Ge
-          | TokenKind::Thread
+          | TokenKind::Pipe
           | TokenKind::Range
         )
     }
@@ -183,7 +183,7 @@ impl Token {
             TokenKind::LParen
           | TokenKind::LBrace
           | TokenKind::LBracket
-          | TokenKind::Case
+          | TokenKind::Fn
           | TokenKind::If
           | TokenKind::Then
           | TokenKind::Else
@@ -196,7 +196,7 @@ impl Token {
           | TokenKind::RBrace
           | TokenKind::RBracket
           | TokenKind::Comma
-          | TokenKind::Case
+          | TokenKind::Fn
           | TokenKind::If
           | TokenKind::Then
           | TokenKind::Else
@@ -219,7 +219,7 @@ impl Token {
             TokenKind::And => 4,
             TokenKind::Or  => 3,
             TokenKind::Range  => 2,
-            TokenKind::Thread => 1,
+            TokenKind::Pipe => 1,
             _ => return None
         };
         Some(precedence)

@@ -2,12 +2,12 @@ use crate::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
-    pub expressions: Vec<Expr>,
+    pub expressions: Vec<Expression>,
 }
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
+pub enum Expression {
 
     Name(Name),
 
@@ -18,8 +18,6 @@ pub enum Expr {
     Set(Box<Set>),
 
     Get(Box<Get>),
-
-    Lambda(Box<Lambda>),
 
     Block(Box<Block>),
 
@@ -63,8 +61,8 @@ pub struct Name {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
-    pub patt: Expr,
-    pub value: Option<Expr>,
+    pub name: Name,
+    pub value: Option<Expression>,
     pub span: Span,
 }
 
@@ -72,110 +70,111 @@ pub struct Parameter {
 pub struct Fn {
     pub name: Name,
     pub parameters: Vec<Parameter>,
-    pub value: Expr,
+    pub value: Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Def {
     pub name: Name,
-    pub value: Expr,
+    pub value: Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Set {
     pub name: Name,
-    pub value: Expr,
+    pub value: Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Get {
-    pub source: Expr,
-    pub value : Expr,
+    pub source: Expression,
+    pub value : Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Call {
-    pub callee: Expr,
+    pub callee: Expression,
     pub arguments: Vec<Argument>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Argument {
-    pub value: Expr,
+    pub value: Expression,
     pub name: Option<Name>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Lambda {
+pub struct Block {
     pub parameters: Vec<Parameter>,
-    pub value: Expr,
+    pub expressions: Vec<Expression>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Block {
-    pub expressions: Vec<Expr>,
+pub struct Match {
+    pub left: Expression,
+    pub right: Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
     pub operator: Operator,
-    pub right: Expr,
+    pub right: Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
     pub operator: Operator,
-    pub left: Expr,
-    pub right: Expr,
+    pub left: Expression,
+    pub right: Expression,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Partial {
     pub operator: Operator,
-    pub left: Option<Expr>,
-    pub right: Option<Expr>,
+    pub left: Option<Expression>,
+    pub right: Option<Expression>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct If {
-    pub pred: Expr,
-    pub then: Expr,
-    pub otherwise: Option<Expr>,
+    pub pred: Expression,
+    pub then: Expression,
+    pub otherwise: Option<Expression>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple {
-    pub values: Vec<Expr>,
+    pub values: Vec<Expression>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct List {
-    pub values: Vec<Expr>,
+    pub values: Vec<Expression>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dict {
-    pub values: Vec<(Expr, Expr)>,
+    pub values: Vec<(Expression, Expression)>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
-    pub properties: Vec<(Name, Option<Expr>)>,
+    pub properties: Vec<(Name, Option<Expression>)>,
     pub span: Span,
 }
 
@@ -187,14 +186,14 @@ pub struct Literal {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Template {
-    pub elements: Vec<Expr>,
+    pub elements: Vec<Expression>,
     pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variant {
     pub name: Name,
-    pub value: Option<Expr>,
+    pub value: Option<Expression>,
     pub span: Span,
 }
 
@@ -214,7 +213,7 @@ pub enum OperatorKind {
     And,
     Or,
     Not,
-    Thread,
+    Pipe,
     Range,
 }
 
@@ -241,8 +240,8 @@ impl std::fmt::Display for Operator {
             OperatorKind::Le  => write!(f, "<="),
             OperatorKind::Gt  => write!(f, ">"),
             OperatorKind::Ge  => write!(f, ">="),
-            OperatorKind::Thread => write!(f, "|>"),
-            OperatorKind::Range  => write!(f, ".."),
+            OperatorKind::Pipe  => write!(f, "|>"),
+            OperatorKind::Range => write!(f, ".."),
         }
     }
 }
@@ -253,43 +252,42 @@ impl Operator {
     }
 }
 
-impl Expr {
+impl Expression {
     pub fn is_pattern(&self) -> bool {
         matches!(self,
-            Expr::Name(_)
-          | Expr::List(_)
-          | Expr::Dict(_)
-          | Expr::String(_)
-          | Expr::Number(_)
-          | Expr::Variant(_)
-          | Expr::True(_)
-          | Expr::False(_))
+            Expression::Name(_)
+          | Expression::List(_)
+          | Expression::Dict(_)
+          | Expression::String(_)
+          | Expression::Number(_)
+          | Expression::Variant(_)
+          | Expression::True(_)
+          | Expression::False(_))
     }
 
     pub fn span(&self) -> Span {
         match self {
-            Expr::Name(e) => e.span,
-            Expr::Fn(e) => e.span,
-            Expr::Def(e) => e.span,
-            Expr::Set(e) => e.span,
-            Expr::Get(e) => e.span,
-            Expr::Lambda(e) => e.span,
-            Expr::Block(e) => e.span,
-            Expr::Binary(e) => e.span,
-            Expr::Unary(e) => e.span,
-            Expr::Partial(e) => e.span,
-            Expr::Call(e) => e.span,
-            Expr::Tuple(e) => e.span,
-            Expr::List(e) => e.span,
-            Expr::Dict(e) => e.span,
-            Expr::Record(e) => e.span,
-            Expr::If(e) => e.span,
-            Expr::Number(e) => e.span,
-            Expr::String(e) => e.span,
-            Expr::Variant(e) => e.span,
-            Expr::True(span) => *span,
-            Expr::False(span) => *span,
-            Expr::It(span) => *span,
+            Expression::Name(e) => e.span,
+            Expression::Fn(e) => e.span,
+            Expression::Def(e) => e.span,
+            Expression::Set(e) => e.span,
+            Expression::Get(e) => e.span,
+            Expression::Block(e) => e.span,
+            Expression::Binary(e) => e.span,
+            Expression::Unary(e) => e.span,
+            Expression::Partial(e) => e.span,
+            Expression::Call(e) => e.span,
+            Expression::Tuple(e) => e.span,
+            Expression::List(e) => e.span,
+            Expression::Dict(e) => e.span,
+            Expression::Record(e) => e.span,
+            Expression::If(e) => e.span,
+            Expression::Number(e) => e.span,
+            Expression::String(e) => e.span,
+            Expression::Variant(e) => e.span,
+            Expression::True(span) => *span,
+            Expression::False(span) => *span,
+            Expression::It(span) => *span,
         }
     }
 }
