@@ -8,10 +8,9 @@ const SYMBOLS: &str = ".!:=+-<>*/%|";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     Regular,
-
     String,
-
-    Template
+    Template,
+    NewLine,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +23,7 @@ pub struct Lexer<'src> {
     offset: usize,
     line: u32,
     mode: Mode,
+    indent_level: Vec<u8>,
 }
 
 impl<'src> Lexer<'src> {
@@ -37,6 +37,7 @@ impl<'src> Lexer<'src> {
             offset: 0,
             line: 1,
             mode: Mode::Regular,
+            indent_level: vec![0],
         };
         lexer.bump();
         lexer.bump();
@@ -67,17 +68,37 @@ impl<'src> Lexer<'src> {
     fn line(&mut self) -> Option<TokenKind> {
         self.line += 1;
         self.bump();
+        self.mode = Mode::NewLine;
+
+        Some(TokenKind::NewLine)
+    }
+
+    fn next_indent(&mut self) -> Option<TokenKind> {
+        self.mode = Mode::Regular;
+
         self.next_token()
     }
 
     fn next_token(&mut self) -> Option<TokenKind> {
-        if self.mode == Mode::String {
-            return self.template(false);
+        match self.mode {
+            Mode::NewLine => {
+                return self.next_indent();
+            }
+            Mode::String => {
+                return self.next_string(false);
+            }
+            _ => {}
         }
 
         self.align();
 
         match self.curr {
+            Some(' ' | '\t' | '\r') => {
+                self.space()
+            }
+            Some('\n') => {
+                self.line()
+            }
             Some('a'..='z') => {
                 Some(self.lower())
             }
@@ -94,7 +115,7 @@ impl<'src> Lexer<'src> {
                 Some(self.number(true))
             }
             Some('"') => {
-                self.template(true)
+                self.next_string(true)
             }
             Some('(') => {
                 self.single(TokenKind::LParen)
@@ -124,17 +145,11 @@ impl<'src> Lexer<'src> {
             Some(';') => {
                 self.single(TokenKind::Semi)
             }
-            Some('#') => {
-                self.single(TokenKind::Hash)
+            Some('_') => {
+                self.single(TokenKind::Anything)
             }
             Some('/') if self.peek == Some('/') => {
                 self.comment()
-            }
-            Some(' ' | '\t' | '\r') => {
-                self.space()
-            }
-            Some('\n') => {
-                self.line()
             }
             Some(_) if self.is_symbol(self.curr) => {
                 self.operator()
@@ -143,7 +158,7 @@ impl<'src> Lexer<'src> {
                 None
             }
             Some(_) => {
-                Some(TokenKind::Error(TokenError::InvalidCharacter))
+                Some(TokenKind::Error(ErrorKind::InvalidCharacter))
             }
         }
     }
@@ -198,7 +213,7 @@ impl<'src> Lexer<'src> {
                     self.bump();
                     self.single(TokenKind::Ne)
                 } else {
-                    Some(TokenKind::Error(TokenError::InvalidOperator))
+                    Some(TokenKind::Error(ErrorKind::InvalidOperator))
                 }
             }
             Some('|') => {
@@ -206,7 +221,7 @@ impl<'src> Lexer<'src> {
                     self.bump();
                     self.single(TokenKind::Pipe)
                 } else {
-                    Some(TokenKind::Error(TokenError::InvalidOperator))
+                    Some(TokenKind::Error(ErrorKind::InvalidOperator))
                 }
             }
             Some('+') => {
@@ -228,7 +243,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn template(&mut self, start: bool) -> Option<TokenKind> {
+    fn next_string(&mut self, start: bool) -> Option<TokenKind> {
         self.align();
 
         loop {
@@ -260,7 +275,7 @@ impl<'src> Lexer<'src> {
                 }
                 Some('\n') |
                 None => {
-                    return Some(TokenKind::Error(TokenError::UnterminatedString));
+                    return Some(TokenKind::Error(ErrorKind::UnterminatedString));
                 }
                 Some('\\') => {
                     self.bump();
@@ -280,7 +295,7 @@ impl<'src> Lexer<'src> {
                             todo!("Validate escaped binary")
                         }
                         _ => {
-                            return Some(TokenKind::Error(TokenError::InvalidEscapeCharacter));
+                            return Some(TokenKind::Error(ErrorKind::InvalidEscapeCharacter));
                         }
                     }
                 }
@@ -430,13 +445,12 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let mut lexer = Lexer::new("function if then else it and or not");
+        let mut lexer = Lexer::new("function if then else and or not");
 
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Fn);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::If);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Then);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Else);
-        assert_eq!(lexer.next().unwrap().kind, TokenKind::It);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::And);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Or);
         assert_eq!(lexer.next().unwrap().kind, TokenKind::Not);
