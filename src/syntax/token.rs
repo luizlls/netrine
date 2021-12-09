@@ -1,15 +1,7 @@
 use std::fmt;
 
-use crate::Span;
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub span: Span,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TokenKind {
+pub enum Token {
     LParen,
     RParen,
     LBrace,
@@ -17,14 +9,14 @@ pub enum TokenKind {
     LBracket,
     RBracket,
 
-    Dot,    // .
-    Comma,  // ,
-    Colon,  // :
-    Semi,   // ;
-    Equals, // =
-    Walrus, // :=
-    Arrow,  // =>
-    Anything,    // _
+    Dot,      // .
+    Comma,    // ,
+    Colon,    // :
+    Semi,     // ;
+    Equals,   // =
+    Walrus,   // :=
+    Arrow,    // =>
+    Anything, // _
 
     Fn,
     If,
@@ -61,98 +53,92 @@ pub enum TokenKind {
     Dedent,
     NewLine,
 
-    Error(ErrorKind),
+    Error(TokenError),
 
     EOF, 
 }
 
-impl fmt::Display for TokenKind {
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TokenKind::LParen      => write!(f, "("),
-            TokenKind::RParen      => write!(f, ")"),
-            TokenKind::LBrace      => write!(f, "{{"),
-            TokenKind::RBrace      => write!(f, "}}"),
-            TokenKind::LBracket    => write!(f, "["),
-            TokenKind::RBracket    => write!(f, "]"),
-            TokenKind::Dot         => write!(f, "."),
-            TokenKind::Comma       => write!(f, ","),
-            TokenKind::Colon       => write!(f, ":"),
-            TokenKind::Semi        => write!(f, ";"),
-            TokenKind::Equals      => write!(f, "="),
-            TokenKind::Walrus      => write!(f, ":="),
-            TokenKind::Arrow       => write!(f, "=>"),
-            TokenKind::Anything         => write!(f, "#"),
-            TokenKind::Fn          => write!(f, "fn"),
-            TokenKind::If          => write!(f, "if"),
-            TokenKind::Then        => write!(f, "then"),
-            TokenKind::Else        => write!(f, "else"),
-            TokenKind::And         => write!(f, "and"),
-            TokenKind::Or          => write!(f, "or"),
-            TokenKind::Not         => write!(f, "not"),
-            TokenKind::Add         => write!(f, "+"),
-            TokenKind::Sub         => write!(f, "-"),
-            TokenKind::Mul         => write!(f, "*"),
-            TokenKind::Div         => write!(f, "/"),
-            TokenKind::Rem         => write!(f, "%"),
-            TokenKind::Eq          => write!(f, "=="),
-            TokenKind::Ne          => write!(f, "!="),
-            TokenKind::Lt          => write!(f, "<"),
-            TokenKind::Le          => write!(f, "<="),
-            TokenKind::Gt          => write!(f, ">"),
-            TokenKind::Ge          => write!(f, ">="),
-            TokenKind::Pipe        => write!(f, "|>"),
-            TokenKind::Range       => write!(f, ".."),
-            TokenKind::Lower       => write!(f, "identifier"),
-            TokenKind::Upper       => write!(f, "constructor"),
-            TokenKind::Number      => write!(f, "number"),
-            TokenKind::String      => write!(f, "string"),
-            TokenKind::StringStart => write!(f, "start of string"),
-            TokenKind::StringEnd   => write!(f, "end of string"),
-            TokenKind::StringSlice => write!(f, "slice of string"),
-            TokenKind::Indent      => write!(f, "indentation"),
-            TokenKind::Dedent      => write!(f, "dedentation"),
-            TokenKind::NewLine     => write!(f, "new line"),
-            TokenKind::EOF         => write!(f, "end of file"),
-            TokenKind::Error(err)  => write!(f, "{}", err),
+            Token::LParen      => write!(f, "("),
+            Token::RParen      => write!(f, ")"),
+            Token::LBrace      => write!(f, "{{"),
+            Token::RBrace      => write!(f, "}}"),
+            Token::LBracket    => write!(f, "["),
+            Token::RBracket    => write!(f, "]"),
+            Token::Dot         => write!(f, "."),
+            Token::Comma       => write!(f, ","),
+            Token::Colon       => write!(f, ":"),
+            Token::Semi        => write!(f, ";"),
+            Token::Equals      => write!(f, "="),
+            Token::Walrus      => write!(f, ":="),
+            Token::Arrow       => write!(f, "=>"),
+            Token::Anything    => write!(f, "_"),
+            Token::Fn          => write!(f, "fn"),
+            Token::If          => write!(f, "if"),
+            Token::Then        => write!(f, "then"),
+            Token::Else        => write!(f, "else"),
+            Token::And         => write!(f, "and"),
+            Token::Or          => write!(f, "or"),
+            Token::Not         => write!(f, "not"),
+            Token::Add         => write!(f, "+"),
+            Token::Sub         => write!(f, "-"),
+            Token::Mul         => write!(f, "*"),
+            Token::Div         => write!(f, "/"),
+            Token::Rem         => write!(f, "%"),
+            Token::Eq          => write!(f, "=="),
+            Token::Ne          => write!(f, "!="),
+            Token::Lt          => write!(f, "<"),
+            Token::Le          => write!(f, "<="),
+            Token::Gt          => write!(f, ">"),
+            Token::Ge          => write!(f, ">="),
+            Token::Pipe        => write!(f, "|>"),
+            Token::Range       => write!(f, ".."),
+            Token::Lower       => write!(f, "identifier"),
+            Token::Upper       => write!(f, "constructor"),
+            Token::Number      => write!(f, "number"),
+            Token::String      => write!(f, "string"),
+            Token::StringStart => write!(f, "start of string"),
+            Token::StringEnd   => write!(f, "end of string"),
+            Token::StringSlice => write!(f, "slice of string"),
+            Token::Indent      => write!(f, "indentation"),
+            Token::Dedent      => write!(f, "dedentation"),
+            Token::NewLine     => write!(f, "new line"),
+            Token::EOF         => write!(f, "end of file"),
+            Token::Error(err)  => write!(f, "{}", err),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ErrorKind {
+pub enum TokenError {
     InvalidCharacter,
     InvalidOperator,
     InvalidEscapeCharacter,
     UnterminatedString,
 }
 
-impl fmt::Display for ErrorKind {
+impl fmt::Display for TokenError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ErrorKind::InvalidCharacter => write!(f, "invalid character"),
-            ErrorKind::InvalidEscapeCharacter => write!(f, "invalid escape"),
-            ErrorKind::InvalidOperator => write!(f, "invalid operator"),
-            ErrorKind::UnterminatedString => write!(f, "unterminated string"),
+            TokenError::InvalidCharacter => write!(f, "invalid character"),
+            TokenError::InvalidEscapeCharacter => write!(f, "invalid escape"),
+            TokenError::InvalidOperator => write!(f, "invalid operator"),
+            TokenError::UnterminatedString => write!(f, "unterminated string"),
         }
     }
 }
 
-impl Default for TokenKind {
-    fn default() -> Self {
-        TokenKind::EOF
-    }
-}
-
-pub fn get_keyword(key: &str) -> Option<TokenKind> {
+pub fn get_keyword(key: &str) -> Option<Token> {
     match key {
-        "fn"   => Some(TokenKind::Fn),
-        "and"  => Some(TokenKind::And),
-        "or"   => Some(TokenKind::Or),
-        "not"  => Some(TokenKind::Not),
-        "if"   => Some(TokenKind::If),
-        "then" => Some(TokenKind::Then),
-        "else" => Some(TokenKind::Else),
+        "fn"   => Some(Token::Fn),
+        "and"  => Some(Token::And),
+        "or"   => Some(Token::Or),
+        "not"  => Some(Token::Not),
+        "if"   => Some(Token::If),
+        "then" => Some(Token::Then),
+        "else" => Some(Token::Else),
         _ => None,
     }
 }
@@ -162,68 +148,71 @@ pub type Precedence = u8;
 impl Token {
 
     pub fn is_operator(&self) -> bool {
-        matches!(self.kind,
-            TokenKind::And
-          | TokenKind::Or
-          | TokenKind::Not
-          | TokenKind::Add
-          | TokenKind::Sub
-          | TokenKind::Mul
-          | TokenKind::Div
-          | TokenKind::Rem
-          | TokenKind::Eq
-          | TokenKind::Ne
-          | TokenKind::Lt
-          | TokenKind::Le
-          | TokenKind::Gt
-          | TokenKind::Ge
-          | TokenKind::Pipe
-          | TokenKind::Range
+        matches!(
+            self,
+            Token::And
+          | Token::Or
+          | Token::Not
+          | Token::Add
+          | Token::Sub
+          | Token::Mul
+          | Token::Div
+          | Token::Rem
+          | Token::Eq
+          | Token::Ne
+          | Token::Lt
+          | Token::Le
+          | Token::Gt
+          | Token::Ge
+          | Token::Pipe
+          | Token::Range
         )
     }
 
     pub fn is_opening(&self) -> bool {
-        matches!(self.kind,
-            TokenKind::LParen
-          | TokenKind::LBrace
-          | TokenKind::LBracket
-          | TokenKind::Fn
-          | TokenKind::If
-          | TokenKind::Then
-          | TokenKind::Else
+        matches!(
+            self,
+            Token::LParen
+          | Token::LBrace
+          | Token::LBracket
+          | Token::Fn
+          | Token::If
+          | Token::Then
+          | Token::Else
         )
     }
 
     pub fn is_closing(&self) -> bool {
-        matches!(self.kind,
-            TokenKind::RParen
-          | TokenKind::RBrace
-          | TokenKind::RBracket
-          | TokenKind::Comma
-          | TokenKind::Fn
-          | TokenKind::If
-          | TokenKind::Then
-          | TokenKind::Else
+        matches!(
+            self,
+            Token::RParen
+          | Token::RBrace
+          | Token::RBracket
+          | Token::Comma
+          | Token::Fn
+          | Token::If
+          | Token::Then
+          | Token::Else
         )
     }
 
     pub fn precedence(&self) -> Option<Precedence> {
-        let precedence = match self.kind {
-            TokenKind::Div   => 7,
-            TokenKind::Mul   => 7,
-            TokenKind::Rem   => 7,
-            TokenKind::Add   => 6,
-            TokenKind::Sub   => 6,
-            TokenKind::Lt    => 5,
-            TokenKind::Le    => 5,
-            TokenKind::Gt    => 5,
-            TokenKind::Ge    => 5,
-            TokenKind::Ne    => 5,
-            TokenKind::Eq    => 5,
-            TokenKind::And   => 4,
-            TokenKind::Or    => 3,
-            TokenKind::Range => 2,
-            TokenKind::Pipe  => 1,
+        let precedence = match self {
+            Token::Div   => 7,
+            Token::Mul   => 7,
+            Token::Rem   => 7,
+            Token::Add   => 6,
+            Token::Sub   => 6,
+            Token::Lt    => 5,
+            Token::Le    => 5,
+            Token::Gt    => 5,
+            Token::Ge    => 5,
+            Token::Ne    => 5,
+            Token::Eq    => 5,
+            Token::And   => 4,
+            Token::Or    => 3,
+            Token::Range => 2,
+            Token::Pipe  => 1,
             _ => return None
         };
         Some(precedence)

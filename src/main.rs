@@ -1,5 +1,5 @@
 use netrine::Source;
-use netrine::syntax::parse;
+//use netrine::syntax::parse;
 
 use std::path::PathBuf;
 use std::fs;
@@ -50,17 +50,21 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn exec(source: Source) {
-    let pipeline =
-        parse(&source);
-
-    match pipeline {
-        Ok(code) => {
-            println!("{:#?}", code)
-        }
-        Err(error) => {
-            let mut buffer = String::new();
-            error.report(&source, &mut buffer).unwrap();
-            eprintln!("{}", buffer);
-        }
-    }
+    println!("{:#?}", source)
 }
+
+// fn exec(source: Source) {
+//     let pipeline =
+//         parse(&source);
+
+//     match pipeline {
+//         Ok(code) => {
+//             println!("{:#?}", code)
+//         }
+//         Err(error) => {
+//             let mut buffer = String::new();
+//             error.report(&source, &mut buffer).unwrap();
+//             eprintln!("{}", buffer);
+//         }
+//     }
+// }

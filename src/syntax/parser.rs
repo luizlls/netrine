@@ -1,15 +1,13 @@
-use crate::{Source, Span};
 use super::ast::*;
-use super::token::{Token, TokenKind};
 use super::lexer::Lexer;
+use super::token::Token;
+use crate::{Source, Span};
 use crate::error::{Result, NetrineError};
 
 #[derive(Debug, Clone)]
 struct Parser<'s> {
     lexer: Lexer<'s>,
-    prev:  Token,
     token: Token,
-    peek:  Token,
     source: &'s Source,
 }
 
@@ -18,14 +16,10 @@ impl<'s> Parser<'s> {
         let mut parser = Parser {
             source,
             lexer: Lexer::new(&source.content),
-            prev : Token::default(),
-            token: Token::default(),
-            peek : Token::default(),
+            token: Token::EOF,
         };
 
         parser.bump(); // token
-        parser.bump(); // peek
-
         parser
     }
 
@@ -40,10 +34,10 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_expr(&mut self) -> Result<Expr> {
-        match self.token.kind {
-            TokenKind::Fn => self.parse_fn(),
-            TokenKind::If => self.parse_if(),
-            TokenKind::Lower if self.match_peek(TokenKind::Equals) => {
+        match self.token {
+            Token::Fn => self.parse_fn(),
+            Token::If => self.parse_if(),
+            Token::Lower if self.match_peek(Token::Equals) => {
                 self.parse_def()
             }
             _ => self.parse_binary(0)
@@ -51,27 +45,28 @@ impl<'s> Parser<'s> {
     }
 
     fn match_term(&self) -> bool {
-        matches!(self.token.kind,
-            TokenKind::Lower
-          | TokenKind::Upper
-          | TokenKind::Number
-          | TokenKind::String
-          | TokenKind::LParen
-          | TokenKind::LBrace
-          | TokenKind::LBracket
-          | TokenKind::Anything)
+        matches!(
+            self.token,
+            Token::Lower
+          | Token::Upper
+          | Token::Number
+          | Token::String
+          | Token::LParen
+          | Token::LBrace
+          | Token::LBracket
+          | Token::Anything)
     }
 
     fn parse_term(&mut self) -> Result<Expr> {
-        match self.token.kind {
-            TokenKind::Anything    => self.parse_any(),
-            TokenKind::Lower  => self.parse_lower(),
-            TokenKind::Upper  => self.parse_upper(),
-            TokenKind::Number => self.parse_number(),
-            TokenKind::String => self.parse_string(),
-            TokenKind::LParen => self.parse_parens(),
-            TokenKind::LBrace => self.parse_record(),
-            TokenKind::LBracket => self.parse_brackets(),
+        match self.token {
+            Token::Anything => self.parse_anything(),
+            Token::Lower    => self.parse_lower(),
+            Token::Upper    => self.parse_upper(),
+            Token::Number   => self.parse_number(),
+            Token::String   => self.parse_string(),
+            Token::LParen   => self.parse_parens(),
+            Token::LBrace   => self.parse_record(),
+            Token::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.unexpected())
             }
@@ -79,31 +74,29 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_patt(&mut self) -> Result<Expr> {
-        let patt = match self.token.kind {
-            TokenKind::Anything    => self.parse_any(),
-            TokenKind::Lower  => self.parse_lower(),
-            TokenKind::Upper  => self.parse_upper(),
-            TokenKind::Number => self.parse_number(),
-            TokenKind::String => self.parse_string(),
-            TokenKind::LParen => self.parse_parens(),
-            TokenKind::LBrace => self.parse_record(),
-            TokenKind::LBracket => self.parse_brackets(),
+        let patt = match self.token {
+            Token::Anything => self.parse_anything(),
+            Token::Lower    => self.parse_lower(),
+            Token::Upper    => self.parse_upper(),
+            Token::Number   => self.parse_number(),
+            Token::String   => self.parse_string(),
+            Token::LParen   => self.parse_parens(),
+            Token::LBrace   => self.parse_record(),
+            Token::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.unexpected())
             }
         }?;
 
         if !patt.is_pattern() {
-            Err(NetrineError::error(
-                patt.span(),
-                "Not a valid pattern".into()))
+            Err(NetrineError::error(patt.span(), "Not a valid pattern".into()))
         } else {
             Ok(patt)
         }
     }
 
     fn parse_name(&mut self) -> Result<Name> {
-        let span  = self.expect(TokenKind::Lower)?;
+        let span  = self.expect(Token::Lower)?;
         let value = self.source.content[span.range()].into();
         Ok(Name { value, span })
     }
@@ -113,7 +106,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_upper(&mut self) -> Result<Expr> {
-        let start = self.expect(TokenKind::Upper)?;
+        let start = self.expect(Token::Upper)?;
         let value = self.source.content[start.range()].to_string();
 
         match &value[..] {
@@ -125,14 +118,14 @@ impl<'s> Parser<'s> {
         let name = Name { value, span: start };
 
         let value = if self.match_lines() && self.match_term() {
-            match self.token.kind {
-                TokenKind::LParen => {
+            match self.token {
+                Token::LParen => {
                     Some(self.parse_parens()?)
                 }
-                TokenKind::LBrace => {
+                Token::LBrace => {
                     Some(self.parse_record()?)
                 }
-                TokenKind::Lower => {
+                Token::Lower => {
                     Some(self.parse_term()?)
                 }
                 _ => return Err(self.unexpected())
@@ -146,31 +139,31 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_number(&mut self) -> Result<Expr> {
-        let span  = self.expect(TokenKind::Number)?;
+        let span  = self.expect(Token::Number)?;
         let value = self.source.content[span.range()].into();
         Ok(Expr::Number(Literal { value, span }))
     }
 
     fn parse_string(&mut self) -> Result<Expr> {
-        let span  = self.expect(TokenKind::String)?;
+        let span  = self.expect(Token::String)?;
         let value = self.source.content[span.range()].into();
         Ok(Expr::String(Literal { value, span }))
     }
 
-    fn parse_any(&mut self) -> Result<Expr> {
-        let span = self.expect(TokenKind::Anything)?;
+    fn parse_anything(&mut self) -> Result<Expr> {
+        let span = self.expect(Token::Anything)?;
         Ok(Expr::Any(span))
     }
 
     fn parse_fn(&mut self) -> Result<Expr> {
         let start = self.token.span;
         
-        self.expect(TokenKind::Fn)?;
+        self.expect(Token::Fn)?;
 
         let name = self.parse_name()?;
 
         let parameters = self.parse_sequence_until(
-            TokenKind::Colon,
+            Token::Colon,
             Self::parse_parameter)?;
 
         let value = self.parse_block()?;
@@ -182,11 +175,11 @@ impl<'s> Parser<'s> {
     fn parse_block(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        self.expect(TokenKind::Colon)?;
+        self.expect(Token::Colon)?;
 
         let parameters = if self.match_lines() {
             self.parse_sequence_until(
-                TokenKind::Arrow,
+                Token::Arrow,
                 Self::parse_parameter)?
         } else {
             vec![]
@@ -202,8 +195,8 @@ impl<'s> Parser<'s> {
         let start = self.token.span;
 
         let mut values = self.parse_sequence_of(
-            TokenKind::LParen,
-            TokenKind::RParen,
+            Token::LParen,
+            Token::RParen,
             Self::parse_expr)?;
 
         if values.len() == 1 {
@@ -218,8 +211,8 @@ impl<'s> Parser<'s> {
         let start = self.token.span;
 
         let values = self.parse_sequence_of(
-            TokenKind::LBrace,
-            TokenKind::RBrace,
+            Token::LBrace,
+            Token::RBrace,
             Self::parse_expr)?;
 
         Ok(Expr::List(
@@ -230,8 +223,8 @@ impl<'s> Parser<'s> {
         let start = self.token.span;
 
         let properties = self.parse_sequence_of(
-            TokenKind::LBrace,
-            TokenKind::RBrace,
+            Token::LBrace,
+            Token::RBrace,
             Self::parse_property)?;
 
         Ok(Expr::Record(
@@ -241,16 +234,16 @@ impl<'s> Parser<'s> {
     fn parse_property(&mut self) -> Result<(Name, Option<Expr>)> {
         let key = self.parse_name()?;
 
-        let val = match self.token.kind {
-            TokenKind::Equals => {
+        let val = match self.token {
+            Token::Equals => {
                 self.bump();
                 Some(self.parse_expr()?)
             }
-            TokenKind::LBrace => {
+            Token::LBrace => {
                 Some(self.parse_record()?)
             }
-            TokenKind::Comma
-          | TokenKind::RBrace => {
+            Token::Comma
+          | Token::RBrace => {
                 None
             }
             _ => return Err(self.unexpected())
@@ -263,7 +256,7 @@ impl<'s> Parser<'s> {
         let start = self.token.span;
 
         let patt = self.parse_patt()?;
-        self.expect(TokenKind::Equals)?;
+        self.expect(Token::Equals)?;
         let value = self.parse_expr()?;
 
         Ok(Expr::Def(
@@ -273,13 +266,13 @@ impl<'s> Parser<'s> {
     fn parse_parameter(&mut self) -> Result<Param> {
         let start = self.token.span;
 
-        let patt = match self.token.kind {
-            TokenKind::Anything    => self.parse_any(),
-            TokenKind::Lower  => self.parse_lower(),
-            TokenKind::Upper  => self.parse_upper(),
-            TokenKind::LParen => self.parse_parens(),
-            TokenKind::LBrace => self.parse_record(),
-            TokenKind::LBracket => self.parse_brackets(),
+        let patt = match self.token {
+            Token::Anything    => self.parse_anything(),
+            Token::Lower  => self.parse_lower(),
+            Token::Upper  => self.parse_upper(),
+            Token::LParen => self.parse_parens(),
+            Token::LBrace => self.parse_record(),
+            Token::LBracket => self.parse_brackets(),
             _ => {
                 Err(self.unexpected())
             }
@@ -291,7 +284,7 @@ impl<'s> Parser<'s> {
                 "Not a valid pattern".into()))
         }
 
-        let value = if self.match_lines() && self.maybe(TokenKind::Equals) {
+        let value = if self.match_lines() && self.maybe(Token::Equals) {
             Some(self.parse_expr()?)
         } else {
             None
@@ -303,13 +296,13 @@ impl<'s> Parser<'s> {
     fn parse_if(&mut self) -> Result<Expr> {
         let start = self.token.span;
 
-        self.expect(TokenKind::If)?;
+        self.expect(Token::If)?;
         let pred = self.parse_expr()?;
 
-        self.expect(TokenKind::Then)?;
+        self.expect(Token::Then)?;
         let then = self.parse_expr()?;
 
-        self.expect(TokenKind::Else)?;
+        self.expect(Token::Else)?;
         let otherwise = Some(self.parse_expr()?);
 
         Ok(Expr::If(
@@ -340,7 +333,7 @@ impl<'s> Parser<'s> {
 
         let mut source = self.parse_term()?;
 
-        while self.match_lines() && self.maybe(TokenKind::Dot) {
+        while self.match_lines() && self.maybe(Token::Dot) {
             let value = self.parse_term()?;
             source = Expr::Get(
                 box Get { source, value, span: self.span(start) })
@@ -419,27 +412,27 @@ impl<'s> Parser<'s> {
     fn parse_operator(&self) -> Result<Operator> {
         let span = self.token.span;
 
-        let kind = match self.token.kind {
-            TokenKind::Add   => OperatorKind::Add,
-          | TokenKind::Sub   => OperatorKind::Sub,
-          | TokenKind::Mul   => OperatorKind::Mul,
-          | TokenKind::Div   => OperatorKind::Div,
-          | TokenKind::Rem   => OperatorKind::Rem,
-          | TokenKind::And   => OperatorKind::And,
-          | TokenKind::Or    => OperatorKind::Or,
-          | TokenKind::Not   => OperatorKind::Not,
-          | TokenKind::Eq    => OperatorKind::Eq,
-          | TokenKind::Ne    => OperatorKind::Ne,
-          | TokenKind::Lt    => OperatorKind::Lt,
-          | TokenKind::Le    => OperatorKind::Le,
-          | TokenKind::Gt    => OperatorKind::Gt,
-          | TokenKind::Ge    => OperatorKind::Ge,
-          | TokenKind::Pipe  => OperatorKind::Pipe,
-          | TokenKind::Range => OperatorKind::Range,
+        let kind = match self.token {
+            Token::Add   => OperatorKind::Add,
+          | Token::Sub   => OperatorKind::Sub,
+          | Token::Mul   => OperatorKind::Mul,
+          | Token::Div   => OperatorKind::Div,
+          | Token::Rem   => OperatorKind::Rem,
+          | Token::And   => OperatorKind::And,
+          | Token::Or    => OperatorKind::Or,
+          | Token::Not   => OperatorKind::Not,
+          | Token::Eq    => OperatorKind::Eq,
+          | Token::Ne    => OperatorKind::Ne,
+          | Token::Lt    => OperatorKind::Lt,
+          | Token::Le    => OperatorKind::Le,
+          | Token::Gt    => OperatorKind::Gt,
+          | Token::Ge    => OperatorKind::Ge,
+          | Token::Pipe  => OperatorKind::Pipe,
+          | Token::Range => OperatorKind::Range,
             _ => {
                 return Err(NetrineError::error(
                     span,
-                    format!("`{}` is not a valid operator", self.token.kind)));
+                    format!("`{}` is not a valid operator", self.token)));
             }
         };
 
@@ -464,7 +457,7 @@ impl<'s> Parser<'s> {
 
     fn parse_sequence_until<T, F>(
         &mut self,
-        until: TokenKind,
+        until: Token,
         mut f: F) -> Result<Vec<T>>
     where
         F: FnMut(&mut Self) -> Result<T>
@@ -480,7 +473,7 @@ impl<'s> Parser<'s> {
 
             result.push(f(self)?);
 
-            if !self.maybe(TokenKind::Comma) {
+            if !self.maybe(Token::Comma) {
                 break;
             }
         }
@@ -490,8 +483,8 @@ impl<'s> Parser<'s> {
 
     fn parse_sequence_of<T, F>(
         &mut self,
-        open: TokenKind,
-        close: TokenKind,
+        open: Token,
+        close: Token,
         mut f: F) -> Result<Vec<T>>
     where
         F: FnMut(&mut Self) -> Result<T>
@@ -505,7 +498,7 @@ impl<'s> Parser<'s> {
 
             result.push(f(self)?);
 
-            if !self.maybe(TokenKind::Comma) {
+            if !self.maybe(Token::Comma) {
                 break;
             }
         }
@@ -523,7 +516,7 @@ impl<'s> Parser<'s> {
         } else {
             let span = self.token.span;
             Token {
-                kind: TokenKind::EOF,
+                kind: Token::EOF,
                 span: Span::new(span.line, span.end, span.end),
             }
         };
@@ -532,21 +525,21 @@ impl<'s> Parser<'s> {
     }
 
     fn done(&self) -> bool {
-        self.token.kind == TokenKind::EOF
+        self.token == Token::EOF
     }
 
-    fn expect(&mut self, expected: TokenKind) -> Result<Span> {
-        if self.token.kind == expected {
+    fn expect(&mut self, expected: Token) -> Result<Span> {
+        if self.token == expected {
             Ok(self.bump())
         } else {
             Err(NetrineError::error(
                 self.token.span,
-                format!("Expected `{}` but found `{}`", expected, self.token.kind)))
+                format!("Expected `{}` but found `{}`", expected, self.token)))
         }
     }
 
-    fn maybe(&mut self, expected: TokenKind) -> bool {
-        if self.token.kind == expected {
+    fn maybe(&mut self, expected: Token) -> bool {
+        if self.token == expected {
             self.bump();
             true
         } else {
@@ -558,11 +551,11 @@ impl<'s> Parser<'s> {
         Span::from(start, self.prev.span)
     }
 
-    fn match_token(&self, kind: TokenKind) -> bool {
-        self.token.kind == kind
+    fn match_token(&self, kind: Token) -> bool {
+        self.token == kind
     }
 
-    fn match_peek(&self, kind: TokenKind) -> bool {
+    fn match_peek(&self, kind: Token) -> bool {
         self.peek.kind == kind
     }
 
@@ -571,12 +564,12 @@ impl<'s> Parser<'s> {
     }
 
     fn unexpected(&mut self) -> NetrineError {
-        let msg = match self.token.kind {
-            TokenKind::Error(_) => {
-                format!("{}", self.token.kind)
+        let msg = match self.token {
+            Token::Error(_) => {
+                format!("{}", self.token)
             }
             _ => {
-                format!("Unexpected `{}`", self.token.kind)
+                format!("Unexpected `{}`", self.token)
             }
         };
 
