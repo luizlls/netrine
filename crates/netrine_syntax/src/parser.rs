@@ -1,8 +1,7 @@
 use super::ast::*;
 use super::lexer::Lexer;
 use super::token::Token;
-use crate::{Source, Span};
-use crate::error::{Result, NetrineError};
+use netrine_core::{Source, Span, NetrineError, Result};
 
 #[derive(Debug, Clone)]
 struct Parser<'s> {
@@ -156,7 +155,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_fn(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
         
         self.expect(Token::Fn)?;
 
@@ -173,7 +172,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_block(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         self.expect(Token::Colon)?;
 
@@ -192,7 +191,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_parens(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let mut values = self.parse_sequence_of(
             Token::LParen,
@@ -208,7 +207,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_brackets(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let values = self.parse_sequence_of(
             Token::LBrace,
@@ -220,7 +219,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_record(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let properties = self.parse_sequence_of(
             Token::LBrace,
@@ -253,7 +252,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_def(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let patt = self.parse_patt()?;
         self.expect(Token::Equals)?;
@@ -264,7 +263,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_parameter(&mut self) -> Result<Param> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let patt = match self.token {
             Token::Anything    => self.parse_anything(),
@@ -294,7 +293,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_if(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         self.expect(Token::If)?;
         let pred = self.parse_expr()?;
@@ -310,7 +309,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_call(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let callee = self.parse_initial()?;
 
@@ -323,13 +322,13 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_argument(&mut self) -> Result<Argument> {
-        let start = self.token.span;
+        let start = self.lexer.span();
         let value = self.parse_expr()?;
         Ok(Argument { name: None, value, span: self.span(start) })
     }
 
     fn parse_initial(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+        let start = self.lexer.span();
 
         let mut source = self.parse_term()?;
 
@@ -360,7 +359,7 @@ impl<'s> Parser<'s> {
 
         if !self.match_lines() {
             return Err(NetrineError::error(
-                self.token.span,
+                self.lexer.span(),
                 "Unary or partial operators must be in the same line as the operand".into()));
         }
 
@@ -410,7 +409,7 @@ impl<'s> Parser<'s> {
     }
 
     fn parse_operator(&self) -> Result<Operator> {
-        let span = self.token.span;
+        let span = self.lexer.span();
 
         let kind = match self.token {
             Token::Add   => OperatorKind::Add,
@@ -514,7 +513,7 @@ impl<'s> Parser<'s> {
         self.peek  = if let Some(token) = self.lexer.next() {
             token
         } else {
-            let span = self.token.span;
+            let span = self.lexer.span();
             Token {
                 kind: Token::EOF,
                 span: Span::new(span.line, span.end, span.end),
@@ -533,7 +532,7 @@ impl<'s> Parser<'s> {
             Ok(self.bump())
         } else {
             Err(NetrineError::error(
-                self.token.span,
+                self.lexer.span(),
                 format!("Expected `{}` but found `{}`", expected, self.token)))
         }
     }
@@ -555,14 +554,6 @@ impl<'s> Parser<'s> {
         self.token == kind
     }
 
-    fn match_peek(&self, kind: Token) -> bool {
-        self.peek.kind == kind
-    }
-
-    fn match_lines(&self) -> bool {
-        self.prev.span.line == self.token.span.line
-    }
-
     fn unexpected(&mut self) -> NetrineError {
         let msg = match self.token {
             Token::Error(_) => {
@@ -573,7 +564,7 @@ impl<'s> Parser<'s> {
             }
         };
 
-        NetrineError::error(self.token.span, msg)
+        NetrineError::error(self.lexer.span(), msg)
     }
 }
 

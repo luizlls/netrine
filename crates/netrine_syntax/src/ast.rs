@@ -1,4 +1,4 @@
-use crate::Span;
+use netrine_core::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {

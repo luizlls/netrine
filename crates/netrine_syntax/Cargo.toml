@@ -1,0 +1,10 @@
+[package]
+authors = ["Luiz Lopes <luizlopesdev@gmail.com>"]
+description = "Netrine syntax (ast and parser)"
+edition = "2018"
+license = "MIT"
+version = "0.1.0"
+name = "netrine_syntax"
+
+[dependencies]
+netrine_core = { version = "0.1.0", path="../netrine_core" }

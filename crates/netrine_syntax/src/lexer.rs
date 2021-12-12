@@ -1,8 +1,7 @@
 use std::str::Chars;
 
 use super::token::*;
-use crate::Span;
-use crate::error::{NetrineError, Result};
+use netrine_core::{Span, NetrineError, Result};
 
 const SYMBOLS: &str = ".!:=+-<>*/%|";
 
