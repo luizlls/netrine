@@ -32,8 +32,8 @@ pub struct Lexer<'src> {
     indent: usize,
     line: u32,
     mode: Mode,
-    indent_level: Vec<usize>,
     indent_style: IndentStyle,
+    indent_level: Vec<usize>,
 }
 
 impl<'src> Lexer<'src> {
@@ -48,9 +48,10 @@ impl<'src> Lexer<'src> {
             indent: 0,
             line: 1,
             mode: Mode::Regular,
-            indent_level: vec![0],
             indent_style: IndentStyle::Unset,
+            indent_level: vec![0],
         };
+
         lexer.bump();
         lexer.bump();
         lexer.offset = 0;
@@ -68,7 +69,12 @@ impl<'src> Lexer<'src> {
     }
 
     pub fn indent(&self) -> usize {
-        self.indent
+        let diff = self.offset - self.start;
+        if self.indent < diff {
+            0
+        } else {
+            self.indent - diff
+        }
     }
 
     fn align(&mut self) {
@@ -109,172 +115,213 @@ impl<'src> Lexer<'src> {
 
         self.align();
 
-        match self.curr {
-            Some(' ' | '\t' | '\r') => {
-                self.space()
+        if let Some(chr) = self.curr {
+            match chr {
+                ' ' | '\t' | '\r' => {
+                    self.space()
+                }
+                '\n' => {
+                    self.line()
+                }
+                'a'..='z' => {
+                    self.lower()
+                }
+                'A'..='Z' => {
+                    self.upper()
+                }
+                '_' if self.is_alpha(self.peek) => {
+                    self.lower()
+                }
+                '0'..='9' => {
+                    self.number(false)
+                }
+                '+' | '-' if self.is_number(self.peek) => {
+                    self.number(true)
+                }
+                '"' => {
+                    self.next_string(true)
+                }
+                '(' => {
+                    self.bump();
+                    Ok(Token::LParen)
+                }
+                ')' => {
+                    self.bump();
+                    Ok(Token::RParen)
+                }
+                '[' => {
+                    self.bump();
+                    Ok(Token::LBracket)
+                }
+                ']' => {
+                    self.bump();
+                    Ok(Token::RBracket)
+                }
+                '{' => {
+                    self.bump();
+                    Ok(Token::LBrace)
+                }
+                '}' if self.mode == Mode::Template => {
+                    self.bump();
+                    self.mode = Mode::String;
+                    Ok(Token::RBrace)
+                }
+                '}' => {
+                    self.bump();
+                    Ok(Token::RBrace)
+                }
+                ',' => {
+                    self.bump();
+                    Ok(Token::Comma)
+                }
+                ';' => {
+                    self.bump();
+                    Ok(Token::Semi)
+                }
+                '_' => {
+                    self.bump();
+                    Ok(Token::Anything)
+                }
+                '/' if self.peek == Some('/') => {
+                    self.comment()
+                }
+                _ if self.is_symbol(self.curr) => {
+                    self.operator()
+                }
+                _ => {
+                    Err(NetrineError::error(
+                        self.span(),
+                        "unexpected character".into()))
+                }
             }
-            Some('\n') => {
-                self.line()
-            }
-            Some('a'..='z') => {
-                Ok(self.lower())
-            }
-            Some('A'..='Z') => {
-                Ok(self.upper())
-            }
-            Some('_') if self.is_alpha(self.peek) => {
-                Ok(self.lower())
-            }
-            Some('0'..='9') => {
-                Ok(self.number(false))
-            }
-            Some('+' | '-') if self.is_number(self.peek) => {
-                Ok(self.number(true))
-            }
-            Some('"') => {
-                self.next_string(true)
-            }
-            Some('(') => {
-                self.one(Token::LParen)
-            }
-            Some(')') => {
-                self.one(Token::RParen)
-            }
-            Some('[') => {
-                self.one(Token::LBracket)
-            }
-            Some(']') => {
-                self.one(Token::RBracket)
-            }
-            Some('{') => {
-                self.one(Token::LBrace)
-            }
-            Some('}') if self.mode == Mode::Template => {
-                self.mode = Mode::String;
-                self.one(Token::RBrace)
-            }
-            Some('}') => {
-                self.one(Token::RBrace)
-            }
-            Some(',') => {
-                self.one(Token::Comma)
-            }
-            Some(';') => {
-                self.one(Token::Semi)
-            }
-            Some('_') => {
-                self.one(Token::Anything)
-            }
-            Some('/') if self.peek == Some('/') => {
-                self.comment()
-            }
-            Some(_) if self.is_symbol(self.curr) => {
-                self.operator()
-            }
-            None => {
-                Ok(Token::EOF)
-            }
-            Some(_) => {
-                Err(NetrineError::error(
-                    self.span(),
-                    "unexpected character".into()))
-            }
+        } else {
+            Ok(Token::EOF)
         }
     }
 
     fn operator(&mut self) -> Result<Token> {
-        match self.curr {
-            Some('.') => {
-                if self.peek == Some('.') {
-                    self.bump();
-                    self.one(Token::Range)
-                } else {
-                    self.one(Token::Dot)
+        if let Some(chr) = self.curr {
+            match chr {
+                '.' => {
+                    if self.peek == Some('.') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Range)
+                    } else {
+                        self.bump();
+                        Ok(Token::Dot)
+                    }
                 }
-            }
-            Some('=') => {
-                if self.peek == Some('=') {
-                    self.bump();
-                    self.one(Token::Eq)
-                } else if self.peek == Some('>') {
-                    self.bump();
-                    self.one(Token::Arrow)
-                } else {
-                    self.one(Token::Equals)
+                '=' => {
+                    if self.peek == Some('=') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Eq)
+                    } else if self.peek == Some('>') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Arrow)
+                    } else {
+                        self.bump();
+                        Ok(Token::Equals)
+                    }
                 }
-            }
-            Some(':') => {
-                if self.peek == Some('=') {
-                    self.bump();
-                    self.one(Token::Walrus)
-                } else {
-                    self.one(Token::Colon)
+                ':' => {
+                    if self.peek == Some('=') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Walrus)
+                    } else {
+                        self.bump();
+                        Ok(Token::Colon)
+                    }
                 }
-            }
-            Some('<') => {
-                if self.peek == Some('=') {
-                    self.bump();
-                    self.one(Token::Le)
-                } else {
-                    self.one(Token::Lt)
+                '<' => {
+                    if self.peek == Some('=') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Le)
+                    } else {
+                        self.bump();
+                        Ok(Token::Lt)
+                    }
                 }
-            }
-            Some('>') => {
-                if self.peek == Some('=') {
-                    self.bump();
-                    self.one(Token::Ge)
-                } else {
-                    self.one(Token::Gt)
+                '>' => {
+                    if self.peek == Some('=') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Ge)
+                    } else {
+                        self.bump();
+                        Ok(Token::Gt)
+                    }
                 }
-            }
-            Some('!') => {
-                if self.peek == Some('=') {
+                '!' => {
+                    if self.peek == Some('=') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Ne)
+                    } else {
+                        Err(NetrineError::error(
+                            self.span(),
+                            "invalid operator".into()))
+                    }
+                }
+                '|' => {
+                    if self.peek == Some('>') {
+                        self.bump();
+                        self.bump();
+                        Ok(Token::Pipe)
+                    } else {
+                        Err(NetrineError::error(
+                            self.span(),
+                            "invalid operator".into()))
+                    }
+                }
+                '+' => {
                     self.bump();
-                    self.one(Token::Ne)
-                } else {
-                    Err(NetrineError::error(
+                    Ok(Token::Add)
+                }
+                '-' => {
+                    self.bump();
+                    Ok(Token::Sub)
+                }
+                '*' => {
+                    self.bump();
+                    Ok(Token::Mul)
+                }
+                '/' => {
+                    self.bump();
+                    Ok(Token::Div)
+                }
+                '%' => {
+                    self.bump();
+                    Ok(Token::Rem)
+                }
+                _ => Err(NetrineError::error(
                         self.span(),
-                        "invalid operator".into()))
-                }
+                        "unexpected character".into()))
             }
-            Some('|') => {
-                if self.peek == Some('>') {
-                    self.bump();
-                    self.one(Token::Pipe)
-                } else {
-                    Err(NetrineError::error(
-                        self.span(),
-                        "invalid operator".into()))
-                }
-            }
-            Some('+') => {
-                self.one(Token::Add)
-            }
-            Some('-') => {
-                self.one(Token::Sub)
-            }
-            Some('*') => {
-                self.one(Token::Mul)
-            }
-            Some('/') => {
-                self.one(Token::Div)
-            }
-            Some('%') => {
-                self.one(Token::Rem)
-            }
-            _ => Err(NetrineError::error(
-                    self.span(),
-                    "unexpected character".into()))
+        } else {
+            Ok(Token::EOF)
         }
     }
 
     fn next_indent(&mut self) -> Result<Token> {
         let new_level = self.count_indent_level()?;
-        let top_level = self.indent_level.pop().unwrap();
+        let top_level = *self.indent_level.last().unwrap();
+
+        if new_level == 0 {
+            self.mode = Mode::Regular;
+            return self.next_token();
+        }
 
         if new_level > top_level {
+            self.indent_level.push(new_level);
             Ok(Token::Indent)
         } else if new_level < top_level {
+            self.indent_level.pop();
+            self.indent_level.push(new_level);
             Ok(Token::Dedent)
         } else {
             self.mode = Mode::Regular;
@@ -291,21 +338,25 @@ impl<'src> Lexer<'src> {
             }
         }
 
+        let mut count = 0;
+
         while self.is_indent(self.curr) {
             match self.indent_style {
                 IndentStyle::Spaces if self.curr == Some(' ') => {
-                    self.bump();
+                    count += 1;
                 }
                 IndentStyle::Tabs if self.curr == Some('\t') => {
-                    self.bump();
+                    count += 1;
                 }
                 _ => return Err(NetrineError::error(
                                 self.span(),
                                 "mixed spaces and tabs".into()))
             }
+
+            self.bump();
         }
 
-        Ok(self.indent())
+        Ok(count)
     }
 
     fn next_string(&mut self, start: bool) -> Result<Token> {
@@ -375,11 +426,6 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn one(&mut self, token: Token) -> Result<Token> {
-        self.bump();
-        Ok(token)
-    }
-
     fn is_alpha(&self, chr: Option<char>) -> bool {
         matches!(
             chr,
@@ -409,26 +455,26 @@ impl<'src> Lexer<'src> {
         matches!(chr, Some('\r') | Some('\t') | Some(' '))
     }
 
-    fn lower(&mut self) -> Token {
+    fn lower(&mut self) -> Result<Token> {
         self.bump_while(Self::is_alpha);
 
         self.bump_while(|_, ch| {
-            !matches!(ch, Some('\'' | '?' | '!'))
+            matches!(ch, Some('\'' | '?' | '!'))
         });
 
         if let Some(keyword) = get_keyword(self.value()) {
-            keyword
+            Ok(keyword)
         } else {
-            Token::Lower
+            Ok(Token::Lower)
         }
     }
 
-    fn upper(&mut self) -> Token {
+    fn upper(&mut self) -> Result<Token> {
         self.bump_while(Self::is_alpha);
-        Token::Upper
+        Ok(Token::Upper)
     }
 
-    fn number(&mut self, prefix: bool) -> Token {
+    fn number(&mut self, prefix: bool) -> Result<Token> {
         if prefix {
             self.bump();
         }
@@ -440,7 +486,7 @@ impl<'src> Lexer<'src> {
             self.bump_while(Self::is_number);
         }
 
-        Token::Number
+        Ok(Token::Number)
     }
 
     fn space(&mut self) -> Result<Token> {
@@ -458,9 +504,7 @@ impl<'src> Lexer<'src> {
     fn bump_while<P>(&mut self, pred: P)
         where P: Fn(&Self, Option<char>) -> bool
     {
-        while !pred(&self, self.curr) {
-            self.bump()
-        }
+        while pred(&self, self.curr) { self.bump() }
     }
 }
 
@@ -473,7 +517,15 @@ mod tests {
         let mut lexer = Lexer::new("variable = 1");
 
         assert_eq!(lexer.next_token().unwrap(), Token::Lower);
+        assert_eq!(lexer.indent(), 0);
         assert_eq!(lexer.value(), "variable");
+        
+        assert_eq!(lexer.next_token().unwrap(), Token::Equals);
+        assert_eq!(lexer.indent(), 9);
+
+        assert_eq!(lexer.next_token().unwrap(), Token::Number);
+        assert_eq!(lexer.indent(), 11);
+        assert_eq!(lexer.value(), "1");
     }
 
     #[test]
@@ -491,7 +543,7 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let mut lexer = Lexer::new("function if then else and or not");
+        let mut lexer = Lexer::new("fn if then else and or not");
 
         assert_eq!(lexer.next_token().unwrap(), Token::Fn);
         assert_eq!(lexer.next_token().unwrap(), Token::If);
@@ -571,5 +623,56 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap(), Token::RBrace);
         let _ = lexer.next_token(); // closing "
         assert_eq!(lexer.mode, Mode::Regular);
+    }
+
+    #[test]
+    fn test_multiple_lines() {
+        let mut lexer = Lexer::new("\n\n\n");
+
+        assert_eq!(lexer.next_token().unwrap(), Token::NewLine);
+        assert_eq!(lexer.next_token().unwrap(), Token::EOF);
+    }
+
+    #[test]
+    fn test_indent() {
+        let mut lexer = Lexer::new("value =
+                                      1 + 1");
+
+        assert_eq!(lexer.next_token().unwrap(), Token::Lower);
+        assert_eq!(lexer.next_token().unwrap(), Token::Equals);
+        assert_eq!(lexer.next_token().unwrap(), Token::NewLine);
+        assert_eq!(lexer.next_token().unwrap(), Token::Indent);
+        assert_eq!(lexer.next_token().unwrap(), Token::Number);
+        assert_eq!(lexer.next_token().unwrap(), Token::Add);
+        assert_eq!(lexer.next_token().unwrap(), Token::Number);
+    }
+
+    #[test]
+    fn test_indent_dedent() {
+        let mut lexer = Lexer::new("value =
+                                      if x > y:
+                                        True
+                                      else:
+                                        False");
+
+        assert_eq!(lexer.next_token().unwrap(), Token::Lower);
+        assert_eq!(lexer.next_token().unwrap(), Token::Equals);
+        assert_eq!(lexer.next_token().unwrap(), Token::NewLine);
+        assert_eq!(lexer.next_token().unwrap(), Token::Indent);
+        assert_eq!(lexer.next_token().unwrap(), Token::If);
+        assert_eq!(lexer.next_token().unwrap(), Token::Lower);
+        assert_eq!(lexer.next_token().unwrap(), Token::Gt);
+        assert_eq!(lexer.next_token().unwrap(), Token::Lower);
+        assert_eq!(lexer.next_token().unwrap(), Token::Colon);
+        assert_eq!(lexer.next_token().unwrap(), Token::NewLine);
+        assert_eq!(lexer.next_token().unwrap(), Token::Indent);
+        assert_eq!(lexer.next_token().unwrap(), Token::Upper);
+        assert_eq!(lexer.next_token().unwrap(), Token::NewLine);
+        assert_eq!(lexer.next_token().unwrap(), Token::Dedent);
+        assert_eq!(lexer.next_token().unwrap(), Token::Else);
+        assert_eq!(lexer.next_token().unwrap(), Token::Colon);
+        assert_eq!(lexer.next_token().unwrap(), Token::NewLine);
+        assert_eq!(lexer.next_token().unwrap(), Token::Indent);
+        assert_eq!(lexer.next_token().unwrap(), Token::Upper);
     }
 }
