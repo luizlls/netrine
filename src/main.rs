@@ -1,9 +1,9 @@
 use netrine_core::Source;
 use netrine_syntax::parse;
 
-use std::path::PathBuf;
 use std::fs;
 use std::io::{stdin, stdout, Write};
+use std::path::PathBuf;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -17,7 +17,7 @@ fn main() {
 fn file(file: String) {
     let path = PathBuf::from(file);
     let content = fs::read_to_string(&path).expect("Couldn't open the file");
-    let source  = Source::new(&content, path);
+    let source = Source::new(&content, path);
     exec(source);
 }
 
@@ -42,16 +42,13 @@ fn read_line() -> Result<String, ()> {
     print!(">>>> ");
     stdout().flush().unwrap();
     match stdin().read_line(&mut line) {
-        Ok(_) => {
-            Ok(line.trim_end().to_string())
-        }
+        Ok(_) => Ok(line.trim_end().to_string()),
         _ => Err(()),
     }
 }
 
 fn exec(source: Source) {
-    let pipeline =
-        parse(&source);
+    let pipeline = parse(&source);
 
     match pipeline {
         Ok(code) => {

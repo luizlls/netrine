@@ -10,25 +10,26 @@ pub struct Span {
 impl Default for Span {
     fn default() -> Span {
         Span {
-            line: 0, start: 0, end: 0
+            line: 0,
+            start: 0,
+            end: 0,
         }
     }
 }
 
 impl Span {
-    pub const fn new(line: u32, start: u32, end: u32) -> Span {
+    pub fn new(line: u32, start: u32, end: u32) -> Span {
+        Span { line, start, end }
+    }
+
+    pub fn from(left: Span, right: Span) -> Span {
         Span {
-            line, start, end
+            end: right.end,
+            ..left
         }
     }
 
-    pub const fn from(left: Span, right: Span) -> Span {
-        Span {
-            end: right.end, ..left
-        }
-    }
-
-    pub const fn range(self) -> Range<usize> {
-        (self.start as usize) .. (self.end as usize)
+    pub fn range(self) -> Range<usize> {
+        (self.start as usize)..(self.end as usize)
     }
 }
