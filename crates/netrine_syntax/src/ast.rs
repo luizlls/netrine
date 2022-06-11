@@ -43,7 +43,15 @@ pub enum Expr {
 
     If(Box<If>),
 
-    Do(Box<Do>),
+    Block(Box<Block>),
+
+    List(Box<List>),
+
+    Dict(Box<Dict>),
+
+    Record(Box<Record>),
+
+    Field(Field),
 
     Number(Literal),
 
@@ -129,7 +137,7 @@ pub struct Apply {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Do {
+pub struct Block {
     pub expressions: Vec<Expr>,
     pub span: Span,
 }
@@ -177,7 +185,7 @@ pub struct Dict {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
-    pub properties: Vec<(Name, Option<Expr>)>,
+    pub properties: Vec<(Name, Expr)>,
     pub span: Span,
 }
 
@@ -243,20 +251,20 @@ impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.kind {
             OperatorKind::And => write!(f, "and"),
-            OperatorKind::Or => write!(f, "or"),
-            OperatorKind::Is => write!(f, "is"),
+            OperatorKind::Or  => write!(f, "or"),
+            OperatorKind::Is  => write!(f, "is"),
             OperatorKind::Add => write!(f, "+"),
             OperatorKind::Sub => write!(f, "-"),
             OperatorKind::Mul => write!(f, "*"),
             OperatorKind::Div => write!(f, "/"),
             OperatorKind::Rem => write!(f, "%"),
-            OperatorKind::Eq => write!(f, "=="),
-            OperatorKind::Ne => write!(f, "!="),
-            OperatorKind::Lt => write!(f, "<"),
-            OperatorKind::Le => write!(f, "<="),
-            OperatorKind::Gt => write!(f, ">"),
-            OperatorKind::Ge => write!(f, ">="),
-            OperatorKind::Pipe => write!(f, "|>"),
+            OperatorKind::Eq  => write!(f, "=="),
+            OperatorKind::Ne  => write!(f, "!="),
+            OperatorKind::Lt  => write!(f, "<"),
+            OperatorKind::Le  => write!(f, "<="),
+            OperatorKind::Gt  => write!(f, ">"),
+            OperatorKind::Ge  => write!(f, ">="),
+            OperatorKind::Pipe  => write!(f, "|>"),
             OperatorKind::Range => write!(f, ".."),
         }
     }
@@ -274,8 +282,12 @@ impl Expr {
             Expr::Lambda(e) => e.span,
             Expr::Apply(e) => e.span,
             Expr::Binary(e) => e.span,
-            Expr::Do(e) => e.span,
+            Expr::Block(e) => e.span,
             Expr::If(e) => e.span,
+            Expr::List(e) => e.span,
+            Expr::Dict(e) => e.span,
+            Expr::Record(e) => e.span,
+            Expr::Field(e) => e.span,
             Expr::Number(e) => e.span,
             Expr::String(e) => e.span,
             Expr::Variant(e) => e.span,

@@ -25,7 +25,7 @@ pub enum TokenKind {
 
     Fn,
     If,
-    Do,
+    Else,
     Let,
     Set,
     Get,
@@ -85,7 +85,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Equals => write!(f, "="),
             TokenKind::Fn => write!(f, "fn"),
             TokenKind::If => write!(f, "if"),
-            TokenKind::Do => write!(f, "do"),
+            TokenKind::Else => write!(f, "else"),
             TokenKind::Let => write!(f, "let"),
             TokenKind::Set => write!(f, "set"),
             TokenKind::Get => write!(f, "get"),
@@ -122,13 +122,13 @@ pub fn get_keyword(key: &str) -> Option<TokenKind> {
     match key {
         "fn" => Some(TokenKind::Fn),
         "if" => Some(TokenKind::If),
+        "else" => Some(TokenKind::Else),
         "let" => Some(TokenKind::Let),
         "set" => Some(TokenKind::Set),
         "get" => Some(TokenKind::Get),
         "and" => Some(TokenKind::And),
         "or" => Some(TokenKind::Or),
         "is" => Some(TokenKind::Is),
-        "do" => Some(TokenKind::Do),
         "type" => Some(TokenKind::Type),
         _ => None,
     }
