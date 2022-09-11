@@ -1,6 +1,6 @@
 # NETRINE
 
-*Netrine* is a minimalistic, gradually typed and functional programming language, with great focus on simplicity.
+*Netrine* is a minimalistic, reactive, functional programming language, with great focus on simplicity.
 
 &nbsp;
 
@@ -9,9 +9,9 @@
 - [X] Syntax
 - [ ] Types
 - [ ] Analysis
-- [ ] JS
-- [ ] C
+- [ ] VM
 - [ ] WASM
+- [ ] C
 
 
 &nbsp;

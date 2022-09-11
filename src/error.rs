@@ -1,29 +1,36 @@
 use std::error::Error;
 use std::fmt;
-use std::fmt::{Formatter, Write, Display};
+use std::fmt::{Display, Formatter, Write};
 
-use crate::{Source, Span};
+use crate::span::Span;
+use crate::source::Source;
 
 pub type Result<T> = ::std::result::Result<T, NetrineError>;
+
+macro_rules! error {
+    ($span: expr, $text: expr, $($field: expr),*) => {
+        Err(NetrineError::new($span, format!($text, $($field),*)))
+    };
+
+    ($span: expr, $text: expr) => {
+        Err(NetrineError::new($span, $text))
+    }
+}
+
+pub(crate) use error;
 
 #[derive(Debug, Clone)]
 pub struct NetrineError {
     text: String,
-    span: Option<Span>
+    span: Option<Span>,
 }
 
 impl NetrineError {
-
-    pub fn error(span: Span, text: String) -> NetrineError {
-        NetrineError { text, span: Some(span) }
-    }
-
-    pub fn basic(text: String) -> NetrineError {
-        NetrineError { text, span: None }
-    }
-
-    pub fn with_span(self, span: Span) -> NetrineError {
-        NetrineError { span: Some(span), ..self }
+    pub fn new<S: Into<String>>(span: Span, text: S) -> NetrineError {
+        NetrineError {
+            text: text.into(),
+            span: Some(span),
+        }
     }
 }
 
@@ -44,7 +51,7 @@ impl Display for NetrineError {
 impl NetrineError {
     pub fn report(&self, source: &Source, buf: &mut String) -> fmt::Result {
         if self.span.is_none() {
-            return writeln!(buf, "error: {}", self.text)
+            return writeln!(buf, "error: {}", self.text);
         }
 
         let path = source.path.as_path().display().to_string();
@@ -57,20 +64,18 @@ impl NetrineError {
         let mut right = right.split('\n');
         let right_main = right.next().unwrap();
 
-        let padding_length = (span.line  + 1).to_string().len() as usize;
+        let padding_length = (span.line + 1).to_string().len() as usize;
         let number_padding = " ".repeat(padding_length);
         let pointer_padding = " ".repeat(left_main.len());
         let pointer_arrows = "^".repeat((span.end - span.start).max(1) as usize);
 
-        let format_line = |n: u32| {
-            format!("{:>length$}", n, length=padding_length)
-        };
+        let format_line = |n: u32| format!("{:>length$}", n, length = padding_length);
 
         writeln!(buf, "\nerror: {}", self.text)?;
 
         writeln!(buf, "{}--> {} at line {}", number_padding, path, span.line)?;
         writeln!(buf, "{} |", number_padding)?;
-        
+
         if let Some(prev_line) = left.next() {
             if !prev_line.trim().is_empty() {
                 writeln!(buf, "{} | {}", format_line(span.line - 1), prev_line)?;

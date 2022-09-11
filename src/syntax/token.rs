@@ -1,14 +1,14 @@
 use std::fmt;
 
-use crate::Span;
+use crate::span::Span;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum TokenKind {
     LParen,
     RParen,
@@ -22,32 +22,24 @@ pub enum TokenKind {
     Colon,  // :
     Semi,   // ;
     Equals, // =
-    Walrus, // :=
-    Pipe,   // |
-    Hash,   // #
 
-    Case,
-    If,
-    Then,
-    Else,
-    It,
-
-    And,    // and
-    Or,     // or
-    Not,    // not
-    Add,    // +
-    Sub,    // -
-    Mul,    // *
-    Div,    // /
-    Rem,    // %
-    Eq,     // ==
-    Ne,     // !=
-    Lt,     // <
-    Le,     // <=
-    Gt,     // >
-    Ge,     // >=
-    Thread, // |>
-    Range,  // ..
+    And,   // and
+    Or,    // or
+    Not,   // not
+    Is,    // is
+    Add,   // +
+    Sub,   // -
+    Mul,   // *
+    Div,   // /
+    Rem,   // %
+    Eq,    // ==
+    Ne,    // !=
+    Lt,    // <
+    Le,    // <=
+    Gt,    // >
+    Ge,    // >=
+    Pipe,  // |>
+    Range, // ..
 
     Lower,
     Upper,
@@ -58,9 +50,16 @@ pub enum TokenKind {
     StringEnd,
     StringSlice,
 
-    Error(TokenError),
+    EOF,
+}
 
-    EOF, 
+impl Default for Token {
+    fn default() -> Self {
+        Token {
+            kind: TokenKind::EOF,
+            span: Span { line: 0, start: 0, end: 0 },
+        }
+    }
 }
 
 impl fmt::Display for TokenKind {
@@ -77,17 +76,10 @@ impl fmt::Display for TokenKind {
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Equals => write!(f, "="),
-            TokenKind::Walrus => write!(f, ":="),
-            TokenKind::Pipe => write!(f, "|"),
-            TokenKind::Hash => write!(f, "#"),
-            TokenKind::Case => write!(f, "case"),
-            TokenKind::If   => write!(f, "if"),
-            TokenKind::Then => write!(f, "then"),
-            TokenKind::Else => write!(f, "else"),
-            TokenKind::It => write!(f, "it"),
             TokenKind::And => write!(f, "and"),
             TokenKind::Or => write!(f, "or"),
             TokenKind::Not => write!(f, "not"),
+            TokenKind::Is => write!(f, "is"),
             TokenKind::Add => write!(f, "+"),
             TokenKind::Sub => write!(f, "-"),
             TokenKind::Mul => write!(f, "*"),
@@ -99,56 +91,26 @@ impl fmt::Display for TokenKind {
             TokenKind::Le => write!(f, "<="),
             TokenKind::Gt => write!(f, ">"),
             TokenKind::Ge => write!(f, ">="),
-            TokenKind::Thread => write!(f, "|>"),
+            TokenKind::Pipe => write!(f, "|>"),
             TokenKind::Range => write!(f, ".."),
-            TokenKind::Lower => write!(f, "identifier"),
-            TokenKind::Upper => write!(f, "constructor"),
+            TokenKind::Lower => write!(f, "lowercase name"),
+            TokenKind::Upper => write!(f, "uppercase name"),
             TokenKind::Number => write!(f, "number"),
             TokenKind::String => write!(f, "string"),
-            TokenKind::StringStart => write!(f, "start of string template"),
-            TokenKind::StringEnd => write!(f, "end of string template"),
-            TokenKind::StringSlice => write!(f, "slice of string template"),
+            TokenKind::StringStart => write!(f, "start of string"),
+            TokenKind::StringEnd => write!(f, "end of string"),
+            TokenKind::StringSlice => write!(f, "slice of string"),
             TokenKind::EOF => write!(f, "end of file"),
-            TokenKind::Error(err) => write!(f, "{}", err),
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TokenError {
-    InvalidCharacter,
-    InvalidOperator,
-    InvalidEscapeCharacter,
-    UnterminatedString,
-}
-
-impl fmt::Display for TokenError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            TokenError::InvalidCharacter => write!(f, "invalid character"),
-            TokenError::InvalidEscapeCharacter => write!(f, "invalid escape"),
-            TokenError::InvalidOperator => write!(f, "invalid operator"),
-            TokenError::UnterminatedString => write!(f, "unterminated string"),
-        }
-    }
-}
-
-impl Default for TokenKind {
-    fn default() -> Self {
-        TokenKind::EOF
     }
 }
 
 pub fn get_keyword(key: &str) -> Option<TokenKind> {
     match key {
-        "and"   => Some(TokenKind::And),
-        "or"    => Some(TokenKind::Or),
-        "not"   => Some(TokenKind::Not),
-        "case"  => Some(TokenKind::Case),
-        "if"    => Some(TokenKind::If),
-        "then"  => Some(TokenKind::Then),
-        "else"  => Some(TokenKind::Else),
-        "it"    => Some(TokenKind::It),
+        "and" => Some(TokenKind::And),
+        "or"  => Some(TokenKind::Or),
+        "not" => Some(TokenKind::Not),
+        "is"  => Some(TokenKind::Is),
         _ => None,
     }
 }
@@ -156,12 +118,16 @@ pub fn get_keyword(key: &str) -> Option<TokenKind> {
 pub type Precedence = u8;
 
 impl Token {
+    pub fn is(&self, kind: TokenKind) -> bool {
+        self.kind == kind
+    }
 
     pub fn is_operator(&self) -> bool {
-        matches!(self.kind,
+        matches!(
+            self.kind,
             TokenKind::And
           | TokenKind::Or
-          | TokenKind::Not
+          | TokenKind::Is
           | TokenKind::Add
           | TokenKind::Sub
           | TokenKind::Mul
@@ -173,54 +139,30 @@ impl Token {
           | TokenKind::Le
           | TokenKind::Gt
           | TokenKind::Ge
-          | TokenKind::Thread
+          | TokenKind::Pipe
           | TokenKind::Range
-        )
-    }
-
-    pub fn is_opening(&self) -> bool {
-        matches!(self.kind,
-            TokenKind::LParen
-          | TokenKind::LBrace
-          | TokenKind::LBracket
-          | TokenKind::Case
-          | TokenKind::If
-          | TokenKind::Then
-          | TokenKind::Else
-        )
-    }
-
-    pub fn is_closing(&self) -> bool {
-        matches!(self.kind,
-            TokenKind::RParen
-          | TokenKind::RBrace
-          | TokenKind::RBracket
-          | TokenKind::Comma
-          | TokenKind::Case
-          | TokenKind::If
-          | TokenKind::Then
-          | TokenKind::Else
         )
     }
 
     pub fn precedence(&self) -> Option<Precedence> {
         let precedence = match self.kind {
-            TokenKind::Div => 7,
-            TokenKind::Mul => 7,
-            TokenKind::Rem => 7,
-            TokenKind::Add => 6,
-            TokenKind::Sub => 6,
-            TokenKind::Lt  => 5,
-            TokenKind::Le  => 5,
-            TokenKind::Gt  => 5,
-            TokenKind::Ge  => 5,
-            TokenKind::Ne  => 5,
-            TokenKind::Eq  => 5,
-            TokenKind::And => 4,
-            TokenKind::Or  => 3,
-            TokenKind::Range  => 2,
-            TokenKind::Thread => 1,
-            _ => return None
+            TokenKind::Div   => 7,
+            TokenKind::Mul   => 7,
+            TokenKind::Rem   => 7,
+            TokenKind::Add   => 6,
+            TokenKind::Sub   => 6,
+            TokenKind::Lt    => 5,
+            TokenKind::Le    => 5,
+            TokenKind::Gt    => 5,
+            TokenKind::Ge    => 5,
+            TokenKind::Ne    => 5,
+            TokenKind::Eq    => 5,
+            TokenKind::Is    => 5,
+            TokenKind::And   => 4,
+            TokenKind::Or    => 3,
+            TokenKind::Range => 2,
+            TokenKind::Pipe  => 1,
+            _ => return None,
         };
         Some(precedence)
     }

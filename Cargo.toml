@@ -1,8 +1,9 @@
 [package]
-name = "netrine"
-version = "0.1.0"
 authors = ["Luiz Lopes <luizlopesdev@gmail.com>"]
+description = "A minimalist programming language"
 edition = "2018"
-
+license = "MIT"
+version = "0.1.0"
+name = "netrine"
 
 [dependencies]
