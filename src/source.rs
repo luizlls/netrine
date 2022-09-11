@@ -13,8 +13,4 @@ impl Source {
             content: content.into(),
         }
     }
-
-    pub fn source(content: &str) -> Source {
-        Source::new(content, PathBuf::from("none"))
-    }
 }

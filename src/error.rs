@@ -2,9 +2,22 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 
-use crate::{Source, Span};
+use crate::span::Span;
+use crate::source::Source;
 
 pub type Result<T> = ::std::result::Result<T, NetrineError>;
+
+macro_rules! error {
+    ($span: expr, $text: expr, $($field: expr),*) => {
+        Err(NetrineError::new($span, format!($text, $($field),*)))
+    };
+
+    ($span: expr, $text: expr) => {
+        Err(NetrineError::new($span, $text))
+    }
+}
+
+pub(crate) use error;
 
 #[derive(Debug, Clone)]
 pub struct NetrineError {
@@ -13,21 +26,10 @@ pub struct NetrineError {
 }
 
 impl NetrineError {
-    pub fn error(span: Span, text: String) -> NetrineError {
+    pub fn new<S: Into<String>>(span: Span, text: S) -> NetrineError {
         NetrineError {
-            text,
+            text: text.into(),
             span: Some(span),
-        }
-    }
-
-    pub fn basic(text: String) -> NetrineError {
-        NetrineError { text, span: None }
-    }
-
-    pub fn with_span(self, span: Span) -> NetrineError {
-        NetrineError {
-            span: Some(span),
-            ..self
         }
     }
 }

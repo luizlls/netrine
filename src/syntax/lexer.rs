@@ -1,7 +1,8 @@
 use std::str::Chars;
 
-use super::token::*;
-use netrine_core::{NetrineError, Result, Span};
+use super::token::{Token, TokenKind, get_keyword};
+use crate::error::{NetrineError, Result, error};
+use crate::span::Span;
 
 const SYMBOLS: &str = ".!:=+-<>*/%|";
 
@@ -60,7 +61,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn bump(&mut self) {
-        let length = self.curr.map(char::len_utf8).unwrap_or(0);
+        let length = self.curr.map_or(0, char::len_utf8);
         self.offset += length;
         self.curr = self.peek;
         self.peek = self.chars.next();
@@ -76,15 +77,16 @@ impl<'src> Lexer<'src> {
     }
 
     fn span(&self) -> Span {
-        Span::new(self.line, self.start as u32, self.offset as u32)
+        Span {
+            line: self.line,
+            start: self.start as u32,
+            end: self.offset as u32,
+        }
     }
 
     fn next_token(&mut self) -> Result<TokenKind> {
-        match self.mode {
-            Mode::String => {
-                return self.next_string(false);
-            }
-            _ => {}
+        if self.mode == Mode::String {
+            return self.next_string(false);
         }
 
         self.align();
@@ -97,22 +99,21 @@ impl<'src> Lexer<'src> {
                 '\n' => {
                     self.line()
                 }
-                'a'..='z' => {
-                    self.lower()
+                'a'..='z' | '_' => {
+                    Ok(self.lower())
                 }
                 'A'..='Z' => {
-                    self.upper()
-                }
-                '_' if self.is_alpha(self.peek) => {
-                    self.lower()
+                    Ok(self.upper())
                 }
                 '0'..='9' => {
-                    self.number(false)
+                    Ok(self.number(false))
                 }
                 '+' | '-' if self.is_number(self.peek) => {
-                    self.number(true)
+                    Ok(self.number(true))
                 }
-                '"' => self.next_string(true),
+                '"' => {
+                    self.next_string(true)
+                }
                 '(' => {
                     self.bump();
                     Ok(TokenKind::LParen)
@@ -134,8 +135,8 @@ impl<'src> Lexer<'src> {
                     Ok(TokenKind::LBrace)
                 }
                 '}' if self.mode == Mode::Template => {
-                    self.bump();
                     self.mode = Mode::String;
+                    self.bump();
                     Ok(TokenKind::RBrace)
                 }
                 '}' => {
@@ -156,10 +157,9 @@ impl<'src> Lexer<'src> {
                 _ if self.is_symbol(self.curr) => {
                     self.operator()
                 }
-                _ => Err(NetrineError::error(
-                    self.span(),
-                    "unexpected character".into(),
-                )),
+                _ => {
+                    error!(self.span(), "unexpected character")
+                }
             }
         } else {
             Ok(TokenKind::EOF)
@@ -219,7 +219,7 @@ impl<'src> Lexer<'src> {
                         self.bump();
                         Ok(TokenKind::Ne)
                     } else {
-                        Err(NetrineError::error(self.span(), "invalid operator".into()))
+                        error!(self.span(), "invalid operator")
                     }
                 }
                 '|' => {
@@ -228,7 +228,7 @@ impl<'src> Lexer<'src> {
                         self.bump();
                         Ok(TokenKind::Pipe)
                     } else {
-                        Err(NetrineError::error(self.span(), "invalid operator".into()))
+                        error!(self.span(), "invalid operator")
                     }
                 }
                 '+' => {
@@ -251,7 +251,7 @@ impl<'src> Lexer<'src> {
                     self.bump();
                     Ok(TokenKind::Rem)
                 }
-                _ => Err(NetrineError::error(self.span(), "unexpected character".into())),
+                _ => error!(self.span(), "unexpected character"),
             }
         } else {
             Ok(TokenKind::EOF)
@@ -289,17 +289,13 @@ impl<'src> Lexer<'src> {
                     };
                 }
                 Some('\n') | None => {
-                    return Err(NetrineError::error(
-                        self.span(),
-                        "unterminated string".into(),
-                    ))
+                    return error!(self.span(), "unterminated string")
                 }
                 Some('\\') => {
                     self.bump();
 
                     match self.curr {
-                        Some('n') | Some('r') | Some('t') | Some('v') | Some('a') | Some('b')
-                        | Some('"') | Some('0') | Some('\\') => {
+                        Some('n' | 'r' | 't' | 'v' | 'a' | 'b' | '"' | '0' | '\\') => {
                             self.bump();
                         }
                         Some('u') => {
@@ -309,10 +305,7 @@ impl<'src> Lexer<'src> {
                             todo!("Validate escaped binary")
                         }
                         _ => {
-                            return Err(NetrineError::error(
-                                self.span(),
-                                "invalid escape character".into(),
-                            ))
+                            return error!(self.span(), "invalid escape character")
                         }
                     }
                 }
@@ -326,7 +319,7 @@ impl<'src> Lexer<'src> {
     fn is_alpha(&self, chr: Option<char>) -> bool {
         matches!(
             chr,
-            Some('a'..='z') | Some('A'..='Z') | Some('0'..='9') | Some('_')
+            Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_')
         )
     }
 
@@ -335,35 +328,30 @@ impl<'src> Lexer<'src> {
     }
 
     fn is_symbol(&self, chr: Option<char>) -> bool {
-        if let Some(chr) = chr {
-            SYMBOLS.contains(chr)
-        } else {
-            false
-        }
+        chr.map_or(false, |c| SYMBOLS.contains(c))
     }
 
     fn is_space(&self, chr: Option<char>) -> bool {
-        matches!(chr, Some('\r') | Some('\t') | Some(' '))
+        matches!(chr, Some('\r' | '\t' | ' '))
     }
 
-    fn lower(&mut self) -> Result<TokenKind> {
+    fn lower(&mut self) -> TokenKind {
         self.bump_while(Self::is_alpha);
-
         self.bump_while(|_, ch| matches!(ch, Some('\'' | '?' | '!')));
 
         if let Some(keyword) = get_keyword(self.value()) {
-            Ok(keyword)
+            keyword
         } else {
-            Ok(TokenKind::Lower)
+            TokenKind::Lower
         }
     }
 
-    fn upper(&mut self) -> Result<TokenKind> {
-        self.bump_while(Self::is_alpha);
-        Ok(TokenKind::Upper)
+    fn upper(&mut self) -> TokenKind {
+        self.bump_while(Lexer::is_alpha);
+        TokenKind::Upper
     }
 
-    fn number(&mut self, prefix: bool) -> Result<TokenKind> {
+    fn number(&mut self, prefix: bool) -> TokenKind {
         if prefix {
             self.bump();
         }
@@ -375,7 +363,7 @@ impl<'src> Lexer<'src> {
             self.bump_while(Self::is_number);
         }
 
-        Ok(TokenKind::Number)
+        TokenKind::Number
     }
 
     fn space(&mut self) -> Result<TokenKind> {
@@ -392,8 +380,8 @@ impl<'src> Lexer<'src> {
     where
         P: Fn(&Self, Option<char>) -> bool,
     {
-        while pred(&self, self.curr) {
-            self.bump()
+        while pred(self, self.curr) {
+            self.bump();
         }
     }
 }
@@ -407,14 +395,11 @@ mod tests {
         let mut lexer = Lexer::new("variable = 1");
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Lower);
-        assert_eq!(lexer.indent(), 0);
         assert_eq!(lexer.value(), "variable");
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
-        assert_eq!(lexer.indent(), 9);
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Number);
-        assert_eq!(lexer.indent(), 11);
         assert_eq!(lexer.value(), "1");
     }
 
@@ -433,14 +418,12 @@ mod tests {
 
     #[test]
     fn test_keywords() {
-        let mut lexer = Lexer::new("if then else and or not");
+        let mut lexer = Lexer::new("and or not is");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::If);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Then);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Else);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::And);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Or);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Not);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Is);
     }
 
     #[test]
@@ -515,7 +498,6 @@ mod tests {
     #[test]
     fn test_empty_lines() {
         let mut lexer = Lexer::new("\n\n\n");
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::NewLine);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::EOF);
     }
 }

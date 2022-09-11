@@ -7,5 +7,3 @@ version = "0.1.0"
 name = "netrine"
 
 [dependencies]
-netrine_core = { version = "0.1.0", path="./crates/netrine_core" }
-netrine_syntax = { version = "0.1.0", path="./crates/netrine_syntax" }

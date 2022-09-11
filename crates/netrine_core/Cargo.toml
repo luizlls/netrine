@@ -1,9 +1,0 @@
-[package]
-authors = ["Luiz Lopes <luizlopesdev@gmail.com>"]
-description = "Netrine core modules"
-edition = "2018"
-license = "MIT"
-version = "0.1.0"
-name = "netrine_core"
-
-[dependencies]
