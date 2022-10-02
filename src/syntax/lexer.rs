@@ -1,7 +1,7 @@
 use std::str::Chars;
 
-use super::token::{Token, TokenKind, get_keyword};
-use crate::error::{NetrineError, Result, error};
+use super::token::{get_keyword, Token, TokenKind};
+use crate::error::{error, NetrineError, Result};
 use crate::span::Span;
 
 const SYMBOLS: &str = ".!:=+-<>*/%|";
@@ -17,11 +17,10 @@ enum Mode {
 pub struct Lexer<'src> {
     src: &'src str,
     chars: Chars<'src>,
-    curr: Option<char>,
-    peek: Option<char>,
+    curr : Option<char>,
+    peek : Option<char>,
     start: usize,
     offset: usize,
-    line: u32,
     mode: Mode,
 }
 
@@ -34,7 +33,6 @@ impl<'src> Lexer<'src> {
             peek: None,
             start: 0,
             offset: 0,
-            line: 1,
             mode: Mode::Regular,
         };
 
@@ -67,21 +65,8 @@ impl<'src> Lexer<'src> {
         self.peek = self.chars.next();
     }
 
-    fn line(&mut self) -> Result<TokenKind> {
-        while self.curr == Some('\n') {
-            self.bump();
-            self.line += 1;
-        }
-
-        self.next_token()
-    }
-
     fn span(&self) -> Span {
-        Span {
-            line: self.line,
-            start: self.start as u32,
-            end: self.offset as u32,
-        }
+        Span(self.start as u32, self.offset as u32)
     }
 
     fn next_token(&mut self) -> Result<TokenKind> {
@@ -97,7 +82,7 @@ impl<'src> Lexer<'src> {
                     self.space()
                 }
                 '\n' => {
-                    self.line()
+                    Ok(self.line())
                 }
                 'a'..='z' | '_' => {
                     Ok(self.lower())
@@ -173,7 +158,7 @@ impl<'src> Lexer<'src> {
                     if self.peek == Some('.') {
                         self.bump();
                         self.bump();
-                        Ok(TokenKind::Range)
+                        Ok(TokenKind::DotDot)
                     } else {
                         self.bump();
                         Ok(TokenKind::Dot)
@@ -183,21 +168,41 @@ impl<'src> Lexer<'src> {
                     if self.peek == Some('=') {
                         self.bump();
                         self.bump();
-                        Ok(TokenKind::Eq)
+                        Ok(TokenKind::EqEq)
                     } else {
                         self.bump();
-                        Ok(TokenKind::Equals)
+                        Ok(TokenKind::Eq)
                     }
                 }
                 ':' => {
                     self.bump();
                     Ok(TokenKind::Colon)
                 }
+                '+' => {
+                    self.bump();
+                    Ok(TokenKind::Plus)
+                }
+                '-' => {
+                    self.bump();
+                    Ok(TokenKind::Minus)
+                }
+                '*' => {
+                    self.bump();
+                    Ok(TokenKind::Star)
+                }
+                '/' => {
+                    self.bump();
+                    Ok(TokenKind::Slash)
+                }
+                '%' => {
+                    self.bump();
+                    Ok(TokenKind::Mod)
+                }
                 '<' => {
                     if self.peek == Some('=') {
                         self.bump();
                         self.bump();
-                        Ok(TokenKind::Le)
+                        Ok(TokenKind::LeEq)
                     } else {
                         self.bump();
                         Ok(TokenKind::Lt)
@@ -207,7 +212,7 @@ impl<'src> Lexer<'src> {
                     if self.peek == Some('=') {
                         self.bump();
                         self.bump();
-                        Ok(TokenKind::Ge)
+                        Ok(TokenKind::GtEq)
                     } else {
                         self.bump();
                         Ok(TokenKind::Gt)
@@ -217,7 +222,7 @@ impl<'src> Lexer<'src> {
                     if self.peek == Some('=') {
                         self.bump();
                         self.bump();
-                        Ok(TokenKind::Ne)
+                        Ok(TokenKind::BangEq)
                     } else {
                         error!(self.span(), "invalid operator")
                     }
@@ -230,26 +235,6 @@ impl<'src> Lexer<'src> {
                     } else {
                         error!(self.span(), "invalid operator")
                     }
-                }
-                '+' => {
-                    self.bump();
-                    Ok(TokenKind::Add)
-                }
-                '-' => {
-                    self.bump();
-                    Ok(TokenKind::Sub)
-                }
-                '*' => {
-                    self.bump();
-                    Ok(TokenKind::Mul)
-                }
-                '/' => {
-                    self.bump();
-                    Ok(TokenKind::Div)
-                }
-                '%' => {
-                    self.bump();
-                    Ok(TokenKind::Rem)
                 }
                 _ => error!(self.span(), "unexpected character"),
             }
@@ -317,10 +302,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn is_alpha(&self, chr: Option<char>) -> bool {
-        matches!(
-            chr,
-            Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_')
-        )
+        matches!(chr, Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
     }
 
     fn is_number(&self, chr: Option<char>) -> bool {
@@ -347,7 +329,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn upper(&mut self) -> TokenKind {
-        self.bump_while(Lexer::is_alpha);
+        self.bump_while(Self::is_alpha);
         TokenKind::Upper
     }
 
@@ -364,6 +346,14 @@ impl<'src> Lexer<'src> {
         }
 
         TokenKind::Number
+    }
+
+    fn line(&mut self) -> TokenKind {
+        while self.curr == Some('\n') {
+            self.bump();
+        }
+
+        TokenKind::NewLine
     }
 
     fn space(&mut self) -> Result<TokenKind> {
@@ -397,7 +387,7 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Lower);
         assert_eq!(lexer.value(), "variable");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Eq);
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Number);
         assert_eq!(lexer.value(), "1");
@@ -432,20 +422,20 @@ mod tests {
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Colon);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Range);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::DotDot);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Pipe);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Eq);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Ne);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Add);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Sub);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Mul);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Div);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Rem);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::EqEq);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::BangEq);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Plus);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Minus);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Star);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Slash);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Mod);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Gt);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Lt);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Ge);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Le);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::GtEq);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::LeEq);
     }
 
     #[test]
@@ -498,6 +488,7 @@ mod tests {
     #[test]
     fn test_empty_lines() {
         let mut lexer = Lexer::new("\n\n\n");
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::NewLine);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::EOF);
     }
 }

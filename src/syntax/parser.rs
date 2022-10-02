@@ -1,6 +1,6 @@
-use super::ast::*;
 use super::token::{Token, TokenKind};
 use super::lexer::Lexer;
+use super::node::*;
 
 use crate::error::{NetrineError, Result, error};
 use crate::span::Span;
@@ -29,71 +29,76 @@ impl<'s> Parser<'s> {
     fn initialize(mut self) -> Result<Parser<'s>> {
         self.bump()?; // peek token
         self.bump()?; // token token
+
+        while self.token.is(TokenKind::NewLine) {
+            self.bump()?;
+        }
+
         Ok(self)
     }
 
-    fn parse_top_level(&mut self) -> Result<Expr> {
+    fn top_level(&mut self) -> Result<Node> {
         match self.token.kind {
-            TokenKind::Lower if self.peek.is(TokenKind::Equals) => {
-                self.parse_def()
+            TokenKind::Lower if self.peek.is(TokenKind::Eq) => {
+                self.define()
             }
             _ => error!(self.token.span, "expected definition")
         }
     }
 
-    fn parse_expr(&mut self) -> Result<Expr> {
+    fn expression(&mut self) -> Result<Node> {
         match self.token.kind {
-            TokenKind::Lower if self.peek.is(TokenKind::Equals) => {
-                self.parse_def()
+            TokenKind::Lower if self.peek.is(TokenKind::Eq) => {
+                self.define()
             }
-            _ => self.parse_binary(0)
+            _ => self.binary(0)
         }
     }
 
-    fn parse_term(&mut self) -> Result<Expr> {
+    fn term(&mut self) -> Result<Node> {
         match self.token.kind {
-            TokenKind::LParen => self.parse_parens(),
-            TokenKind::Lower  => self.parse_lower(),
-            TokenKind::Upper  => self.parse_upper(),
-            TokenKind::Number => self.parse_number(),
-            TokenKind::String => self.parse_string(),
+            TokenKind::LParen => self.parens(),
+            TokenKind::Lower  => self.lower(),
+            TokenKind::Upper  => self.upper(),
+            TokenKind::Number => self.number(),
+            TokenKind::String => self.string(),
             _ => error!(self.token.span, "expected a term"),
         }
     }
 
-    fn parse_name(&mut self) -> Result<Name> {
+    fn identifier(&mut self) -> Result<Identifier> {
         let span = self.expect(TokenKind::Lower)?;
         let value = self.source.content[span.range()].to_string();
-        Ok(Name { value, span })
+        Ok(Identifier { value, span })
     }
 
-    fn parse_lower(&mut self) -> Result<Expr> {
-        Ok(Expr::Name(self.parse_name()?))
+    fn lower(&mut self) -> Result<Node> {
+        Ok(Node::Id(self.identifier()?))
     }
 
-    fn parse_upper(&mut self) -> Result<Expr> {
+    fn upper(&mut self) -> Result<Node> {
         let span = self.expect(TokenKind::Upper)?;
         let value = self.source.content[span.range()].to_string();
 
         match &value[..] {
-            "True"  => Ok(Expr::True(span)),
-            "False" => Ok(Expr::False(span)),
+            "True"  => Ok(Node::True(span)),
+            "False" => Ok(Node::False(span)),
             _ => {
                 error!(span, "anonymous variants are not supported yet")
             }
         }
     }
 
-    fn parse_parens(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+    fn parens(&mut self) -> Result<Node> {
+        let start = self.token;
 
-        let mut elements = self.parse_sequence_of(
+        let mut elements = self.sequence_of(
             TokenKind::LParen,
             TokenKind::RParen,
-            Self::parse_expr
+            Self::expression,
         )?;
 
-        let span = self.span(start);
+        let span = Span::of(&start, &self.prev);
 
         if elements.len() == 1 {
             Ok(elements.pop().unwrap())
@@ -102,99 +107,159 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn parse_number(&mut self) -> Result<Expr> {
+    fn number(&mut self) -> Result<Node> {
         let span = self.expect(TokenKind::Number)?;
         let value = self.source.content[span.range()].to_string();
-        Ok(Expr::Number(Literal { value, span }))
+
+        Ok(Node::Number(Literal { value, span }))
     }
 
-    fn parse_string(&mut self) -> Result<Expr> {
+    fn string(&mut self) -> Result<Node> {
         let span = self.expect(TokenKind::String)?;
         let value = self.source.content[span.range()].to_string();
-        Ok(Expr::String(Literal { value, span }))
+
+        Ok(Node::String(Literal { value, span }))
     }
 
-    fn parse_def(&mut self) -> Result<Expr> {
-        let start = self.token.span;
+    fn define(&mut self) -> Result<Node> {
+        let name = self.identifier()?;
+        self.expect(TokenKind::Eq)?;
+        let value = self.expression()?;
 
-        let name = self.parse_name()?;
-        self.expect(TokenKind::Equals)?;
-        let value = self.parse_expr()?;
+        let span = Span::of(&name, &value);
 
-        let span = self.span(start);
-
-        Ok(Expr::Def(box Def { name, value, span }))
+        Ok(Node::Define(box Define { name, value, span }))
     }
-    
-    fn parse_unary(&mut self) -> Result<Expr> {
-        if self.token.is(TokenKind::Not) {
-            let operator = self.parse_operator()?;
-            let right = self.parse_term()?;
-            let span = Span::from(operator.span, right.span());
 
-            Ok(Expr::Unary(box Unary { operator, right, span }))
+    fn initial(&mut self) -> Result<Node> {
+        self.term()
+    }
+
+    fn unary(&mut self) -> Result<Node> {
+        if let Ok(operator) = self.operator() {
+            self.bump()?;
+
+            if self.token.terminator() {
+                let span = operator.span;
+                Ok(Node::Partial(box Partial {
+                    operator,
+                    rhs: None,
+                    lhs: None,
+                    span,
+                }))
+            } else {
+                let rhs = self.expression()?;
+                let span = Span::of(&operator, &rhs);
+
+                if operator.unary() {
+                    Ok(Node::Unary(box Unary {
+                        operator,
+                        rhs,
+                        span,
+                    }))
+                } else {
+                    Ok(Node::Partial(box Partial {
+                        operator,
+                        lhs: None,
+                        rhs: Some(rhs),
+                        span,
+                    }))
+                }
+            }
         } else {
-            self.parse_term()
+            self.initial()
         }
     }
 
-    fn parse_binary(&mut self, minimum_precedence: u8) -> Result<Expr> {
-        let mut expr = self.parse_unary()?;
-        
-        while self.token.is_operator() {
-            if let Some(precedence) = self.token.precedence() {
-                if precedence < minimum_precedence {
-                    break;
-                }
+    fn binary(&mut self, mininum: u8) -> Result<Node> {
+        let mut expr = self.unary()?;
 
-                let operator = self.parse_operator()?;
+        while let Ok(operator) = self.operator() {
 
-                let right = self.parse_binary(precedence + 1)?;
-                let left = expr;
-
-                let span = Span::from(
-                    left.span(), right.span(),
-                );
-
-                expr = Expr::Binary(box Binary { operator, left, right, span });
+            if operator.precedence() < mininum {
+                break;
             }
+
+            self.bump()?;
+
+            // partial operator application
+            if self.token.terminator() {
+                let span = Span::of(&expr, &operator);
+
+                return Ok(Node::Partial(box Partial {
+                    operator,
+                    rhs: None,
+                    lhs: Some(expr),
+                    span,
+                }));
+            }
+
+            let rhs = self.binary(operator.precedence() + 1)?;
+            let lhs = expr;
+            let span = Span::of(&lhs, &rhs);
+
+            expr = Node::Binary(box Binary {
+                operator,
+                lhs,
+                rhs,
+                span,
+            });
         }
 
         Ok(expr)
     }
 
-    fn parse_operator(&mut self) -> Result<Operator> {
+    fn is_unary(&self) -> bool {
+        match self.token.kind {
+            TokenKind::Plus
+          | TokenKind::Minus => {
+                match self.peek.kind {
+                    TokenKind::Lower
+                  | TokenKind::LParen
+                  | TokenKind::LBrace
+                  | TokenKind::Number => {
+                    // there is no spaces between the operator and the next token
+                    self.peek.span.start() - self.token.span.end() == 0
+                  }
+                  _ => false
+                }
+            }
+            _ => false
+        }
+    }
+
+    fn operator(&mut self) -> Result<Operator> {
         let span = self.token.span;
 
         let kind = match self.token.kind {
-            TokenKind::Add   => OperatorKind::Add,
-            TokenKind::Sub   => OperatorKind::Sub,
-            TokenKind::Mul   => OperatorKind::Mul,
-            TokenKind::Div   => OperatorKind::Div,
-            TokenKind::Rem   => OperatorKind::Rem,
-            TokenKind::And   => OperatorKind::And,
-            TokenKind::Or    => OperatorKind::Or,
-            TokenKind::Not   => OperatorKind::Not,
-            TokenKind::Is    => OperatorKind::Is,
-            TokenKind::Eq    => OperatorKind::Eq,
-            TokenKind::Ne    => OperatorKind::Ne,
-            TokenKind::Lt    => OperatorKind::Lt,
-            TokenKind::Le    => OperatorKind::Le,
-            TokenKind::Gt    => OperatorKind::Gt,
-            TokenKind::Ge    => OperatorKind::Ge,
-            TokenKind::Pipe  => OperatorKind::Pipe,
-            TokenKind::Range => OperatorKind::Range,
+            TokenKind::Plus  if self.is_unary() => OperatorKind::Pos,
+            TokenKind::Minus if self.is_unary() => OperatorKind::Neg,
+            TokenKind::Plus   => OperatorKind::Add,
+            TokenKind::Minus  => OperatorKind::Sub,
+            TokenKind::Star   => OperatorKind::Mul,
+            TokenKind::Slash  => OperatorKind::Div,
+            TokenKind::Mod    => OperatorKind::Mod,
+            TokenKind::And    => OperatorKind::And,
+            TokenKind::Or     => OperatorKind::Or,
+            TokenKind::Not    => OperatorKind::Not,
+            TokenKind::Is     => OperatorKind::Is,
+            TokenKind::EqEq   => OperatorKind::Eq,
+            TokenKind::BangEq => OperatorKind::Ne,
+            TokenKind::Lt     => OperatorKind::Lt,
+            TokenKind::LeEq   => OperatorKind::Le,
+            TokenKind::Gt     => OperatorKind::Gt,
+            TokenKind::GtEq   => OperatorKind::Ge,
+            TokenKind::Pipe   => OperatorKind::Pipe,
+            TokenKind::DotDot => OperatorKind::Range,
             _ => {
                 return error!(span, "`{}` is not a valid operator", self.token.kind);
             }
         };
 
-        self.bump()?;
-
         Ok(Operator { kind, span })
     }
 
-    fn parse_sequence_of<T, F>(
+    fn sequence_of<T, F>(
         &mut self,
         open: TokenKind,
         close: TokenKind,
@@ -214,10 +279,6 @@ impl<'s> Parser<'s> {
         self.expect(close)?;
 
         Ok(result)
-    }
-
-    fn span(&self, start: Span) -> Span {
-        Span::from(start, self.prev.span)
     }
 
     fn bump(&mut self) -> Result<Span> {
@@ -243,12 +304,12 @@ impl<'s> Parser<'s> {
     }
 }
 
-pub fn parse(source: &Source) -> Result<Vec<Expr>> {
+pub fn parse(source: &Source) -> Result<Vec<Node>> {
     let mut parser = Parser::new(source).initialize()?;
     let mut module = vec![];
 
     while !parser.done() {
-        module.push(parser.parse_top_level()?);
+        module.push(parser.top_level()?);
     }
 
     Ok(module)
@@ -266,25 +327,24 @@ mod tests {
         }
     }
 
-    fn module(code: &str) -> Vec<Expr> {
+    fn module(code: &str) -> Vec<Node> {
         parse(&source(&code)).unwrap()
     }
 
-    fn expr(code: &str) -> Expr {
+    fn expr(code: &str) -> Node {
         Parser::new(&source(&code))
             .initialize()
             .unwrap()
-            .parse_expr()
+            .expression()
             .unwrap()
-    }
-
-    fn span(start: u32, end: u32) -> Span {
-        Span { line: 1, start, end }
     }
 
     macro_rules! assert_error_expr {
         ($code:expr) => {
-            if let Err(_) = Parser::new(&source(&$code)).parse_expr() {
+            if let Err(_) = Parser::new(&source(&$code))
+              .initialize()
+              .unwrap()
+              .expression() {
                 assert!(true)
             } else {
                 assert!(false)
@@ -305,41 +365,41 @@ mod tests {
     fn test_name() {
         assert_eq!(
             expr("netrine"),
-            Expr::Name(Name {
+            Node::Id(Identifier {
                 value: "netrine".to_string(),
-                span: span(0, 7)
+                span: Span(0, 7)
             })
         );
 
         assert_eq!(
             expr("maybe?"),
-            Expr::Name(Name {
+            Node::Id(Identifier {
                 value: "maybe?".to_string(),
-                span: span(0, 6)
+                span: Span(0, 6)
             })
         );
 
         assert_eq!(
             expr("dangerous!"),
-            Expr::Name(Name {
+            Node::Id(Identifier {
                 value: "dangerous!".to_string(),
-                span: span(0, 10)
+                span: Span(0, 10)
             })
         );
 
         assert_eq!(
             expr("prime'"),
-            Expr::Name(Name {
+            Node::Id(Identifier {
                 value: "prime'".to_string(),
-                span: span(0, 6)
+                span: Span(0, 6)
             })
         );
 
         assert_eq!(
             expr("primes''''"),
-            Expr::Name(Name {
+            Node::Id(Identifier {
                 value: "primes''''".to_string(),
-                span: span(0, 10)
+                span: Span(0, 10)
             })
         );
     }
@@ -348,42 +408,263 @@ mod tests {
     fn test_literals() {
         assert_eq!(
             expr("42"),
-            Expr::Number(Literal {
+            Node::Number(Literal {
                 value: "42".to_string(),
-                span: span(0, 2)
+                span: Span(0, 2)
             })
         );
 
         assert_eq!(
             expr("3.14"),
-            Expr::Number(Literal {
+            Node::Number(Literal {
                 value: "3.14".to_string(),
-                span: span(0, 4)
+                span: Span(0, 4)
             })
         );
 
         assert_eq!(
             expr("\"hello\""),
-            Expr::String(Literal {
+            Node::String(Literal {
                 value: "\"hello\"".to_string(),
-                span: span(0, 7)
+                span: Span(0, 7)
             })
         );
 
         assert_eq!(
             expr("_"),
-            Expr::Name(Name {
+            Node::Id(Identifier {
                 value: "_".to_string(),
-                span: span(0, 1)
+                span: Span(0, 1)
             })
         );
 
-        assert_eq!(expr("True"), Expr::True(span(0, 4)));
+        assert_eq!(expr("True"), Node::True(Span(0, 4)));
 
-        assert_eq!(expr("False"), Expr::False(span(0, 5)));
+        assert_eq!(expr("False"), Node::False(Span(0, 5)));
 
         assert_error_expr!("\"unclosed");
 
         assert_error_expr!("1.");
+    }
+
+    #[test]
+    fn test_basic_definition() {
+        assert_eq!(
+            expr("value = 10"),
+            Node::Define(box Define {
+                name: Identifier {
+                    value: "value".into(), span: Span(0, 5)
+                },
+                value: Node::Number(
+                    Literal {
+                        value: "10".into(), span: Span(8, 10)
+                    }
+                ),
+                span: Span(0, 10)
+            })
+        );
+
+        assert_error_expr!("value = ");
+    }
+
+    #[test]
+    fn test_unary_operation() {
+        assert_eq!(
+            expr("not True"),
+            Node::Unary(box Unary {
+                operator: Operator {
+                    kind: OperatorKind::Not,
+                    span: Span(0, 3)
+                },
+                rhs: Node::True(Span(4, 8)),
+                span: Span(0, 8)
+            })
+        );
+
+        assert_eq!(
+            expr("+x"),
+            Node::Unary(box Unary {
+                operator: Operator {
+                    kind: OperatorKind::Pos,
+                    span: Span(0, 1)
+                },
+                rhs: Node::Id(Identifier {
+                    value: "x".to_string(),
+                    span: Span(1, 2)
+                }),
+                span: Span(0, 2)
+            })
+        );
+
+        assert_eq!(
+            expr("-x"),
+            Node::Unary(box Unary {
+                operator: Operator {
+                    kind: OperatorKind::Neg,
+                    span: Span(0, 1)
+                },
+                rhs: Node::Id(Identifier {
+                    value: "x".to_string(),
+                    span: Span(1, 2)
+                }),
+                span: Span(0, 2)
+            })
+        );
+
+        assert_error_expr!("+");
+
+        assert_error_expr!("-");
+
+        assert_error_expr!("not");
+    }
+
+    #[test]
+    fn test_basic_binary_operation() {
+        let operations = vec![
+            ("+", OperatorKind::Add),
+            ("-", OperatorKind::Sub),
+            ("*", OperatorKind::Mul),
+            ("/", OperatorKind::Div),
+            ("%", OperatorKind::Mod),
+        ];
+
+        for (symbol, operator) in operations {
+            assert_eq!(
+                expr(&format!("1 {} 1", symbol)),
+                Node::Binary(box Binary {
+                    operator: Operator {
+                        kind: operator,
+                        span: Span(2, 3)
+                    },
+                    lhs: Node::Number(
+                        Literal {
+                            value: "1".into(),
+                            span: Span(0, 1)
+                        }
+                    ),
+                    rhs: Node::Number(
+                        Literal {
+                            value: "1".into(),
+                            span: Span(4, 5)
+                        }
+                    ),
+                    span: Span(0, 5)
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn test_complex_binary_operation() {
+        assert_eq!(
+            expr("a + b - c * d / e"),
+            // sub(add(a, b), div(mul(c, d), e))
+            Node::Binary(box Binary {
+                operator: Operator {
+                    kind: OperatorKind::Sub,
+                    span: Span(6, 7),
+                },
+                lhs: Node::Binary(box Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Add,
+                        span: Span(2, 3),
+                    },
+                    lhs: Node::Id(Identifier {
+                        value: "a".to_string(),
+                        span: Span(0, 1),
+                    }),
+                    rhs: Node::Id(Identifier {
+                        value: "b".to_string(),
+                        span: Span(4, 5),
+                    }),
+                    span: Span(0, 5),
+                }),
+                rhs: Node::Binary(box Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Div,
+                        span: Span(14, 15),
+                    },
+                    lhs: Node::Binary(box Binary {
+                        operator: Operator {
+                            kind: OperatorKind::Mul,
+                            span: Span(10, 11),
+                        },
+                        lhs: Node::Id(Identifier {
+                            value: "c".to_string(),
+                            span: Span(8, 9),
+                        }),
+                        rhs: Node::Id(Identifier {
+                            value: "d".to_string(),
+                            span: Span(12, 13),
+                        }),
+                        span: Span(8, 13),
+                    }),
+                    rhs: Node::Id(Identifier {
+                        value: "e".to_string(),
+                        span: Span(16, 17),
+                    }),
+                    span: Span(8, 17),
+                }),
+                span: Span(0, 17),
+            }),
+        );
+    }
+
+    #[test]
+    fn test_empty_partial_operation() {
+        assert_eq!(
+            expr("(+)"),
+            Node::Partial(box Partial {
+                operator: Operator {
+                    kind: OperatorKind::Add,
+                    span: Span(1, 2)
+                },
+                lhs: None,
+                rhs: None,
+                span: Span(1, 2)
+            })
+        );
+    }
+
+    #[test]
+    fn test_left_partial_operation() {
+        assert_eq!(
+            expr("(+ x)"),
+            Node::Partial(box Partial {
+                operator: Operator {
+                    kind: OperatorKind::Add,
+                    span: Span(1, 2)
+                },
+                rhs: Some(Node::Id(
+                    Identifier {
+                        value: "x".to_string(),
+                        span: Span(3, 4)
+                    })
+                ),
+                lhs: None,
+                span: Span(1, 4)
+            })
+        );
+    }
+
+    #[test]
+    fn test_right_partial_operation() {
+        assert_eq!(
+            expr("(x +)"),
+            Node::Partial(box Partial {
+                operator: Operator {
+                    kind: OperatorKind::Add,
+                    span: Span(3, 4)
+                },
+                lhs: Some(Node::Id(
+                    Identifier {
+                        value: "x".to_string(),
+                        span: Span(1, 2)
+                    })
+                ),
+                rhs: None,
+                span: Span(1, 4)
+            })
+        );
     }
 }

@@ -1,4 +1,4 @@
 /target
 /.vscode
-input.*
-output.*
+input
+output

@@ -1,5 +1,6 @@
 #![feature(box_syntax)]
 #![feature(box_patterns)]
+#![feature(let_chains)]
 
 mod error;
 mod source;
@@ -12,7 +13,6 @@ use std::path::PathBuf;
 
 use crate::source::Source;
 use crate::syntax::parse;
-
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -49,7 +49,7 @@ fn repl() {
 fn read_line() -> Result<String, ()> {
     let mut line = String::new();
     print!(">>>> ");
-    
+
     stdout().flush().unwrap();
 
     match stdin().read_line(&mut line) {
