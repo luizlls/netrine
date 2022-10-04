@@ -1,6 +1,6 @@
 #![macro_use]
 
-pub mod node;
+pub mod nodes;
 mod lexer;
 mod parser;
 mod token;

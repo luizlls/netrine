@@ -17,11 +17,11 @@ pub enum TokenKind {
     LBracket,
     RBracket,
 
-    Dot,   // .
-    Comma, // ,
-    Semi,  // ;
-    Colon, // :
-    Eq,    // =
+    Dot,    // .
+    Comma,  // ,
+    Semi,   // ;
+    Colon,  // :
+    Equals, // =
 
     And,    // and
     Or,     // or
@@ -51,13 +51,13 @@ pub enum TokenKind {
     StringSlice,
 
     NewLine,
-    EOF,
+    Eof,
 }
 
 impl Default for Token {
     fn default() -> Self {
         Token {
-            kind: TokenKind::EOF,
+            kind: TokenKind::Eof,
             span: Span(0, 0),
         }
     }
@@ -82,7 +82,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Comma => write!(f, ","),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
-            TokenKind::Eq => write!(f, "="),
+            TokenKind::Equals => write!(f, "="),
             TokenKind::And => write!(f, "and"),
             TokenKind::Or => write!(f, "or"),
             TokenKind::Not => write!(f, "not"),
@@ -108,7 +108,7 @@ impl fmt::Display for TokenKind {
             TokenKind::StringEnd => write!(f, "end of string"),
             TokenKind::StringSlice => write!(f, "slice of string"),
             TokenKind::NewLine => write!(f, "new line"),
-            TokenKind::EOF => write!(f, "end of file"),
+            TokenKind::Eof => write!(f, "end of file"),
         }
     }
 }

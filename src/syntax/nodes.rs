@@ -6,6 +6,8 @@ pub enum Node {
 
     Define(Box<Define>),
 
+    Call(Box<Call>),
+
     Unary(Box<Unary>),
 
     Binary(Box<Binary>),
@@ -26,6 +28,7 @@ impl WithSpan for Node {
         match self {
             Node::Id(node) => node.span,
             Node::Define(node) => node.span,
+            Node::Call(node) => node.span,
             Node::Unary(node) => node.span,
             Node::Binary(node) => node.span,
             Node::Partial(node) => node.span,
@@ -65,6 +68,20 @@ impl WithSpan for Literal {
 pub struct Define {
     pub name: Identifier,
     pub value: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Call {
+    pub function: Node,
+    pub arguments: Vec<Argument>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Argument {
+    pub value: Node,
+    pub name: Option<Identifier>,
     pub span: Span,
 }
 

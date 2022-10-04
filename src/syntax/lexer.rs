@@ -147,7 +147,7 @@ impl<'src> Lexer<'src> {
                 }
             }
         } else {
-            Ok(TokenKind::EOF)
+            Ok(TokenKind::Eof)
         }
     }
 
@@ -171,7 +171,7 @@ impl<'src> Lexer<'src> {
                         Ok(TokenKind::EqEq)
                     } else {
                         self.bump();
-                        Ok(TokenKind::Eq)
+                        Ok(TokenKind::Equals)
                     }
                 }
                 ':' => {
@@ -239,7 +239,7 @@ impl<'src> Lexer<'src> {
                 _ => error!(self.span(), "unexpected character"),
             }
         } else {
-            Ok(TokenKind::EOF)
+            Ok(TokenKind::Eof)
         }
     }
 
@@ -387,7 +387,7 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Lower);
         assert_eq!(lexer.value(), "variable");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Eq);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Number);
         assert_eq!(lexer.value(), "1");
@@ -424,7 +424,7 @@ mod tests {
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::DotDot);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Pipe);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Eq);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::EqEq);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::BangEq);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Plus);
@@ -489,6 +489,6 @@ mod tests {
     fn test_empty_lines() {
         let mut lexer = Lexer::new("\n\n\n");
         assert_eq!(lexer.next_token().unwrap(), TokenKind::NewLine);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::EOF);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Eof);
     }
 }
