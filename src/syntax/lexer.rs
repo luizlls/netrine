@@ -1,7 +1,7 @@
 use std::str::Chars;
 
 use super::token::{get_keyword, Token, TokenKind};
-use crate::error::{error, NetrineError, Result};
+use crate::error::{err, NetrineError, Result};
 use crate::span::Span;
 
 const SYMBOLS: &str = ".!:=+-<>*/%|";
@@ -82,7 +82,7 @@ impl<'src> Lexer<'src> {
                     self.space()
                 }
                 '\n' => {
-                    Ok(self.line())
+                    self.lines()
                 }
                 'a'..='z' | '_' => {
                     Ok(self.lower())
@@ -143,7 +143,7 @@ impl<'src> Lexer<'src> {
                     self.operator()
                 }
                 _ => {
-                    error!(self.span(), "unexpected character")
+                    err!(self.span(), "unexpected character")
                 }
             }
         } else {
@@ -152,94 +152,94 @@ impl<'src> Lexer<'src> {
     }
 
     fn operator(&mut self) -> Result<TokenKind> {
-        if let Some(chr) = self.curr {
-            match chr {
-                '.' => {
-                    if self.peek == Some('.') {
-                        self.bump();
-                        self.bump();
-                        Ok(TokenKind::DotDot)
-                    } else {
-                        self.bump();
-                        Ok(TokenKind::Dot)
-                    }
-                }
-                '=' => {
-                    if self.peek == Some('=') {
-                        self.bump();
-                        self.bump();
-                        Ok(TokenKind::EqEq)
-                    } else {
-                        self.bump();
-                        Ok(TokenKind::Equals)
-                    }
-                }
-                ':' => {
+        match self.curr.unwrap() {
+            '.' => {
+                self.bump();
+                if self.curr == Some('.') {
                     self.bump();
-                    Ok(TokenKind::Colon)
-                }
-                '+' => {
-                    self.bump();
-                    Ok(TokenKind::Plus)
-                }
-                '-' => {
-                    self.bump();
-                    Ok(TokenKind::Minus)
-                }
-                '*' => {
-                    self.bump();
-                    Ok(TokenKind::Star)
-                }
-                '/' => {
-                    self.bump();
-                    Ok(TokenKind::Slash)
-                }
-                '%' => {
-                    self.bump();
-                    Ok(TokenKind::Mod)
-                }
-                '<' => {
-                    if self.peek == Some('=') {
+                    if self.curr == Some('.') {
                         self.bump();
-                        self.bump();
-                        Ok(TokenKind::LeEq)
+                        Ok(TokenKind::Dot3)
                     } else {
-                        self.bump();
-                        Ok(TokenKind::Lt)
+                        Ok(TokenKind::Dot2)
                     }
+                } else {
+                    Ok(TokenKind::Dot)
                 }
-                '>' => {
-                    if self.peek == Some('=') {
-                        self.bump();
-                        self.bump();
-                        Ok(TokenKind::GtEq)
-                    } else {
-                        self.bump();
-                        Ok(TokenKind::Gt)
-                    }
-                }
-                '!' => {
-                    if self.peek == Some('=') {
-                        self.bump();
-                        self.bump();
-                        Ok(TokenKind::BangEq)
-                    } else {
-                        error!(self.span(), "invalid operator")
-                    }
-                }
-                '|' => {
-                    if self.peek == Some('>') {
-                        self.bump();
-                        self.bump();
-                        Ok(TokenKind::Pipe)
-                    } else {
-                        error!(self.span(), "invalid operator")
-                    }
-                }
-                _ => error!(self.span(), "unexpected character"),
             }
-        } else {
-            Ok(TokenKind::Eof)
+            '=' => {
+                if self.peek == Some('=') {
+                    self.bump();
+                    self.bump();
+                    Ok(TokenKind::EqEq)
+                } else {
+                    self.bump();
+                    Ok(TokenKind::Equals)
+                }
+            }
+            ':' => {
+                self.bump();
+                Ok(TokenKind::Colon)
+            }
+            '+' => {
+                self.bump();
+                Ok(TokenKind::Plus)
+            }
+            '-' => {
+                self.bump();
+                Ok(TokenKind::Minus)
+            }
+            '*' => {
+                self.bump();
+                Ok(TokenKind::Star)
+            }
+            '/' => {
+                self.bump();
+                Ok(TokenKind::Slash)
+            }
+            '%' => {
+                self.bump();
+                Ok(TokenKind::Mod)
+            }
+            '<' => {
+                self.bump();
+                if self.curr == Some('=') {
+                    self.bump();
+                    Ok(TokenKind::LeEq)
+                } else {
+                    Ok(TokenKind::Lt)
+                }
+            }
+            '>' => {
+                self.bump();
+                if self.curr == Some('=') {
+                    self.bump();
+                    Ok(TokenKind::GtEq)
+                } else {
+                    Ok(TokenKind::Gt)
+                }
+            }
+            '!' => {
+                if self.peek == Some('=') {
+                    self.bump();
+                    self.bump();
+                    Ok(TokenKind::BangEq)
+                } else {
+                    err!(self.span(), "invalid operator")
+                }
+            }
+            '|' => {
+                if self.peek == Some('>') {
+                    self.bump();
+                    self.bump();
+                    Ok(TokenKind::Pipe)
+                } else {
+                    err!(self.span(), "invalid operator")
+                }
+            }
+            _ => {
+                err!(self.span(), "unexpected character")
+            }
         }
     }
 
@@ -274,7 +274,7 @@ impl<'src> Lexer<'src> {
                     };
                 }
                 Some('\n') | None => {
-                    return error!(self.span(), "unterminated string")
+                    return err!(self.span(), "unterminated string")
                 }
                 Some('\\') => {
                     self.bump();
@@ -290,7 +290,7 @@ impl<'src> Lexer<'src> {
                             todo!("Validate escaped binary")
                         }
                         _ => {
-                            return error!(self.span(), "invalid escape character")
+                            return err!(self.span(), "invalid escape character")
                         }
                     }
                 }
@@ -348,12 +348,11 @@ impl<'src> Lexer<'src> {
         TokenKind::Number
     }
 
-    fn line(&mut self) -> TokenKind {
+    fn lines(&mut self) -> Result<TokenKind> {
         while self.curr == Some('\n') {
             self.bump();
         }
-
-        TokenKind::NewLine
+        self.next_token()
     }
 
     fn space(&mut self) -> Result<TokenKind> {
@@ -418,11 +417,12 @@ mod tests {
 
     #[test]
     fn test_operator() {
-        let mut lexer = Lexer::new(": . .. |> = == != + - * / % > < >= <=");
+        let mut lexer = Lexer::new(": . .. ... |> = == != + - * / % > < >= <=");
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Colon);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::DotDot);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot2);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot3);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Pipe);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::EqEq);

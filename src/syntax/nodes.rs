@@ -6,7 +6,7 @@ pub enum Node {
 
     Define(Box<Define>),
 
-    Call(Box<Call>),
+    Apply(Box<Apply>),
 
     Unary(Box<Unary>),
 
@@ -28,7 +28,7 @@ impl WithSpan for Node {
         match self {
             Node::Id(node) => node.span,
             Node::Define(node) => node.span,
-            Node::Call(node) => node.span,
+            Node::Apply(node) => node.span,
             Node::Unary(node) => node.span,
             Node::Binary(node) => node.span,
             Node::Partial(node) => node.span,
@@ -72,16 +72,9 @@ pub struct Define {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Call {
-    pub function: Node,
-    pub arguments: Vec<Argument>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Argument {
-    pub value: Node,
-    pub name: Option<Identifier>,
+pub struct Apply {
+    pub callee: Node,
+    pub arguments: Vec<Node>,
     pub span: Span,
 }
 
@@ -135,6 +128,7 @@ pub enum OperatorKind {
     Is,
     Pipe,
     Range,
+    Spread,
 }
 
 pub type Precedence = u8;
@@ -144,30 +138,32 @@ impl Operator {
         matches!(self.kind,
             OperatorKind::Not
           | OperatorKind::Pos
-          | OperatorKind::Neg)
+          | OperatorKind::Neg
+          | OperatorKind::Spread)
     }
 
     pub fn precedence(&self) -> Precedence {
         match self.kind {
-            OperatorKind::Not   => 0,
-            OperatorKind::Neg   => 0,
-            OperatorKind::Pos   => 0,
-            OperatorKind::Mul   => 7,
-            OperatorKind::Div   => 7,
-            OperatorKind::Mod   => 7,
-            OperatorKind::Add   => 6,
-            OperatorKind::Sub   => 6,
-            OperatorKind::Lt    => 5,
-            OperatorKind::Le    => 5,
-            OperatorKind::Gt    => 5,
-            OperatorKind::Ge    => 5,
-            OperatorKind::Ne    => 5,
-            OperatorKind::Eq    => 5,
-            OperatorKind::Is    => 5,
-            OperatorKind::And   => 4,
-            OperatorKind::Or    => 3,
-            OperatorKind::Range => 2,
-            OperatorKind::Pipe  => 1,
+            OperatorKind::Not    => 0,
+            OperatorKind::Neg    => 0,
+            OperatorKind::Pos    => 0,
+            OperatorKind::Spread => 0,
+            OperatorKind::Mul    => 7,
+            OperatorKind::Div    => 7,
+            OperatorKind::Mod    => 7,
+            OperatorKind::Add    => 6,
+            OperatorKind::Sub    => 6,
+            OperatorKind::Lt     => 5,
+            OperatorKind::Le     => 5,
+            OperatorKind::Gt     => 5,
+            OperatorKind::Ge     => 5,
+            OperatorKind::Ne     => 5,
+            OperatorKind::Eq     => 5,
+            OperatorKind::Is     => 5,
+            OperatorKind::And    => 4,
+            OperatorKind::Or     => 3,
+            OperatorKind::Range  => 2,
+            OperatorKind::Pipe   => 1,
         }
     }
 }
@@ -181,25 +177,26 @@ impl WithSpan for Operator {
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self.kind {
-            OperatorKind::And   => write!(f, "and"),
-            OperatorKind::Or    => write!(f, "or"),
-            OperatorKind::Not   => write!(f, "not"),
-            OperatorKind::Is    => write!(f, "is"),
-            OperatorKind::Add   => write!(f, "+"),
-            OperatorKind::Sub   => write!(f, "-"),
-            OperatorKind::Pos   => write!(f, "+"),
-            OperatorKind::Neg   => write!(f, "-"),
-            OperatorKind::Mul   => write!(f, "*"),
-            OperatorKind::Div   => write!(f, "/"),
-            OperatorKind::Mod   => write!(f, "%"),
-            OperatorKind::Eq    => write!(f, "=="),
-            OperatorKind::Ne    => write!(f, "!="),
-            OperatorKind::Lt    => write!(f, "<"),
-            OperatorKind::Le    => write!(f, "<="),
-            OperatorKind::Gt    => write!(f, ">"),
-            OperatorKind::Ge    => write!(f, ">="),
-            OperatorKind::Pipe  => write!(f, "|>"),
-            OperatorKind::Range => write!(f, ".."),
+            OperatorKind::And    => write!(f, "and"),
+            OperatorKind::Or     => write!(f, "or"),
+            OperatorKind::Not    => write!(f, "not"),
+            OperatorKind::Is     => write!(f, "is"),
+            OperatorKind::Add    => write!(f, "+"),
+            OperatorKind::Sub    => write!(f, "-"),
+            OperatorKind::Pos    => write!(f, "+"),
+            OperatorKind::Neg    => write!(f, "-"),
+            OperatorKind::Mul    => write!(f, "*"),
+            OperatorKind::Div    => write!(f, "/"),
+            OperatorKind::Mod    => write!(f, "%"),
+            OperatorKind::Eq     => write!(f, "=="),
+            OperatorKind::Ne     => write!(f, "!="),
+            OperatorKind::Lt     => write!(f, "<"),
+            OperatorKind::Le     => write!(f, "<="),
+            OperatorKind::Gt     => write!(f, ">"),
+            OperatorKind::Ge     => write!(f, ">="),
+            OperatorKind::Pipe   => write!(f, "|>"),
+            OperatorKind::Range  => write!(f, ".."),
+            OperatorKind::Spread => write!(f, "..."),
         }
     }
 }

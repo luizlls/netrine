@@ -7,7 +7,7 @@ use crate::span::Span;
 
 pub type Result<T> = ::std::result::Result<T, NetrineError>;
 
-macro_rules! error {
+macro_rules! err {
     ($span: expr, $text: expr, $($field: expr),*) => {
         Err(NetrineError::new($span, format!($text, $($field),*)))
     };
@@ -17,7 +17,7 @@ macro_rules! error {
     }
 }
 
-pub(crate) use error;
+pub(crate) use err;
 
 #[derive(Debug, Clone)]
 pub struct NetrineError {

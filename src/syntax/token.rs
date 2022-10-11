@@ -39,7 +39,8 @@ pub enum TokenKind {
     Gt,     // >
     GtEq,   // >=
     Pipe,   // |>
-    DotDot, // ..
+    Dot2,   // ..
+    Dot3,   // ...
 
     Lower,
     Upper,
@@ -79,6 +80,8 @@ impl fmt::Display for TokenKind {
             TokenKind::LBracket => write!(f, "["),
             TokenKind::RBracket => write!(f, "]"),
             TokenKind::Dot => write!(f, "."),
+            TokenKind::Dot2 => write!(f, ".."),
+            TokenKind::Dot3 => write!(f, "..."),
             TokenKind::Comma => write!(f, ","),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
@@ -99,7 +102,6 @@ impl fmt::Display for TokenKind {
             TokenKind::Gt => write!(f, ">"),
             TokenKind::GtEq => write!(f, ">="),
             TokenKind::Pipe => write!(f, "|>"),
-            TokenKind::DotDot => write!(f, ".."),
             TokenKind::Lower => write!(f, "lowercase name"),
             TokenKind::Upper => write!(f, "uppercase name"),
             TokenKind::Number => write!(f, "number"),

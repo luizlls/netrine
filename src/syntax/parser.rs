@@ -2,7 +2,7 @@ use super::token::{Token, TokenKind};
 use super::lexer::Lexer;
 use super::nodes::*;
 
-use crate::error::{NetrineError, Result, error};
+use crate::error::{NetrineError, Result, err};
 use crate::span::Span;
 use crate::source::Source;
 
@@ -26,7 +26,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn initialize(mut self) -> Result<Parser<'s>> {
+    fn init(mut self) -> Result<Parser<'s>> {
         self.bump()?; // peek token
         self.bump()?; // token token
 
@@ -42,16 +42,26 @@ impl<'s> Parser<'s> {
             TokenKind::Lower if self.peek.is(TokenKind::Equals) => {
                 self.define()
             }
-            _ => error!(self.token.span, "expected definition")
+            _ => err!(self.token.span, "expected definition")
         }
     }
 
-    fn expression(&mut self) -> Result<Node> {
+    fn expr(&mut self) -> Result<Node> {
         match self.token.kind {
             TokenKind::Lower if self.peek.is(TokenKind::Equals) => {
                 self.define()
             }
             _ => self.binary(0)
+        }
+    }
+
+    fn start_term(&self) -> bool {
+        match self.token.kind {
+            TokenKind::LParen
+          | TokenKind::Lower 
+          | TokenKind::Upper 
+          | TokenKind::Number
+          | TokenKind::String => true, _ => false
         }
     }
 
@@ -62,18 +72,18 @@ impl<'s> Parser<'s> {
             TokenKind::Upper  => self.upper(),
             TokenKind::Number => self.number(),
             TokenKind::String => self.string(),
-            _ => error!(self.token.span, "expected a term"),
+            _ => err!(self.token.span, "expected a term"),
         }
     }
 
-    fn identifier(&mut self) -> Result<Identifier> {
+    fn ident(&mut self) -> Result<Identifier> {
         let span = self.expect(TokenKind::Lower)?;
         let value = self.source.content[span.range()].to_string();
         Ok(Identifier { value, span })
     }
 
     fn lower(&mut self) -> Result<Node> {
-        Ok(Node::Id(self.identifier()?))
+        Ok(Node::Id(self.ident()?))
     }
 
     fn upper(&mut self) -> Result<Node> {
@@ -84,27 +94,13 @@ impl<'s> Parser<'s> {
             "True"  => Ok(Node::True(span)),
             "False" => Ok(Node::False(span)),
             _ => {
-                error!(span, "anonymous variants are not supported yet")
+                err!(span, "anonymous variants are not supported yet")
             }
         }
     }
 
     fn parens(&mut self) -> Result<Node> {
-        let start = self.token;
-
-        let (mut elements, trailing_comma) = self.sequence_of(
-            TokenKind::LParen,
-            TokenKind::RParen,
-            Self::expression,
-        )?;
-
-        let span = Span::of(&start, &self.prev);
-
-        if elements.len() == 1 && !trailing_comma {
-            Ok(elements.pop().unwrap())
-        } else {
-            error!(span, "tuples are not supported yet")
-        }
+        self.between(TokenKind::LParen,TokenKind::RParen, Self::expr)
     }
 
     fn number(&mut self) -> Result<Node> {
@@ -122,9 +118,9 @@ impl<'s> Parser<'s> {
     }
 
     fn define(&mut self) -> Result<Node> {
-        let name = self.identifier()?;
+        let name = self.ident()?;
         self.expect(TokenKind::Equals)?;
-        let value = self.expression()?;
+        let value = self.expr()?;
 
         let span = Span::of(&name, &value);
 
@@ -134,47 +130,26 @@ impl<'s> Parser<'s> {
     fn initial(&mut self) -> Result<Node> {
         let mut expression = self.term()?;
 
-        while !self.done() && self.token.is(TokenKind::LParen) {
-            expression = self.call(expression)?;
+        if self.start_term() {
+            expression = self.apply(expression)?;
         }
 
         Ok(expression)
     }
 
-    fn call(&mut self, function: Node) -> Result<Node> {
-        let (arguments, _) = self.sequence_of(
-            TokenKind::LParen,
-            TokenKind::RParen,
-            Self::argument
+    fn apply(&mut self, callee: Node) -> Result<Node> {
+        let arguments = self.parse_while(
+            Self::start_term,
+            Self::term,
         )?;
+       
+        let span = Span::of(&callee, &self.prev);
 
-        let span = Span::of(&function, &self.prev);
-
-        Ok(Node::Call(box Call {
-            function,
+        Ok(Node::Apply(box Apply {
+            callee,
             arguments,
             span,
         }))
-    }
-
-    fn argument(&mut self) -> Result<Argument> {
-        let start = self.token.span;
-        
-        let name = if self.token.is(TokenKind::Lower) && self.peek.is(TokenKind::Equals) {
-            Some(self.identifier()?)
-        } else {
-            None
-        };
-
-        if name.is_some() {
-            self.expect(TokenKind::Equals)?;
-        }
-
-        let value = self.expression()?;
-
-        let span = Span::of(&start, &value);
-
-        Ok(Argument { name, value, span })
     }
 
     fn unary(&mut self) -> Result<Node> {
@@ -185,12 +160,12 @@ impl<'s> Parser<'s> {
                 let span = operator.span;
                 Ok(Node::Partial(box Partial {
                     operator,
-                    rhs: None,
                     lhs: None,
+                    rhs: None,
                     span,
                 }))
             } else {
-                let rhs = self.expression()?;
+                let rhs = self.expr()?;
                 let span = Span::of(&operator, &rhs);
 
                 if operator.unary() {
@@ -242,7 +217,8 @@ impl<'s> Parser<'s> {
 
             expr = Node::Binary(box Binary {
                 operator,
-                lhs, rhs,
+                lhs,
+                rhs,
                 span,
             });
         }
@@ -290,45 +266,48 @@ impl<'s> Parser<'s> {
             TokenKind::LeEq   => OperatorKind::Le,
             TokenKind::Gt     => OperatorKind::Gt,
             TokenKind::GtEq   => OperatorKind::Ge,
+            TokenKind::Dot2   => OperatorKind::Range,
+            TokenKind::Dot3   => OperatorKind::Spread,
             TokenKind::Pipe   => OperatorKind::Pipe,
-            TokenKind::DotDot => OperatorKind::Range,
             _ => {
-                return error!(span, "`{}` is not a valid operator", self.token.kind);
+                return err!(span, "`{}` is not a valid operator", self.token.kind);
             }
         };
 
         Ok(Operator { kind, span })
     }
 
-    fn sequence_of<T, F>(
+    fn parse_while<T, P, F>(
+        &mut self,
+        p: P,
+        mut f: F,
+    ) -> Result<Vec<T>>
+    where
+      P: Fn(&Self) -> bool, F: FnMut(&mut Self) -> Result<T>
+    {
+        let mut result = vec![];
+
+        while p(self) {
+            result.push(f(self)?);
+        }
+
+        Ok(result)
+    }
+
+    fn between<T, F>(
         &mut self,
         open: TokenKind,
         close: TokenKind,
         mut f: F,
-    ) -> Result<(Vec<T>, bool)>
+    ) -> Result<T>
     where
         F: FnMut(&mut Self) -> Result<T>,
     {
-        let mut result = vec![];
-
         self.expect(open)?;
-
-        let mut trailing_comma = false;
-
-        while !self.done() && !self.token.is(close) {
-            result.push(f(self)?);
-
-            if !self.expect_maybe(TokenKind::Comma)? {
-                trailing_comma = false;
-                break;
-            }
-
-            trailing_comma = true;
-        }
-
+        let result = f(self)?;
         self.expect(close)?;
 
-        Ok((result, trailing_comma))
+        Ok(result)
     }
 
     fn bump(&mut self) -> Result<Span> {
@@ -349,22 +328,13 @@ impl<'s> Parser<'s> {
         if self.token.kind == expected {
             self.bump()
         } else {
-            error!(self.token.span, "Expected `{}` but found `{}`", expected, self.token.kind)
-        }
-    }
-
-    fn expect_maybe(&mut self, expected: TokenKind) -> Result<bool> {
-        if self.token.kind == expected {
-            self.bump()?;
-            Ok(true)
-        } else {
-            Ok(false)
+            err!(self.token.span, "Expected `{}` but found `{}`", expected, self.token.kind)
         }
     }
 }
 
 pub fn parse(source: &Source) -> Result<Vec<Node>> {
-    let mut parser = Parser::new(source).initialize()?;
+    let mut parser = Parser::new(source).init()?;
     let mut module = vec![];
 
     while !parser.done() {
@@ -392,9 +362,9 @@ mod tests {
 
     fn expr(code: &str) -> Node {
         Parser::new(&source(&code))
-            .initialize()
+            .init()
             .unwrap()
-            .expression()
+            .expr()
             .unwrap()
     }
 
@@ -402,8 +372,8 @@ mod tests {
         ($code:expr) => {
             if let Err(_) =
                 Parser::new(&source(&$code))
-                    .initialize()
-                    .and_then(|mut p| p.expression()) {
+                    .init()
+                    .and_then(|mut p| p.expr()) {
                 assert!(true)
             } else {
                 assert!(false)
@@ -730,83 +700,22 @@ mod tests {
     #[test]
     fn test_function_call() {
         assert_eq!(
-            expr(r#"print("hello, world")"#),
-            Node::Call(box Call {
-                function: Node::Id(Identifier {
+            expr(r#"print "hello, world""#),
+            Node::Apply(box Apply {
+                callee: Node::Id(Identifier {
                     value: "print".to_string(),
                     span: Span(0, 5)
                 }),
                 arguments: vec![
-                    Argument {
-                        value: Node::String(
-                            Literal {
-                                value: "\"hello, world\"".to_string(),
-                                span: Span(6, 20)
-                            }
-                        ),
-                        name: None,
-                        span: Span(6, 20)
-                    }
-                ],
-                span: Span(0, 21)
-            })
-        )
-    }
-
-    #[test]
-    fn test_function_call_with_arguments() {
-        assert_eq!(
-            expr("point(x=1, y=0, z=5)"),
-            Node::Call(box Call {
-                function: Node::Id(Identifier {
-                    value: "point".to_string(),
-                    span: Span(0, 5)
-                }),
-                arguments: vec![
-                    Argument {
-                        name: Some(Identifier {
-                            value: "x".to_string(),
-                            span: Span(6, 7)
-                        }),
-                        value: Node::Number(
-                            Literal {
-                                value: "1".to_string(),
-                                span: Span(8, 9)
-                            }
-                        ),
-                        span: Span(6, 9)
-                    },
-
-                    Argument {
-                        name: Some(Identifier {
-                            value: "y".to_string(),
-                            span: Span(11, 12)
-                        }),
-                        value: Node::Number(
-                            Literal {
-                                value: "0".to_string(),
-                                span: Span(13, 14)
-                            }
-                        ),
-                        span: Span(11, 14)
-                    },
-
-                    Argument {
-                        name: Some(Identifier {
-                            value: "z".to_string(),
-                            span: Span(16, 17)
-                        }),
-                        value: Node::Number(
-                            Literal {
-                                value: "5".to_string(),
-                                span: Span(18, 19)
-                            }
-                        ),
-                        span: Span(16, 19)
-                    },
+                    Node::String(
+                        Literal {
+                            value: "\"hello, world\"".to_string(),
+                            span: Span(6, 20)
+                        }
+                    )
                 ],
                 span: Span(0, 20)
             })
-        );
+        )
     }
 }

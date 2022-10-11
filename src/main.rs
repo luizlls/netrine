@@ -65,7 +65,7 @@ fn exec(source: &Source) {
 
     match pipeline {
         Ok(code) => {
-            println!("{:?}", code);
+            println!("{:#?}", code);
         }
         Err(error) => {
             let mut buffer = String::new();
