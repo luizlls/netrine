@@ -1,6 +1,6 @@
 use std::str::Chars;
 
-use super::token::{get_keyword, Token, TokenKind};
+use super::token::*;
 use crate::error::{err, NetrineError, Result};
 use crate::span::Span;
 
@@ -48,9 +48,11 @@ impl<'src> Lexer<'src> {
     }
 
     pub fn next(&mut self) -> Result<Token> {
-        self.next_token().map(|kind| Token {
-            kind,
-            span: self.span(),
+        self.next_token().map(|kind| {
+            Token {
+                kind,
+                span: self.span(),
+            }
         })
     }
 
@@ -69,6 +71,11 @@ impl<'src> Lexer<'src> {
         Span(self.start as u32, self.offset as u32)
     }
 
+    fn token(&mut self, kind: TokenKind) -> Result<TokenKind> {
+        self.bump();
+        Ok(kind)
+    }
+
     fn next_token(&mut self) -> Result<TokenKind> {
         if self.mode == Mode::String {
             return self.next_string(false);
@@ -85,56 +92,47 @@ impl<'src> Lexer<'src> {
                     self.lines()
                 }
                 'a'..='z' | '_' => {
-                    Ok(self.lower())
+                    self.lower()
                 }
                 'A'..='Z' => {
-                    Ok(self.upper())
+                    self.upper()
                 }
                 '0'..='9' => {
-                    Ok(self.number(false))
+                    self.number(false)
                 }
                 '+' | '-' if self.is_number(self.peek) => {
-                    Ok(self.number(true))
+                    self.number(true)
                 }
                 '"' => {
                     self.next_string(true)
                 }
                 '(' => {
-                    self.bump();
-                    Ok(TokenKind::LParen)
+                    self.token(TokenKind::LParen)
                 }
                 ')' => {
-                    self.bump();
-                    Ok(TokenKind::RParen)
+                    self.token(TokenKind::RParen)
                 }
                 '[' => {
-                    self.bump();
-                    Ok(TokenKind::LBracket)
+                    self.token(TokenKind::LBracket)
                 }
                 ']' => {
-                    self.bump();
-                    Ok(TokenKind::RBracket)
+                    self.token(TokenKind::RBracket)
                 }
                 '{' => {
-                    self.bump();
-                    Ok(TokenKind::LBrace)
+                    self.token(TokenKind::LBrace)
                 }
                 '}' if self.mode == Mode::Template => {
                     self.mode = Mode::String;
-                    self.bump();
-                    Ok(TokenKind::RBrace)
+                    self.token(TokenKind::RBrace)
                 }
                 '}' => {
-                    self.bump();
-                    Ok(TokenKind::RBrace)
+                    self.token(TokenKind::RBrace)
                 }
                 ',' => {
-                    self.bump();
-                    Ok(TokenKind::Comma)
+                    self.token(TokenKind::Comma)
                 }
                 ';' => {
-                    self.bump();
-                    Ok(TokenKind::Semi)
+                    self.token(TokenKind::Semi)
                 }
                 '/' if self.peek == Some('/') => {
                     self.comment()
@@ -153,77 +151,55 @@ impl<'src> Lexer<'src> {
 
     fn operator(&mut self) -> Result<TokenKind> {
         match self.curr.unwrap() {
-            '.' => {
-                self.bump();
-                if self.curr == Some('.') {
-                    self.bump();
-                    if self.curr == Some('.') {
-                        self.bump();
-                        Ok(TokenKind::Dot3)
-                    } else {
-                        Ok(TokenKind::Dot2)
-                    }
-                } else {
-                    Ok(TokenKind::Dot)
-                }
-            }
             '=' => {
                 if self.peek == Some('=') {
                     self.bump();
-                    self.bump();
-                    Ok(TokenKind::EqEq)
+                    self.token(TokenKind::Op(OpKind::EqEq))
                 } else {
-                    self.bump();
-                    Ok(TokenKind::Equals)
+                    self.token(TokenKind::Equals)
                 }
             }
+            '.' => {
+                self.token(TokenKind::Dot)
+            }
             ':' => {
-                self.bump();
-                Ok(TokenKind::Colon)
+                self.token(TokenKind::Colon)
             }
             '+' => {
-                self.bump();
-                Ok(TokenKind::Plus)
+                self.token(TokenKind::Op(OpKind::Plus))
             }
             '-' => {
-                self.bump();
-                Ok(TokenKind::Minus)
+                self.token(TokenKind::Op(OpKind::Minus))
             }
             '*' => {
-                self.bump();
-                Ok(TokenKind::Star)
+                self.token(TokenKind::Op(OpKind::Star))
             }
             '/' => {
-                self.bump();
-                Ok(TokenKind::Slash)
+                self.token(TokenKind::Op(OpKind::Slash))
             }
             '%' => {
-                self.bump();
-                Ok(TokenKind::Mod)
+                self.token(TokenKind::Op(OpKind::Mod))
             }
             '<' => {
-                self.bump();
                 if self.curr == Some('=') {
                     self.bump();
-                    Ok(TokenKind::LeEq)
+                    self.token(TokenKind::Op(OpKind::LeEq))
                 } else {
-                    Ok(TokenKind::Lt)
+                    self.token(TokenKind::Op(OpKind::Lt))
                 }
             }
             '>' => {
-                self.bump();
                 if self.curr == Some('=') {
                     self.bump();
-                    Ok(TokenKind::GtEq)
+                    self.token(TokenKind::Op(OpKind::GtEq))
                 } else {
-                    Ok(TokenKind::Gt)
+                    self.token(TokenKind::Op(OpKind::Gt))
                 }
             }
             '!' => {
                 if self.peek == Some('=') {
                     self.bump();
-                    self.bump();
-                    Ok(TokenKind::BangEq)
+                    self.token(TokenKind::Op(OpKind::BangEq))
                 } else {
                     err!(self.span(), "invalid operator")
                 }
@@ -231,8 +207,7 @@ impl<'src> Lexer<'src> {
             '|' => {
                 if self.peek == Some('>') {
                     self.bump();
-                    self.bump();
-                    Ok(TokenKind::Pipe)
+                    self.token(TokenKind::Op(OpKind::Pipe))
                 } else {
                     err!(self.span(), "invalid operator")
                 }
@@ -317,23 +292,23 @@ impl<'src> Lexer<'src> {
         matches!(chr, Some('\r' | '\t' | ' '))
     }
 
-    fn lower(&mut self) -> TokenKind {
+    fn lower(&mut self) -> Result<TokenKind> {
         self.bump_while(Self::is_alpha);
         self.bump_while(|_, ch| matches!(ch, Some('\'' | '?' | '!')));
 
         if let Some(keyword) = get_keyword(self.value()) {
-            keyword
+            Ok(keyword)
         } else {
-            TokenKind::Lower
+            Ok(TokenKind::Id(IdKind::Lower))
         }
     }
 
-    fn upper(&mut self) -> TokenKind {
+    fn upper(&mut self) -> Result<TokenKind> {
         self.bump_while(Self::is_alpha);
-        TokenKind::Upper
+        Ok(TokenKind::Id(IdKind::Upper))
     }
 
-    fn number(&mut self, prefix: bool) -> TokenKind {
+    fn number(&mut self, prefix: bool) -> Result<TokenKind> {
         if prefix {
             self.bump();
         }
@@ -345,7 +320,7 @@ impl<'src> Lexer<'src> {
             self.bump_while(Self::is_number);
         }
 
-        TokenKind::Number
+        Ok(TokenKind::Number)
     }
 
     fn lines(&mut self) -> Result<TokenKind> {
@@ -369,9 +344,7 @@ impl<'src> Lexer<'src> {
     where
         P: Fn(&Self, Option<char>) -> bool,
     {
-        while pred(self, self.curr) {
-            self.bump();
-        }
+        while pred(self, self.curr) { self.bump(); }
     }
 }
 
@@ -383,7 +356,7 @@ mod tests {
     fn test_identifier() {
         let mut lexer = Lexer::new("variable = 1");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Lower);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Id(IdKind::Lower));
         assert_eq!(lexer.value(), "variable");
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
@@ -396,12 +369,12 @@ mod tests {
     fn test_variant() {
         let mut lexer = Lexer::new("True or False");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Upper);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Id(IdKind::Upper));
         assert_eq!(lexer.value(), "True");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Or);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Or));
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Upper);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Id(IdKind::Upper));
         assert_eq!(lexer.value(), "False");
     }
 
@@ -409,33 +382,33 @@ mod tests {
     fn test_keywords() {
         let mut lexer = Lexer::new("and or not is");
 
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::And);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Or);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Not);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Is);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::And));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Or));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Not));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Is));
     }
 
     #[test]
     fn test_operator() {
-        let mut lexer = Lexer::new(": . .. ... |> = == != + - * / % > < >= <=");
+        let mut lexer = Lexer::new(": . .. = == != + - * / % > < >= <= |>");
 
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Colon);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot2);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot3);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Pipe);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Dot);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::Equals);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::EqEq);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::BangEq);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Plus);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Minus);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Star);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Slash);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Mod);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Gt);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Lt);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::GtEq);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::LeEq);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::EqEq));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::BangEq));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Plus));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Minus));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Star));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Slash));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Mod));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Gt));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Lt));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::GtEq));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::LeEq));
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Op(OpKind::Pipe));
     }
 
     #[test]
@@ -478,7 +451,7 @@ mod tests {
         assert_eq!(lexer.value(), r#""Hello, "#);
         assert_eq!(lexer.mode, Mode::Template);
         assert_eq!(lexer.next_token().unwrap(), TokenKind::LBrace);
-        assert_eq!(lexer.next_token().unwrap(), TokenKind::Lower);
+        assert_eq!(lexer.next_token().unwrap(), TokenKind::Id(IdKind::Lower));
         assert_eq!(lexer.value(), "name");
         assert_eq!(lexer.next_token().unwrap(), TokenKind::RBrace);
         let _ = lexer.next_token(); // closing "

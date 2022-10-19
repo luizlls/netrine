@@ -23,6 +23,21 @@ pub enum TokenKind {
     Colon,  // :
     Equals, // =
 
+    Op(OpKind),
+    Id(IdKind),
+    Number,
+    String,
+
+    StringStart,
+    StringEnd,
+    StringSlice,
+
+    NewLine,
+    Eof,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum OpKind {
     And,    // and
     Or,     // or
     Not,    // not
@@ -39,20 +54,13 @@ pub enum TokenKind {
     Gt,     // >
     GtEq,   // >=
     Pipe,   // |>
-    Dot2,   // ..
-    Dot3,   // ...
+}
 
-    Lower,
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum IdKind {
     Upper,
-    Number,
-    String,
-
-    StringStart,
-    StringEnd,
-    StringSlice,
-
-    NewLine,
-    Eof,
+    Lower,
+    AllCaps,
 }
 
 impl Default for Token {
@@ -80,30 +88,12 @@ impl fmt::Display for TokenKind {
             TokenKind::LBracket => write!(f, "["),
             TokenKind::RBracket => write!(f, "]"),
             TokenKind::Dot => write!(f, "."),
-            TokenKind::Dot2 => write!(f, ".."),
-            TokenKind::Dot3 => write!(f, "..."),
             TokenKind::Comma => write!(f, ","),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Equals => write!(f, "="),
-            TokenKind::And => write!(f, "and"),
-            TokenKind::Or => write!(f, "or"),
-            TokenKind::Not => write!(f, "not"),
-            TokenKind::Is => write!(f, "is"),
-            TokenKind::Plus => write!(f, "+"),
-            TokenKind::Minus => write!(f, "-"),
-            TokenKind::Star => write!(f, "*"),
-            TokenKind::Slash => write!(f, "/"),
-            TokenKind::Mod => write!(f, "%"),
-            TokenKind::EqEq => write!(f, "=="),
-            TokenKind::BangEq => write!(f, "!="),
-            TokenKind::Lt => write!(f, "<"),
-            TokenKind::LeEq => write!(f, "<="),
-            TokenKind::Gt => write!(f, ">"),
-            TokenKind::GtEq => write!(f, ">="),
-            TokenKind::Pipe => write!(f, "|>"),
-            TokenKind::Lower => write!(f, "lowercase name"),
-            TokenKind::Upper => write!(f, "uppercase name"),
+            TokenKind::Id(id) => write!(f, "{}", id),
+            TokenKind::Op(op) => write!(f, "{}", op),
             TokenKind::Number => write!(f, "number"),
             TokenKind::String => write!(f, "string"),
             TokenKind::StringStart => write!(f, "start of string"),
@@ -115,12 +105,45 @@ impl fmt::Display for TokenKind {
     }
 }
 
+impl fmt::Display for OpKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OpKind::And => write!(f, "and"),
+            OpKind::Or => write!(f, "or"),
+            OpKind::Not => write!(f, "not"),
+            OpKind::Is => write!(f, "is"),
+            OpKind::Plus => write!(f, "+"),
+            OpKind::Minus => write!(f, "-"),
+            OpKind::Star => write!(f, "*"),
+            OpKind::Slash => write!(f, "/"),
+            OpKind::Mod => write!(f, "%"),
+            OpKind::EqEq => write!(f, "=="),
+            OpKind::BangEq => write!(f, "!="),
+            OpKind::Lt => write!(f, "<"),
+            OpKind::LeEq => write!(f, "<="),
+            OpKind::Gt => write!(f, ">"),
+            OpKind::GtEq => write!(f, ">="),
+            OpKind::Pipe => write!(f, "|>"),
+        }
+    }
+}
+
+impl fmt::Display for IdKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IdKind::Lower => write!(f, "lowercase identifier"),
+            IdKind::Upper => write!(f, "titlecase identifier"),
+            IdKind::AllCaps => write!(f, "all caps identifier"),
+        }
+    }
+}
+
 pub fn get_keyword(key: &str) -> Option<TokenKind> {
     match key {
-        "and" => Some(TokenKind::And),
-        "or"  => Some(TokenKind::Or),
-        "not" => Some(TokenKind::Not),
-        "is"  => Some(TokenKind::Is),
+        "and" => Some(TokenKind::Op(OpKind::And)),
+        "or"  => Some(TokenKind::Op(OpKind::Or)),
+        "not" => Some(TokenKind::Op(OpKind::Not)),
+        "is"  => Some(TokenKind::Op(OpKind::Is)),
         _ => None,
     }
 }
@@ -130,7 +153,7 @@ impl Token {
         self.kind == kind
     }
 
-    pub fn terminator(&self) -> bool {
+    pub fn is_terminator(&self) -> bool {
         matches!(self.kind,
             TokenKind::RParen
           | TokenKind::RBrace
