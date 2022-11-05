@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::span::{Span, WithSpan};
+use crate::span::Span;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Token {
@@ -23,21 +23,6 @@ pub enum TokenKind {
     Colon,  // :
     Equals, // =
 
-    Op(OpKind),
-    Id(IdKind),
-    Number,
-    String,
-
-    StringStart,
-    StringEnd,
-    StringSlice,
-
-    NewLine,
-    Eof,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum OpKind {
     And,    // and
     Or,     // or
     Not,    // not
@@ -48,33 +33,39 @@ pub enum OpKind {
     Slash,  // /
     Mod,    // %
     EqEq,   // ==
-    BangEq, // !=
+    NoEq,   // !=
     Lt,     // <
-    LeEq,   // <=
+    LtEq,   // <=
     Gt,     // >
     GtEq,   // >=
     Pipe,   // |>
+
+    Ident,
+    Number,
+    String,
+
+    StringStart,
+    StringEnd,
+    StringSlice,
+
+    Error(TokenErrorKind),
+
+    NewLine,
+    EOF,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum IdKind {
-    Upper,
-    Lower,
-    AllCaps,
+pub enum TokenErrorKind {
+    UnexpectedCharacter,
+    UnterminatedString,
 }
 
 impl Default for Token {
     fn default() -> Self {
         Token {
-            kind: TokenKind::Eof,
+            kind: TokenKind::EOF,
             span: Span(0, 0),
         }
-    }
-}
-
-impl WithSpan for Token {
-    fn span(&self) -> Span {
-        self.span
     }
 }
 
@@ -92,59 +83,41 @@ impl fmt::Display for TokenKind {
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Equals => write!(f, "="),
-            TokenKind::Id(id) => write!(f, "{}", id),
-            TokenKind::Op(op) => write!(f, "{}", op),
+            TokenKind::And => write!(f, "and"),
+            TokenKind::Or => write!(f, "or"),
+            TokenKind::Not => write!(f, "not"),
+            TokenKind::Is => write!(f, "is"),
+            TokenKind::Plus => write!(f, "+"),
+            TokenKind::Minus => write!(f, "-"),
+            TokenKind::Star => write!(f, "*"),
+            TokenKind::Slash => write!(f, "/"),
+            TokenKind::Mod => write!(f, "%"),
+            TokenKind::EqEq => write!(f, "=="),
+            TokenKind::NoEq => write!(f, "!="),
+            TokenKind::Lt => write!(f, "<"),
+            TokenKind::LtEq => write!(f, "<="),
+            TokenKind::Gt => write!(f, ">"),
+            TokenKind::GtEq => write!(f, ">="),
+            TokenKind::Pipe => write!(f, "|>"),
+            TokenKind::Ident => write!(f, "identifier"),
             TokenKind::Number => write!(f, "number"),
             TokenKind::String => write!(f, "string"),
             TokenKind::StringStart => write!(f, "start of string"),
             TokenKind::StringEnd => write!(f, "end of string"),
             TokenKind::StringSlice => write!(f, "slice of string"),
+            TokenKind::Error(err) => write!(f, "{}", err),
             TokenKind::NewLine => write!(f, "new line"),
-            TokenKind::Eof => write!(f, "end of file"),
+            TokenKind::EOF => write!(f, "end of file"),
         }
     }
 }
 
-impl fmt::Display for OpKind {
+impl fmt::Display for TokenErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OpKind::And => write!(f, "and"),
-            OpKind::Or => write!(f, "or"),
-            OpKind::Not => write!(f, "not"),
-            OpKind::Is => write!(f, "is"),
-            OpKind::Plus => write!(f, "+"),
-            OpKind::Minus => write!(f, "-"),
-            OpKind::Star => write!(f, "*"),
-            OpKind::Slash => write!(f, "/"),
-            OpKind::Mod => write!(f, "%"),
-            OpKind::EqEq => write!(f, "=="),
-            OpKind::BangEq => write!(f, "!="),
-            OpKind::Lt => write!(f, "<"),
-            OpKind::LeEq => write!(f, "<="),
-            OpKind::Gt => write!(f, ">"),
-            OpKind::GtEq => write!(f, ">="),
-            OpKind::Pipe => write!(f, "|>"),
+            TokenErrorKind::UnexpectedCharacter => write!(f, "unexpected character"),
+            TokenErrorKind::UnterminatedString => write!(f, "unterminated string"),
         }
-    }
-}
-
-impl fmt::Display for IdKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            IdKind::Lower => write!(f, "lowercase identifier"),
-            IdKind::Upper => write!(f, "titlecase identifier"),
-            IdKind::AllCaps => write!(f, "all caps identifier"),
-        }
-    }
-}
-
-pub fn get_keyword(key: &str) -> Option<TokenKind> {
-    match key {
-        "and" => Some(TokenKind::Op(OpKind::And)),
-        "or"  => Some(TokenKind::Op(OpKind::Or)),
-        "not" => Some(TokenKind::Op(OpKind::Not)),
-        "is"  => Some(TokenKind::Op(OpKind::Is)),
-        _ => None,
     }
 }
 

@@ -1,8 +1,10 @@
 #![macro_use]
 
-pub mod nodes;
+use crate::source::Source;
+
 mod lexer;
-mod parser;
 mod token;
 
-pub use parser::parse;
+pub fn parse(source: &Source) -> Vec<token::Token> {
+    lexer::Lexer::new(&source.content).into_iter().collect()
+}

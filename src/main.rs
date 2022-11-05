@@ -61,16 +61,5 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn exec(source: &Source) {
-    let pipeline = parse(source);
-
-    match pipeline {
-        Ok(code) => {
-            println!("{:#?}", code);
-        }
-        Err(error) => {
-            let mut buffer = String::new();
-            error.report(source, &mut buffer).unwrap();
-            eprintln!("{}", buffer);
-        }
-    }
+    println!("{:?}", parse(source))
 }
