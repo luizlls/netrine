@@ -1,42 +1,27 @@
-use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 
 use crate::source::Source;
 use crate::span::Span;
 
-pub type Result<T> = ::std::result::Result<T, NetrineError>;
-
-macro_rules! err {
-    ($span: expr, $text: expr, $($field: expr),*) => {
-        Err(NetrineError::new($span, format!($text, $($field),*)))
-    };
-
-    ($span: expr, $text: expr) => {
-        Err(NetrineError::new($span, $text))
-    }
-}
-
-pub(crate) use err;
+pub type Result<T> = ::std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
-pub struct NetrineError {
+pub struct Error {
     text: String,
     span: Option<Span>,
 }
 
-impl NetrineError {
-    pub fn new<S: Into<String>>(span: Span, text: S) -> NetrineError {
-        NetrineError {
-            text: text.into(),
+impl Error {
+    pub fn new<S: Into<String>>(msg: S, span: Span) -> Error {
+        Error {
+            text: msg.into(),
             span: Some(span),
         }
     }
 }
 
-impl Error for NetrineError {}
-
-impl Display for NetrineError {
+impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "error")?;
 
@@ -48,7 +33,7 @@ impl Display for NetrineError {
     }
 }
 
-impl NetrineError {
+impl Error {
     pub fn report(&self, source: &Source, buf: &mut String) -> fmt::Result {
         if self.span.is_none() {
             return writeln!(buf, "error: {}", self.text);

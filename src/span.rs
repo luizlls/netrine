@@ -5,9 +5,9 @@ use std::ops::Range;
 pub struct Span(pub u32, pub u32);
 
 impl Span {
-    pub fn of(
-        left: &impl WithSpan,
-        right: &impl WithSpan,
+    pub fn from(
+        left: &impl ToSpan,
+        right: &impl ToSpan,
     ) -> Span {
         Span(left.span().0, right.span().1)
     }
@@ -21,7 +21,7 @@ impl Span {
     }
 }
 
-impl WithSpan for Span {
+impl ToSpan for Span {
     fn span(&self) -> Span {
         *self
     }
@@ -45,6 +45,6 @@ impl Span {
     }
 }
 
-pub trait WithSpan {
+pub trait ToSpan {
     fn span(&self) -> Span;
 }

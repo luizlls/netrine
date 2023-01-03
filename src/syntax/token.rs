@@ -22,6 +22,7 @@ pub enum TokenKind {
     Semi,   // ;
     Colon,  // :
     Equals, // =
+    Walrus, // :=
 
     And,    // and
     Or,     // or
@@ -31,6 +32,7 @@ pub enum TokenKind {
     Minus,  // -
     Star,   // *
     Slash,  // /
+    Caret,  // ^
     Mod,    // %
     EqEq,   // ==
     NoEq,   // !=
@@ -45,8 +47,8 @@ pub enum TokenKind {
     String,
 
     StringStart,
+    StringPart,
     StringEnd,
-    StringSlice,
 
     Error(TokenErrorKind),
 
@@ -83,6 +85,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Semi => write!(f, ";"),
             TokenKind::Equals => write!(f, "="),
+            TokenKind::Walrus => write!(f, ":="),
             TokenKind::And => write!(f, "and"),
             TokenKind::Or => write!(f, "or"),
             TokenKind::Not => write!(f, "not"),
@@ -91,6 +94,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Star => write!(f, "*"),
             TokenKind::Slash => write!(f, "/"),
+            TokenKind::Caret => write!(f, "^"),
             TokenKind::Mod => write!(f, "%"),
             TokenKind::EqEq => write!(f, "=="),
             TokenKind::NoEq => write!(f, "!="),
@@ -102,9 +106,9 @@ impl fmt::Display for TokenKind {
             TokenKind::Ident => write!(f, "identifier"),
             TokenKind::Number => write!(f, "number"),
             TokenKind::String => write!(f, "string"),
-            TokenKind::StringStart => write!(f, "start of string"),
-            TokenKind::StringEnd => write!(f, "end of string"),
-            TokenKind::StringSlice => write!(f, "slice of string"),
+            TokenKind::StringStart => write!(f, "start of a string"),
+            TokenKind::StringEnd => write!(f, "end of a string"),
+            TokenKind::StringPart => write!(f, "part of a string"),
             TokenKind::Error(err) => write!(f, "{}", err),
             TokenKind::NewLine => write!(f, "new line"),
             TokenKind::EOF => write!(f, "end of file"),

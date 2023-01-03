@@ -61,5 +61,14 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn exec(source: &Source) {
-    println!("{:?}", parse(source))
+    match parse(source) {
+        Ok(node) => {
+            println!("{:#?}", node)
+        }
+        Err(error) => {
+            let mut buffer = String::new();
+            error.report(source, &mut buffer).unwrap();
+            eprintln!("{}", buffer);
+        }
+    }
 }
