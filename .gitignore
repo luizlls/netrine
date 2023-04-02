@@ -1,0 +1,6 @@
+/target
+/.vscode
+/.idea
+input
+output
+.DS_Store
