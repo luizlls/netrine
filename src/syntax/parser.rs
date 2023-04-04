@@ -40,7 +40,7 @@ impl<'p> Parser<'p> {
 
     fn node(&mut self) {
         match self.kind {
-            SyntaxKind::If => self.r#if(),
+            SyntaxKind::If    => self.r#if(),
             SyntaxKind::Yield => self.r#yield(),
             SyntaxKind::Break => self.r#break(),
             _ => self.define(),
@@ -112,13 +112,24 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn element(&mut self) {
+        let start = self.mark();
+
+        if self.maybe(SyntaxKind::Range) {
+            self.apply();
+            self.collect(SyntaxKind::Spread, start);
+        } else {
+            self.expr();
+        }
+    }
+
     fn parens(&mut self) {
         let start = self.mark();
 
         self.expect(SyntaxKind::LParen);
         let total = self.sequence(
             |parser| !parser.at(SyntaxKind::RParen),
-            Self::expr,
+            Parser::element,
         );
         self.expect(SyntaxKind::RParen);
 
@@ -129,20 +140,22 @@ impl<'p> Parser<'p> {
                 _ => SyntaxKind::Tuple,
             },
             start,
-        )
+        );
     }
 
     fn brackets(&mut self) {
         let start = self.mark();
 
         self.expect(SyntaxKind::LBracket);
+
         self.sequence(
             |parser| !parser.at(SyntaxKind::RBracket),
-            Self::expr,
+            Parser::element,
         );
+
         self.expect(SyntaxKind::RBracket);
 
-        self.collect(SyntaxKind::List, start)
+        self.collect(SyntaxKind::List, start);
     }
 
     fn braces(&mut self) {
@@ -159,7 +172,7 @@ impl<'p> Parser<'p> {
         self.expect(SyntaxKind::LBrace);
         self.sequence(
             |parser| !parser.at(SyntaxKind::RBrace),
-            Self::property,
+            Parser::property,
         );
         self.expect(SyntaxKind::RBrace);
 
@@ -227,18 +240,18 @@ impl<'p> Parser<'p> {
 
     fn call(&mut self, start: Marker) {
         self.expect(SyntaxKind::LParen);
-        self.args();
+        self.function_arguments();
         self.expect(SyntaxKind::RParen);
         self.collect(SyntaxKind::Call, start);
     }
 
-    fn args(&mut self) {
+    fn function_arguments(&mut self) {
         let start = self.mark();
         self.sequence(
             |parser| !parser.at(SyntaxKind::RParen),
-            Self::expr,
+            Parser::element,
         );
-        self.collect(SyntaxKind::Args, start);
+        self.collect(SyntaxKind::Arguments, start);
     }
 
     fn trailing_lambda(&mut self, start: Marker) {
@@ -255,19 +268,25 @@ impl<'p> Parser<'p> {
             return self.collect(SyntaxKind::Lambda, start);
         }
 
-        self.params();
-
-        while !self.at(SyntaxKind::RBrace) {
-               self.node();
+        if self.at(SyntaxKind::Case) {
+            self.lambda_cases();
+        } else {
+            self.lambda_params();
         }
+
+        self.until(
+            |parser| parser.at(SyntaxKind::RBrace),
+            Parser::node,
+        );
 
         self.expect(SyntaxKind::RBrace);
 
         self.collect(SyntaxKind::Lambda, start);
     }
 
-    fn params(&mut self) {
+    fn lambda_params(&mut self) {
         let start = self.mark();
+
         self.node();
 
         match self.kind {
@@ -275,7 +294,7 @@ impl<'p> Parser<'p> {
             SyntaxKind::Comma => {
                 self.sequence(
                     |parser| !parser.at(SyntaxKind::Arrow),
-                    Self::atom,
+                    Parser::atom,
                 );
             }
             _ => {
@@ -283,9 +302,42 @@ impl<'p> Parser<'p> {
             }
         }
 
-        self.expect(SyntaxKind::Arrow);
+        self.collect(SyntaxKind::Parameters, start);
 
-        self.collect(SyntaxKind::Params, start);
+        self.expect(SyntaxKind::Arrow);
+    }
+
+    fn lambda_cases(&mut self) {
+        while self.at(SyntaxKind::Case) {
+            let start = self.mark();
+
+            self.expect(SyntaxKind::Case);
+
+            let params = self.mark();
+            self.sequence(
+                |parser| !parser.at(SyntaxKind::Arrow),
+                Parser::atom,
+            );
+            self.collect(SyntaxKind::Parameters, params);
+
+            self.expect(SyntaxKind::Arrow);
+
+            self.until(
+                |parser| matches!(parser.kind, SyntaxKind::Case | SyntaxKind::Else | SyntaxKind::RBrace),
+                Parser::node,
+            );
+
+            self.collect(SyntaxKind::Case, start);
+        }
+
+        if self.maybe(SyntaxKind::Else) {
+            let start = self.mark();
+            self.until(
+                |parser| parser.at(SyntaxKind::RBrace),
+                Parser::node,
+            );
+            self.collect(SyntaxKind::Else, start);
+        }
     }
 
     fn apply(&mut self) {
@@ -346,13 +398,21 @@ impl<'p> Parser<'p> {
         self.binary(0 as Precedence);
     }
 
+    fn rvalue(&mut self) {
+        if self.at(SyntaxKind::If) {
+            self.r#if();
+        } else {
+            self.lvalue();
+        }
+    }
+
     fn pipe(&mut self) {
         let start = self.mark();
 
         self.lvalue();
 
         while self.maybe(SyntaxKind::Pipe) {
-            self.lvalue();
+            self.rvalue();
             self.collect(SyntaxKind::Pipe, start);
         }
     }
@@ -452,15 +512,26 @@ impl<'p> Parser<'p> {
     where
         P: Fn(&Self) -> bool, F: FnMut(&mut Self),
     {
-        let mut count = 0;
+        let mut counter = 0;
 
-        while predicate(self) && !self.eof() {
+        while predicate(self) {
             parser(self);
-            count += 1;
+            counter += 1;
             if !self.maybe(SyntaxKind::Comma) { break; }
         }
 
-        count
+        counter
+    }
+
+    fn until<F, P>(
+        &mut self,
+        predicate: P,
+        mut parser: F,
+    )
+    where
+        P: Fn(&Self) -> bool, F: FnMut(&mut Self),
+    {
+        while !predicate(self) { parser(self); }
     }
 
     fn skip_trivia(&mut self) {

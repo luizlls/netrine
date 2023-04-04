@@ -69,7 +69,7 @@ pub enum SyntaxKind {
     Set,
     Get,
     Call,
-    Args,
+    Arguments,
     Unary,
     Binary,
     Group,
@@ -79,8 +79,9 @@ pub enum SyntaxKind {
     Property,
     Empty,
     Lambda,
-    Params,
+    Parameters,
     Field,
+    Spread,
 
     LParen,
     RParen,
@@ -100,6 +101,7 @@ pub enum SyntaxKind {
     If,
     Then,
     Else,
+    Case,
     Yield,
     Break,
     Import,
@@ -145,7 +147,7 @@ impl fmt::Display for SyntaxKind {
             SyntaxKind::Set => "set",
             SyntaxKind::Get => "get",
             SyntaxKind::Call => "function call",
-            SyntaxKind::Args => "function arguments",
+            SyntaxKind::Arguments => "function arguments",
             SyntaxKind::Unary => "unary expression",
             SyntaxKind::Binary => "binary expression",
             SyntaxKind::Group => "group",
@@ -154,7 +156,8 @@ impl fmt::Display for SyntaxKind {
             SyntaxKind::Record => "record",
             SyntaxKind::Property => "record property",
             SyntaxKind::Lambda => "lambda",
-            SyntaxKind::Params => "parameters",
+            SyntaxKind::Parameters => "parameters",
+            SyntaxKind::Spread => "spread",
             SyntaxKind::Empty => "()",
             SyntaxKind::LParen => "(",
             SyntaxKind::RParen => ")",
@@ -192,6 +195,7 @@ impl fmt::Display for SyntaxKind {
             SyntaxKind::If => "if",
             SyntaxKind::Then => "then",
             SyntaxKind::Else => "else",
+            SyntaxKind::Case => "case",
             SyntaxKind::Yield => "yield",
             SyntaxKind::Break => "break",
             SyntaxKind::Where => "where",
@@ -210,11 +214,11 @@ impl fmt::Display for SyntaxKind {
 }
 
 impl SyntaxKind {
-    pub fn is_terminal(&self) -> bool {
+    pub fn is_terminal(self) -> bool {
         matches!(self, SyntaxKind::Semi | SyntaxKind::EOF | SyntaxKind::Else | SyntaxKind::RBrace)
     }
 
-    pub fn is_trivia(&self) -> bool {
+    pub fn is_trivia(self) -> bool {
         matches!(self, SyntaxKind::Space | SyntaxKind::Comment)
     }
 }

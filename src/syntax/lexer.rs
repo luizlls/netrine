@@ -67,7 +67,10 @@ impl<'src> Lexer<'src> {
                 return self.ident();
             }
             b'0'..=b'9' => {
-                return self.number();
+                return self.number(false);
+            }
+            b'+' | b'-' if Lexer::is_number(self.peek()) => {
+                return self.number(true);
             }
             b'"' => {
                 return self.string();
@@ -75,7 +78,7 @@ impl<'src> Lexer<'src> {
             b'/' if self.peek() == Some(b'/') => {
                 return self.comment();
             }
-            _ if Self::is_symbol(self.curr) => {
+            _ if Lexer::is_symbol(self.curr) => {
                 return self.operator();
             }
             b'(' => SyntaxKind::LParen,
@@ -124,12 +127,13 @@ impl<'src> Lexer<'src> {
     }
 
     fn ident(&mut self) -> SyntaxKind {
-        self.bump_while(Self::is_ident);
+        self.bump_while(Lexer::is_ident);
         self.bump_while(|ch| matches!(ch, Some(b'?' | b'!' | b'\'')));
-        
+
         match self.slice() {
             "and" => SyntaxKind::And,
             "break" => SyntaxKind::Break,
+            "case" => SyntaxKind::Case,
             "else" => SyntaxKind::Else,
             "if" => SyntaxKind::If,
             "import" => SyntaxKind::Import,
@@ -152,7 +156,7 @@ impl<'src> Lexer<'src> {
         let kind = match chr {
             b'+' => {
                 let peek = self.peek();
-                if Self::is_ident(peek) || Self::is_number(peek) || peek == Some(b'(') {
+                if Lexer::is_ident(peek) || Lexer::is_number(peek) || peek == Some(b'(') {
                     SyntaxKind::Pos
                 } else {
                     SyntaxKind::Add
@@ -163,7 +167,7 @@ impl<'src> Lexer<'src> {
                 if peek == Some(b'>') {
                     self.bump();
                     SyntaxKind::Arrow
-                } else if Self::is_ident(peek) || Self::is_number(peek) || peek == Some(b'(') {
+                } else if Lexer::is_ident(peek) || Lexer::is_number(peek) || peek == Some(b'(') {
                     SyntaxKind::Neg
                 } else {
                     SyntaxKind::Sub
@@ -228,21 +232,25 @@ impl<'src> Lexer<'src> {
         kind
     }
 
-    fn number(&mut self) -> SyntaxKind {
-        self.bump_while(Self::is_number);
+    fn number(&mut self, prefix: bool) -> SyntaxKind {
+        if prefix {
+            self.bump();
+        }
+
+        self.bump_while(Lexer::is_number);
 
         match self.curr {
-            Some(b'.') if Self::is_number(self.peek()) => {
+            Some(b'.') if Lexer::is_number(self.peek()) => {
                 self.bump();
-                self.bump_while(Self::is_number);
+                self.bump_while(Lexer::is_number);
             }
             Some(b'x' | b'X') if self.slice() == "0" => {
                 self.bump();
-                self.bump_while(Self::is_hex);
+                self.bump_while(Lexer::is_hex);
             }
             Some(b'b' | b'B') if self.slice() == "0" => {
                 self.bump();
-                self.bump_while(Self::is_bin);
+                self.bump_while(Lexer::is_bin);
             }
             _ => {}
         }
@@ -252,7 +260,7 @@ impl<'src> Lexer<'src> {
 
     fn string(&mut self) -> SyntaxKind {
         let mut string = String::new();
-        
+
         loop {
             match self.bump() {
                 Some(b'\n')
@@ -365,7 +373,7 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let mut lexer = Lexer::new("and or is not if then else yield break where import");
+        let mut lexer = Lexer::new("and or is not if then else case yield break where import");
         lexer.next(); // space
         assert_syntax_kind!(lexer, SyntaxKind::And);
         lexer.next(); // space
@@ -380,6 +388,8 @@ mod tests {
         assert_syntax_kind!(lexer, SyntaxKind::Then);
         lexer.next(); // space
         assert_syntax_kind!(lexer, SyntaxKind::Else);
+        lexer.next(); // space
+        assert_syntax_kind!(lexer, SyntaxKind::Case);
         lexer.next(); // space
         assert_syntax_kind!(lexer, SyntaxKind::Yield);
         lexer.next(); // space

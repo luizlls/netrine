@@ -3,7 +3,8 @@
 neighbors((x, y)) =
   (-1..1) { dx ->
     (-1..1) { dy ->
-      if (dx, dy) != (0, 0) yield (x + dx, y + dy)
+      if (dx, dy) != (0, 0)
+        yield (x + dx, y + dy)
     }
   }
 
@@ -28,6 +29,8 @@ draw(state, x, y, x', y') =
         write(". ") 
     }
   }
+
+state := set((0, 0), (0, 1), (1, 0), (1, 1))
 
 state {
   draw(state, -7, -7, 7, 7)
