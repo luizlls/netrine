@@ -43,6 +43,7 @@ impl<'p> Parser<'p> {
             SyntaxKind::If    => self.r#if(),
             SyntaxKind::Yield => self.r#yield(),
             SyntaxKind::Break => self.r#break(),
+            SyntaxKind::Import => self.import(),
             _ => self.define(),
         }
     }
@@ -81,7 +82,21 @@ impl<'p> Parser<'p> {
     }
 
     fn ident(&mut self) {
-        self.expect(SyntaxKind::Ident);
+        self.expect(SyntaxKind::Lower);
+    }
+
+    fn upper(&mut self) {
+        let start = self.mark();
+
+        self.expect(SyntaxKind::Upper);
+
+        match self.kind {
+            SyntaxKind::LParen => self.parens(),
+            SyntaxKind::LBrace => self.record(),
+            _ => {}
+        }
+
+        self.collect(SyntaxKind::Variant, start);
     }
 
     fn number(&mut self) {
@@ -99,7 +114,8 @@ impl<'p> Parser<'p> {
             self.make(); // dot
             self.bump(); // next
             match self.kind {
-                SyntaxKind::Ident => self.ident(),
+                SyntaxKind::Lower => self.ident(),
+                SyntaxKind::Upper => self.upper(),
                 SyntaxKind::Number => self.number(),
                 SyntaxKind::String => self.string(),
                 SyntaxKind::LParen => self.parens(),
@@ -220,7 +236,8 @@ impl<'p> Parser<'p> {
 
     fn atom(&mut self) {
         match self.kind {
-            SyntaxKind::Ident => self.ident(),
+            SyntaxKind::Lower => self.ident(),
+            SyntaxKind::Upper => self.upper(),
             SyntaxKind::Number => self.number(),
             SyntaxKind::String => self.string(),
             SyntaxKind::LParen => self.parens(),
@@ -330,13 +347,13 @@ impl<'p> Parser<'p> {
             self.collect(SyntaxKind::Case, start);
         }
 
+        let else_ = self.mark();
         if self.maybe(SyntaxKind::Else) {
-            let start = self.mark();
             self.until(
                 |parser| parser.at(SyntaxKind::RBrace),
                 Parser::node,
             );
-            self.collect(SyntaxKind::Else, start);
+            self.collect(SyntaxKind::Else, else_);
         }
     }
 
@@ -456,6 +473,33 @@ impl<'p> Parser<'p> {
         self.expect(SyntaxKind::Break);
     }
 
+    fn import(&mut self) {
+        let start = self.mark();
+
+        self.expect(SyntaxKind::Import);
+
+        self.expect(SyntaxKind::Upper);
+
+        while self.maybe(SyntaxKind::Dot) {
+              self.expect(SyntaxKind::Upper);
+        }
+
+        let imported_names = self.mark();
+
+        if self.at(SyntaxKind::LParen) {
+            self.expect(SyntaxKind::LParen);
+            self.sequence(
+                |parser| !parser.at(SyntaxKind::RParen),
+                Parser::ident,
+            );
+            self.expect(SyntaxKind::RParen);
+        }
+
+        self.collect(SyntaxKind::Import, imported_names);
+
+        self.collect(SyntaxKind::Import, start);
+    }
+
     fn at(&self, kind: SyntaxKind) -> bool {
         self.kind == kind
     }
@@ -491,7 +535,8 @@ impl<'p> Parser<'p> {
 
     fn make(&mut self) {
         match self.kind {
-            SyntaxKind::Ident
+            SyntaxKind::Lower
+          | SyntaxKind::Upper
           | SyntaxKind::String
           | SyntaxKind::Number => {
                 let value = self.lexer.slice().to_string();

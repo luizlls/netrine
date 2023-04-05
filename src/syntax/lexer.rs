@@ -63,8 +63,11 @@ impl<'src> Lexer<'src> {
             b' ' | b'\t' | b'\r' | b'\n' => {
                 return self.space();
             }
-            b'a'..=b'z' |  b'A'..=b'Z' | b'_' => {
+            b'a'..=b'z' | b'_' => {
                 return self.ident();
+            }
+            b'A'..=b'Z' => {
+                return self.upper();
             }
             b'0'..=b'9' => {
                 return self.number(false);
@@ -143,7 +146,19 @@ impl<'src> Lexer<'src> {
             "then" => SyntaxKind::Then,
             "where"  => SyntaxKind::Where,
             "yield" => SyntaxKind::Yield,
-            _ => SyntaxKind::Ident,
+            _ => SyntaxKind::Lower,
+        }
+    }
+
+    fn upper(&mut self) -> SyntaxKind {
+        self.bump_while(Lexer::is_ident);
+
+        let value = self.slice();
+
+        if value.chars().all(|ch| matches!(ch, 'A'..='Z' | '_')) {
+            SyntaxKind::Lower // CONSTANT CASE
+        } else {
+            SyntaxKind::Upper
         }
     }
 
@@ -362,19 +377,19 @@ mod tests {
     fn identifier() {
         let mut lexer = Lexer::new("variable True CONST _");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Ident, "variable");
+        assert_syntax_kind!(lexer, SyntaxKind::Lower, "variable");
         lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Ident, "True");
+        assert_syntax_kind!(lexer, SyntaxKind::Upper, "True");
         lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Ident, "CONST");
+        assert_syntax_kind!(lexer, SyntaxKind::Lower, "CONST");
         lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Ident, "_");
+        assert_syntax_kind!(lexer, SyntaxKind::Lower, "_");
     }
 
     #[test]
     fn keywords() {
         let mut lexer = Lexer::new("and or is not if then else case yield break where import");
-        lexer.next(); // space
+
         assert_syntax_kind!(lexer, SyntaxKind::And);
         lexer.next(); // space
         assert_syntax_kind!(lexer, SyntaxKind::Or);
@@ -533,14 +548,14 @@ mod tests {
     fn lookahead() {
         let mut lexer = Lexer::new("a 1 c");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Ident, "a");
+        assert_syntax_kind!(lexer, SyntaxKind::Lower, "a");
 
         assert_eq!(lexer.lookahead(0), SyntaxKind::Number);
-        assert_eq!(lexer.lookahead(1), SyntaxKind::Ident);
+        assert_eq!(lexer.lookahead(1), SyntaxKind::Lower);
 
         assert_syntax_kind!(lexer, SyntaxKind::Space);
         assert_syntax_kind!(lexer, SyntaxKind::Number, "1");
         assert_syntax_kind!(lexer, SyntaxKind::Space);
-        assert_syntax_kind!(lexer, SyntaxKind::Ident, "c");
+        assert_syntax_kind!(lexer, SyntaxKind::Lower, "c");
     }
 }

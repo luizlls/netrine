@@ -82,6 +82,7 @@ pub enum SyntaxKind {
     Parameters,
     Field,
     Spread,
+    Variant,
 
     LParen,
     RParen,
@@ -128,7 +129,8 @@ pub enum SyntaxKind {
     Pipe,   // |>
     Range,  // ..
 
-    Ident,
+    Lower,
+    Upper,
     Number,
     String,
 
@@ -158,6 +160,7 @@ impl fmt::Display for SyntaxKind {
             SyntaxKind::Lambda => "lambda",
             SyntaxKind::Parameters => "parameters",
             SyntaxKind::Spread => "spread",
+            SyntaxKind::Variant => "variant",
             SyntaxKind::Empty => "()",
             SyntaxKind::LParen => "(",
             SyntaxKind::RParen => ")",
@@ -200,7 +203,8 @@ impl fmt::Display for SyntaxKind {
             SyntaxKind::Break => "break",
             SyntaxKind::Where => "where",
             SyntaxKind::Import => "import",
-            SyntaxKind::Ident => "identifier",
+            SyntaxKind::Lower => "lowercase identifier",
+            SyntaxKind::Upper => "uppercase identifier",
             SyntaxKind::Number => "number",
             SyntaxKind::String => "string",
             SyntaxKind::Field => "field",
@@ -215,7 +219,8 @@ impl fmt::Display for SyntaxKind {
 
 impl SyntaxKind {
     pub fn is_terminal(self) -> bool {
-        matches!(self, SyntaxKind::Semi | SyntaxKind::EOF | SyntaxKind::Else | SyntaxKind::RBrace)
+        matches!(self, SyntaxKind::Semi | SyntaxKind::RBrace | SyntaxKind::Else
+                     | SyntaxKind::Case | SyntaxKind::EOF)
     }
 
     pub fn is_trivia(self) -> bool {
