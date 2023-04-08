@@ -5,14 +5,7 @@ use std::ops::Range;
 pub struct Span(pub u32, pub u32);
 
 impl Span {
-    pub fn from(
-        left: &impl ToSpan,
-        right: &impl ToSpan,
-    ) -> Span {
-        Span(left.span().0, right.span().1)
-    }
-
-    pub fn of(
+    pub fn combine(
         left: Span,
         right: Span,
     ) -> Span {
@@ -28,15 +21,9 @@ impl Span {
     }
 }
 
-impl ToSpan for Span {
-    fn span(&self) -> Span {
-        *self
-    }
-}
-
 impl Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} .. {}", self.0, self.1)
+        write!(f, "{}..{}", self.0, self.1)
     }
 }
 
@@ -50,8 +37,4 @@ impl Span {
     pub fn range(self) -> Range<usize> {
         (self.0 as usize) .. (self.1 as usize)
     }
-}
-
-pub trait ToSpan {
-    fn span(&self) -> Span;
 }

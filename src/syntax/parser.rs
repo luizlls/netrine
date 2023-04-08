@@ -1,7 +1,9 @@
 use std::vec;
 
+use crate::span::Span;
+
 use super::lexer::Lexer;
-use super::node::{Associativity, Precedence, SyntaxKind, SyntaxNode};
+use super::node::{Associativity, Precedence, Node, SyntaxKind, SyntaxToken};
 
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -10,8 +12,8 @@ struct Marker(usize);
 #[derive(Debug, Clone)]
 pub struct Parser<'p> {
     lexer: Lexer<'p>,
-    nodes: Vec<SyntaxNode>,
-    kind: SyntaxKind,
+    nodes: Vec<Node>,
+    token: SyntaxToken,
 }
 
 impl<'p> Parser<'p> {
@@ -19,17 +21,13 @@ impl<'p> Parser<'p> {
         let mut parser = Parser {
             lexer: Lexer::new(source),
             nodes: vec![],
-            kind: SyntaxKind::default(),
+            token: SyntaxToken::default(),
         };
         parser.bump(); // first token
         parser
     }
 
-    fn mark(&self) -> Marker {
-        Marker(self.nodes.len())
-    }
-
-    pub fn parse(mut self) -> Vec<SyntaxNode> {
+    pub fn parse(mut self) -> Vec<Node> {
         while !self.eof() {
             self.skip_trivia();
             self.node();
@@ -39,17 +37,17 @@ impl<'p> Parser<'p> {
     }
 
     fn node(&mut self) {
-        match self.kind {
-            SyntaxKind::If    => self.r#if(),
-            SyntaxKind::Yield => self.r#yield(),
-            SyntaxKind::Break => self.r#break(),
-            SyntaxKind::Import => self.import(),
+        match self.token {
+            SyntaxToken::If => self.r#if(),
+            SyntaxToken::Yield => self.r#yield(),
+            SyntaxToken::Break => self.r#break(),
+            SyntaxToken::Import => self.import(),
             _ => self.define(),
         }
     }
 
     fn expr(&mut self) {
-        if self.at(SyntaxKind::If) {
+        if self.at(SyntaxToken::If) {
             self.r#if();
         } else {
             self.pipe();
@@ -61,19 +59,19 @@ impl<'p> Parser<'p> {
 
         self.lvalue();
 
-        match self.kind {
-            SyntaxKind::Equals => {
-                self.expect(SyntaxKind::Equals);
+        match self.token {
+            SyntaxToken::Equals => {
+                self.expect(SyntaxToken::Equals);
                 self.expr();
                 let where_ = self.mark();
-                if self.maybe(SyntaxKind::Where) {
+                if self.maybe(SyntaxToken::Where) {
                     self.expr();
                     self.collect(SyntaxKind::Where, where_);
                 }
                 self.collect(SyntaxKind::Let, start);
             }
-            SyntaxKind::Walrus => {
-                self.expect(SyntaxKind::Walrus);
+            SyntaxToken::Walrus => {
+                self.expect(SyntaxToken::Walrus);
                 self.expr();
                 self.collect(SyntaxKind::Set, start);
             }
@@ -82,17 +80,17 @@ impl<'p> Parser<'p> {
     }
 
     fn ident(&mut self) {
-        self.expect(SyntaxKind::Lower);
+        self.expect(SyntaxToken::Lower);
     }
 
     fn upper(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::Upper);
+        self.expect(SyntaxToken::Upper);
 
-        match self.kind {
-            SyntaxKind::LParen => self.parens(),
-            SyntaxKind::LBrace => self.record(),
+        match self.token {
+            SyntaxToken::LParen => self.parens(),
+            SyntaxToken::LBrace => self.record(),
             _ => {}
         }
 
@@ -100,26 +98,26 @@ impl<'p> Parser<'p> {
     }
 
     fn number(&mut self) {
-        self.expect(SyntaxKind::Number);
+        self.expect(SyntaxToken::Number);
     }
 
     fn string(&mut self) {
-        self.expect(SyntaxKind::String);
+        self.expect(SyntaxToken::String);
     }
 
     fn field(&mut self) {
         let start = self.mark();
 
-        while self.at(SyntaxKind::Dot) {
+        while self.at(SyntaxToken::Dot) {
             self.make(); // dot
             self.bump(); // next
-            match self.kind {
-                SyntaxKind::Lower => self.ident(),
-                SyntaxKind::Upper => self.upper(),
-                SyntaxKind::Number => self.number(),
-                SyntaxKind::String => self.string(),
-                SyntaxKind::LParen => self.parens(),
-                SyntaxKind::LBracket => self.brackets(),
+            match self.token {
+                SyntaxToken::Lower => self.ident(),
+                SyntaxToken::Upper => self.upper(),
+                SyntaxToken::Number => self.number(),
+                SyntaxToken::String => self.string(),
+                SyntaxToken::LParen => self.parens(),
+                SyntaxToken::LBracket => self.brackets(),
                 _ => {
                     return self.unexpected(&[SyntaxKind::Field]);
                 }
@@ -131,7 +129,7 @@ impl<'p> Parser<'p> {
     fn element(&mut self) {
         let start = self.mark();
 
-        if self.maybe(SyntaxKind::Range) {
+        if self.maybe(SyntaxToken::Range) {
             self.apply();
             self.collect(SyntaxKind::Spread, start);
         } else {
@@ -142,12 +140,12 @@ impl<'p> Parser<'p> {
     fn parens(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::LParen);
+        self.expect(SyntaxToken::LParen);
         let total = self.sequence(
-            |parser| !parser.at(SyntaxKind::RParen),
+            |parser| !parser.at(SyntaxToken::RParen),
             Parser::element,
         );
-        self.expect(SyntaxKind::RParen);
+        self.expect(SyntaxToken::RParen);
 
         self.collect(
             match total {
@@ -162,20 +160,20 @@ impl<'p> Parser<'p> {
     fn brackets(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::LBracket);
+        self.expect(SyntaxToken::LBracket);
 
         self.sequence(
-            |parser| !parser.at(SyntaxKind::RBracket),
+            |parser| !parser.at(SyntaxToken::RBracket),
             Parser::element,
         );
 
-        self.expect(SyntaxKind::RBracket);
+        self.expect(SyntaxToken::RBracket);
 
         self.collect(SyntaxKind::List, start);
     }
 
     fn braces(&mut self) {
-        if matches!(self.peek(), SyntaxKind::Dot | SyntaxKind::Range) {
+        if matches!(self.peek(), SyntaxToken::Dot | SyntaxToken::Range) {
             self.record();
         } else {
             self.lambda();
@@ -185,12 +183,12 @@ impl<'p> Parser<'p> {
     fn record(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::LBrace);
+        self.expect(SyntaxToken::LBrace);
         self.sequence(
-            |parser| !parser.at(SyntaxKind::RBrace),
+            |parser| !parser.at(SyntaxToken::RBrace),
             Parser::property,
         );
-        self.expect(SyntaxKind::RBrace);
+        self.expect(SyntaxToken::RBrace);
 
         self.collect(SyntaxKind::Record, start);
     }
@@ -198,36 +196,36 @@ impl<'p> Parser<'p> {
     fn property(&mut self) {
         let start = self.mark();
 
-        match self.kind {
-            SyntaxKind::Range => {
+        match self.token {
+            SyntaxToken::Range => {
                 self.take();
-                if !self.at(SyntaxKind::RBrace) {
+                if !self.at(SyntaxToken::RBrace) {
                     self.apply();
                 }
             }
-            SyntaxKind::Dot => {
+            SyntaxToken::Dot => {
                 self.field();
 
-                match self.kind {
-                    SyntaxKind::Equals => {
+                match self.token {
+                    SyntaxToken::Equals => {
                         self.take();
                         self.expr();
                     }
-                    SyntaxKind::LBrace => {
+                    SyntaxToken::LBrace => {
                         self.braces();
                     }
-                    SyntaxKind::Comma
-                  | SyntaxKind::RBrace => {}
+                    SyntaxToken::Comma
+                  | SyntaxToken::RBrace => {}
                     _ => self.unexpected(&[
-                        SyntaxKind::Equals,
-                        SyntaxKind::Comma,
-                        SyntaxKind::RBrace,
+                        SyntaxToken::Equals,
+                        SyntaxToken::Comma,
+                        SyntaxToken::RBrace,
                     ])
                 }
             }
             _ => self.unexpected(&[
-                SyntaxKind::Dot,
-                SyntaxKind::Range,
+                SyntaxToken::Dot,
+                SyntaxToken::Range,
             ])
         }
 
@@ -235,68 +233,71 @@ impl<'p> Parser<'p> {
     }
 
     fn atom(&mut self) {
-        match self.kind {
-            SyntaxKind::Lower => self.ident(),
-            SyntaxKind::Upper => self.upper(),
-            SyntaxKind::Number => self.number(),
-            SyntaxKind::String => self.string(),
-            SyntaxKind::LParen => self.parens(),
-            SyntaxKind::LBrace => self.braces(),
-            SyntaxKind::LBracket => self.brackets(),
-            SyntaxKind::Dot => self.field(),
-            SyntaxKind::Error => self.error(),
+        match self.token {
+            SyntaxToken::Lower => self.ident(),
+            SyntaxToken::Upper => self.upper(),
+            SyntaxToken::Number => self.number(),
+            SyntaxToken::String => self.string(),
+            SyntaxToken::LParen => self.parens(),
+            SyntaxToken::LBrace => self.braces(),
+            SyntaxToken::LBracket => self.brackets(),
+            SyntaxToken::Dot => self.field(),
+            SyntaxToken::Error => self.error(),
             _ => self.unexpected(&[SyntaxKind::Expr])
         }
     }
 
     fn get(&mut self, start: Marker) {
-        self.expect(SyntaxKind::Dot);
+        self.expect(SyntaxToken::Dot);
         self.atom();
         self.collect(SyntaxKind::Get, start);
     }
 
     fn call(&mut self, start: Marker) {
-        self.expect(SyntaxKind::LParen);
+        self.expect(SyntaxToken::LParen);
         self.function_arguments();
-        self.expect(SyntaxKind::RParen);
+        self.expect(SyntaxToken::RParen);
         self.collect(SyntaxKind::Call, start);
     }
 
     fn function_arguments(&mut self) {
         let start = self.mark();
         self.sequence(
-            |parser| !parser.at(SyntaxKind::RParen),
-            Parser::element,
+            |parser| !parser.at(SyntaxToken::RParen),
+            |parser| {
+                let named = parser.mark();
+                parser.element();
+                if parser.at(SyntaxToken::Equals) && parser.was(SyntaxToken::Lower) {
+                    parser.expect(SyntaxToken::Equals);
+                    parser.expr();
+                    parser.collect(SyntaxKind::Let, named);
+                }
+            },
         );
         self.collect(SyntaxKind::Arguments, start);
-    }
-
-    fn trailing_lambda(&mut self, start: Marker) {
-        self.lambda();
-        self.collect(SyntaxKind::Call, start);
     }
 
     fn lambda(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::LBrace);
+        self.expect(SyntaxToken::LBrace);
 
-        if self.maybe(SyntaxKind::RBrace) {
+        if self.maybe(SyntaxToken::RBrace) {
             return self.collect(SyntaxKind::Lambda, start);
         }
 
-        if self.at(SyntaxKind::Case) {
+        if self.at(SyntaxToken::Case) {
             self.lambda_cases();
         } else {
             self.lambda_params();
         }
 
         self.until(
-            |parser| parser.at(SyntaxKind::RBrace),
+            |parser| parser.at(SyntaxToken::RBrace),
             Parser::node,
         );
 
-        self.expect(SyntaxKind::RBrace);
+        self.expect(SyntaxToken::RBrace);
 
         self.collect(SyntaxKind::Lambda, start);
     }
@@ -306,11 +307,11 @@ impl<'p> Parser<'p> {
 
         self.node();
 
-        match self.kind {
-            SyntaxKind::Arrow => {},
-            SyntaxKind::Comma => {
+        match self.token {
+            SyntaxToken::Arrow => {},
+            SyntaxToken::Comma => {
                 self.sequence(
-                    |parser| !parser.at(SyntaxKind::Arrow),
+                    |parser| !parser.at(SyntaxToken::Arrow),
                     Parser::atom,
                 );
             }
@@ -319,28 +320,28 @@ impl<'p> Parser<'p> {
             }
         }
 
-        self.collect(SyntaxKind::Parameters, start);
+        self.expect(SyntaxToken::Arrow);
 
-        self.expect(SyntaxKind::Arrow);
+        self.collect(SyntaxKind::Parameters, start);
     }
 
     fn lambda_cases(&mut self) {
-        while self.at(SyntaxKind::Case) {
+        while self.at(SyntaxToken::Case) {
             let start = self.mark();
 
-            self.expect(SyntaxKind::Case);
+            self.expect(SyntaxToken::Case);
 
             let params = self.mark();
             self.sequence(
-                |parser| !parser.at(SyntaxKind::Arrow),
+                |parser| !parser.at(SyntaxToken::Arrow),
                 Parser::atom,
             );
+
+            self.expect(SyntaxToken::Arrow);
             self.collect(SyntaxKind::Parameters, params);
 
-            self.expect(SyntaxKind::Arrow);
-
             self.until(
-                |parser| matches!(parser.kind, SyntaxKind::Case | SyntaxKind::Else | SyntaxKind::RBrace),
+                |parser| matches!(parser.token, SyntaxToken::Case | SyntaxToken::Else | SyntaxToken::RBrace),
                 Parser::node,
             );
 
@@ -348,9 +349,9 @@ impl<'p> Parser<'p> {
         }
 
         let else_ = self.mark();
-        if self.maybe(SyntaxKind::Else) {
+        if self.maybe(SyntaxToken::Else) {
             self.until(
-                |parser| parser.at(SyntaxKind::RBrace),
+                |parser| parser.at(SyntaxToken::RBrace),
                 Parser::node,
             );
             self.collect(SyntaxKind::Else, else_);
@@ -362,12 +363,19 @@ impl<'p> Parser<'p> {
 
         self.atom();
 
+        if self.at(SyntaxToken::Colon) {
+            self.type_annotation(start);
+        }
+
         loop {
-            match self.kind {
-                SyntaxKind::Dot    => self.get(start),
-                SyntaxKind::LParen => self.call(start),
-                SyntaxKind::LBrace => self.trailing_lambda(start),
+            match self.token {
+                SyntaxToken::Dot    => self.get(start),
+                SyntaxToken::LParen => self.call(start),
                 _ => break,
+            }
+
+            if self.at(SyntaxToken::Colon) {
+                self.type_annotation(start);
             }
         }
     }
@@ -375,11 +383,11 @@ impl<'p> Parser<'p> {
     fn unary(&mut self) {
         let start = self.mark();
 
-        match self.kind {
-            SyntaxKind::Not
-          | SyntaxKind::Pos
-          | SyntaxKind::Neg => {
-                self.expect(self.kind);
+        match self.token {
+            SyntaxToken::Not
+          | SyntaxToken::Pos
+          | SyntaxToken::Neg => {
+                self.expect(self.token);
                 self.apply();
                 self.collect(SyntaxKind::Unary, start);
             }
@@ -394,7 +402,7 @@ impl<'p> Parser<'p> {
 
         self.unary();
 
-        while let Some((precedence, associativity)) = self.kind.precedence()
+        while let Some((precedence, associativity)) = self.token.precedence()
           && precedence >= minimum_precedence
           && associativity != Associativity::None
         {
@@ -415,20 +423,31 @@ impl<'p> Parser<'p> {
         self.binary(0 as Precedence);
     }
 
+    fn xlvalue(&mut self) {
+        let start = self.mark();
+
+        self.lvalue();
+
+        if self.at(SyntaxToken::LBrace) {
+            self.lambda();
+            self.collect(SyntaxKind::LambdaCall, start);
+        }
+    }
+
     fn rvalue(&mut self) {
-        if self.at(SyntaxKind::If) {
+        if self.at(SyntaxToken::If) {
             self.r#if();
         } else {
-            self.lvalue();
+            self.xlvalue();
         }
     }
 
     fn pipe(&mut self) {
         let start = self.mark();
 
-        self.lvalue();
+        self.xlvalue();
 
-        while self.maybe(SyntaxKind::Pipe) {
+        while self.maybe(SyntaxToken::Pipe) {
             self.rvalue();
             self.collect(SyntaxKind::Pipe, start);
         }
@@ -437,11 +456,11 @@ impl<'p> Parser<'p> {
     fn r#if(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::If);
+        self.expect(SyntaxToken::If);
         self.expr();
 
         let then_ = self.mark();
-        if self.maybe(SyntaxKind::Then) {
+        if self.maybe(SyntaxToken::Then) {
             self.node();
             self.collect(SyntaxKind::Then, then_);
         } else {
@@ -449,7 +468,7 @@ impl<'p> Parser<'p> {
         }
 
         let else_ = self.mark();
-        if self.maybe(SyntaxKind::Else) {
+        if self.maybe(SyntaxToken::Else) {
             self.node();
             self.collect(SyntaxKind::Else, else_);
         }
@@ -460,9 +479,9 @@ impl<'p> Parser<'p> {
     fn r#yield(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::Yield);
+        self.expect(SyntaxToken::Yield);
 
-        if !self.kind.is_terminal() {
+        if !self.token.is_terminal() {
             self.expr();
         }
 
@@ -470,41 +489,56 @@ impl<'p> Parser<'p> {
     }
 
     fn r#break(&mut self) {
-        self.expect(SyntaxKind::Break);
+        let start = self.mark();
+        self.expect(SyntaxToken::Break);
+        self.collect(SyntaxKind::Break, start);
     }
 
     fn import(&mut self) {
         let start = self.mark();
 
-        self.expect(SyntaxKind::Import);
+        self.expect(SyntaxToken::Import);
 
-        self.expect(SyntaxKind::Upper);
+        self.expect(SyntaxToken::Upper);
 
-        while self.maybe(SyntaxKind::Dot) {
-              self.expect(SyntaxKind::Upper);
+        while self.maybe(SyntaxToken::Dot) {
+              self.expect(SyntaxToken::Upper);
         }
 
-        let imported_names = self.mark();
-
-        if self.at(SyntaxKind::LParen) {
-            self.expect(SyntaxKind::LParen);
+        let import = self.mark();
+        if self.at(SyntaxToken::LParen) {
+            self.expect(SyntaxToken::LParen);
             self.sequence(
-                |parser| !parser.at(SyntaxKind::RParen),
+                |parser| !parser.at(SyntaxToken::RParen),
                 Parser::ident,
             );
-            self.expect(SyntaxKind::RParen);
+            self.expect(SyntaxToken::RParen);
+            self.collect(SyntaxKind::Import, import);
         }
-
-        self.collect(SyntaxKind::Import, imported_names);
 
         self.collect(SyntaxKind::Import, start);
     }
 
-    fn at(&self, kind: SyntaxKind) -> bool {
-        self.kind == kind
+    fn type_annotation(&mut self, start: Marker) {
+        self.expect(SyntaxToken::Colon);
+        self.atom();
+        self.collect(SyntaxKind::TypeAnnotation, start);
     }
 
-    fn expect(&mut self, kind: SyntaxKind) {
+    fn at(&self, kind: SyntaxToken) -> bool {
+        self.token == kind
+    }
+
+    fn was(&self, kind: SyntaxToken) -> bool {
+        self.nodes
+            .iter()
+            .rev()
+            .skip_while(|node| node.is_trivia())
+            .next()
+            .map_or(false, |node| node.is_token(kind))
+    }
+
+    fn expect(&mut self, kind: SyntaxToken) {
         if self.at(kind) {
             self.take();
         } else {
@@ -513,7 +547,7 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn maybe(&mut self, kind: SyntaxKind) -> bool {
+    fn maybe(&mut self, kind: SyntaxToken) -> bool {
         if self.at(kind) {
             self.take();
             true
@@ -529,24 +563,29 @@ impl<'p> Parser<'p> {
     }
 
     fn collect(&mut self, kind: SyntaxKind, Marker(start): Marker) {
-        let nodes = self.nodes.drain(start..).collect();
-        self.nodes.push(SyntaxNode::nodes(kind, nodes));
+        let nodes = self.nodes.drain(start..).collect::<Vec<_>>();
+        let span = if let (Some(first), Some(last)) = (nodes.first(), nodes.last()) {
+            Span::combine(first.span, last.span)
+        } else {
+            Span::default()
+        };
+        self.nodes.push(Node::nodes(kind, nodes, span));
     }
 
     fn make(&mut self) {
-        match self.kind {
-            SyntaxKind::Lower
-          | SyntaxKind::Upper
-          | SyntaxKind::String
-          | SyntaxKind::Number => {
-                let value = self.lexer.slice().to_string();
-                self.nodes.push(SyntaxNode::node(self.kind, value));
-            }
+        let span = self.lexer.span();
+
+        let kind = match self.token {
+            SyntaxToken::Lower => SyntaxKind::Lower,
+            SyntaxToken::Upper => SyntaxKind::Upper,
+            SyntaxToken::String => SyntaxKind::String,
+            SyntaxToken::Number => SyntaxKind::Number,
             _ => {
-                let size = self.lexer.size() as u32;
-                self.nodes.push(SyntaxNode::basic(self.kind, size));
+                return self.nodes.push(Node::token(self.token, span));
             }
-        }
+        };
+        let value = self.lexer.slice().to_string();
+        self.nodes.push(Node::node(kind, value, span));
     }
 
     fn sequence<F, P>(
@@ -562,7 +601,7 @@ impl<'p> Parser<'p> {
         while predicate(self) {
             parser(self);
             counter += 1;
-            if !self.maybe(SyntaxKind::Comma) { break; }
+            if !self.maybe(SyntaxToken::Comma) { break; }
         }
 
         counter
@@ -580,13 +619,13 @@ impl<'p> Parser<'p> {
     }
 
     fn skip_trivia(&mut self) {
-        while matches!(self.kind, SyntaxKind::Space | SyntaxKind::Comment) {
+        while matches!(self.token, SyntaxToken::Space | SyntaxToken::Comment) {
             self.make();
             self.bump();
         }
     }
 
-    fn unexpected(&mut self, expected: &[SyntaxKind]) {
+    fn unexpected(&mut self, expected: &[impl std::fmt::Display]) {
         let formatted = expected
             .iter()
             .map(|it| {
@@ -596,22 +635,21 @@ impl<'p> Parser<'p> {
             .join(" or ");
 
         self.fail(format!("expected {formatted}"));
-
-        self.bump();
+        self.recover();
     }
 
     fn error(&mut self) {
-        debug_assert!(self.at(SyntaxKind::Error));
+        debug_assert!(self.at(SyntaxToken::Error));
 
         let error = self.lexer.slice().to_string();
-        let size = self.lexer.size() as u32;
-        self.nodes.push(SyntaxNode::error(error, size));
+        let span = self.lexer.span();
+        self.nodes.push(Node::error(error, span));
 
         self.recover();
     }
 
     fn fail(&mut self, error: impl Into<String>) {
-        self.nodes.push(SyntaxNode::error(error.into(), 0));
+        self.nodes.push(Node::error(error.into(), self.lexer.span()));
     }
 
     // TODO: better recover from errors
@@ -619,16 +657,20 @@ impl<'p> Parser<'p> {
         self.bump();
     }
 
-    fn bump(&mut self) -> SyntaxKind {
-        self.kind = self.lexer.next();
-        self.kind
-    }
-
-    fn peek(&mut self) -> SyntaxKind {
+    fn peek(&mut self) -> SyntaxToken {
         self.lexer.lookahead(0)
     }
 
+    fn bump(&mut self) -> SyntaxToken {
+        self.token = self.lexer.next();
+        self.token
+    }
+
+    fn mark(&self) -> Marker {
+        Marker(self.nodes.len())
+    }
+
     fn eof(&self) -> bool {
-        self.at(SyntaxKind::EOF)
+        self.at(SyntaxToken::EOF)
     }
 }

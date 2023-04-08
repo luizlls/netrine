@@ -1,4 +1,6 @@
-use super::node::SyntaxKind;
+use crate::span::Span;
+
+use super::node::SyntaxToken;
 
 #[derive(Debug, Clone)]
 pub struct Lexer<'src> {
@@ -32,8 +34,8 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    pub fn size(&self) -> usize {
-        self.index - self.start
+    pub fn span(&self) -> Span {
+        Span(self.start as u32, self.index as u32)
     }
 
     fn align(&mut self) {
@@ -51,12 +53,12 @@ impl<'src> Lexer<'src> {
         self.raw.get(self.index + 1).copied()
     }
 
-    pub fn next(&mut self) -> SyntaxKind {
+    pub fn next(&mut self) -> SyntaxToken {
         self.align();
 
         let Some(chr) = self.curr
         else {
-            return SyntaxKind::EOF;
+            return SyntaxToken::EOF;
         };
 
         let kind = match chr {
@@ -84,14 +86,14 @@ impl<'src> Lexer<'src> {
             _ if Lexer::is_symbol(self.curr) => {
                 return self.operator();
             }
-            b'(' => SyntaxKind::LParen,
-            b'{' => SyntaxKind::LBrace,
-            b'[' => SyntaxKind::LBracket,
-            b')' => SyntaxKind::RParen,
-            b'}' => SyntaxKind::RBrace,
-            b']' => SyntaxKind::RBracket,
-            b';' => SyntaxKind::Semi,
-            b',' => SyntaxKind::Comma,
+            b'(' => SyntaxToken::LParen,
+            b'{' => SyntaxToken::LBrace,
+            b'[' => SyntaxToken::LBracket,
+            b')' => SyntaxToken::RParen,
+            b'}' => SyntaxToken::RBrace,
+            b']' => SyntaxToken::RBracket,
+            b';' => SyntaxToken::Semi,
+            b',' => SyntaxToken::Comma,
             _ => self.error("unexpected character"),
         };
 
@@ -100,7 +102,7 @@ impl<'src> Lexer<'src> {
         kind
     }
 
-    pub fn skip_trivia(&mut self) -> SyntaxKind {
+    pub fn skip_trivia(&mut self) -> SyntaxToken {
         let mut next = self.next();
 
         while next.is_trivia() { next = self.next(); }
@@ -108,7 +110,7 @@ impl<'src> Lexer<'src> {
         next
     }
 
-    pub fn lookahead(&mut self, nth: usize) -> SyntaxKind {
+    pub fn lookahead(&mut self, nth: usize) -> SyntaxToken {
         let start = self.start;
         let index = self.index;
         let curr = self.curr;
@@ -129,117 +131,117 @@ impl<'src> Lexer<'src> {
         next
     }
 
-    fn ident(&mut self) -> SyntaxKind {
+    fn ident(&mut self) -> SyntaxToken {
         self.bump_while(Lexer::is_ident);
         self.bump_while(|ch| matches!(ch, Some(b'?' | b'!' | b'\'')));
 
         match self.slice() {
-            "and" => SyntaxKind::And,
-            "break" => SyntaxKind::Break,
-            "case" => SyntaxKind::Case,
-            "else" => SyntaxKind::Else,
-            "if" => SyntaxKind::If,
-            "import" => SyntaxKind::Import,
-            "is" => SyntaxKind::Is,
-            "not" => SyntaxKind::Not,
-            "or" => SyntaxKind::Or,
-            "then" => SyntaxKind::Then,
-            "where"  => SyntaxKind::Where,
-            "yield" => SyntaxKind::Yield,
-            _ => SyntaxKind::Lower,
+            "and" => SyntaxToken::And,
+            "break" => SyntaxToken::Break,
+            "case" => SyntaxToken::Case,
+            "else" => SyntaxToken::Else,
+            "if" => SyntaxToken::If,
+            "import" => SyntaxToken::Import,
+            "is" => SyntaxToken::Is,
+            "not" => SyntaxToken::Not,
+            "or" => SyntaxToken::Or,
+            "then" => SyntaxToken::Then,
+            "where"  => SyntaxToken::Where,
+            "yield" => SyntaxToken::Yield,
+            _ => SyntaxToken::Lower,
         }
     }
 
-    fn upper(&mut self) -> SyntaxKind {
+    fn upper(&mut self) -> SyntaxToken {
         self.bump_while(Lexer::is_ident);
 
         let value = self.slice();
 
         if value.chars().all(|ch| matches!(ch, 'A'..='Z' | '_')) {
-            SyntaxKind::Lower // CONSTANT CASE
+            SyntaxToken::Lower // CONSTANT CASE
         } else {
-            SyntaxKind::Upper
+            SyntaxToken::Upper
         }
     }
 
-    fn operator(&mut self) -> SyntaxKind {
+    fn operator(&mut self) -> SyntaxToken {
         let Some(chr) = self.curr
         else {
-            return SyntaxKind::EOF;
+            return SyntaxToken::EOF;
         };
 
         let kind = match chr {
             b'+' => {
                 let peek = self.peek();
                 if Lexer::is_ident(peek) || Lexer::is_number(peek) || peek == Some(b'(') {
-                    SyntaxKind::Pos
+                    SyntaxToken::Pos
                 } else {
-                    SyntaxKind::Add
+                    SyntaxToken::Add
                 }
             }
             b'-' => {
                 let peek = self.peek();
                 if peek == Some(b'>') {
                     self.bump();
-                    SyntaxKind::Arrow
+                    SyntaxToken::Arrow
                 } else if Lexer::is_ident(peek) || Lexer::is_number(peek) || peek == Some(b'(') {
-                    SyntaxKind::Neg
+                    SyntaxToken::Neg
                 } else {
-                    SyntaxKind::Sub
+                    SyntaxToken::Sub
                 }
             }
             b'.' => {
                 if self.peek() == Some(b'.') {
                     self.bump();
-                    SyntaxKind::Range
+                    SyntaxToken::Range
                 } else {
-                    SyntaxKind::Dot
+                    SyntaxToken::Dot
                 }
             }
             b'=' => {
                 if self.peek() == Some(b'=') {
                     self.bump();
-                    SyntaxKind::Eq
+                    SyntaxToken::Eq
                 } else {
-                    SyntaxKind::Equals
+                    SyntaxToken::Equals
                 }
             }
             b':' => {
                 if self.peek() == Some(b'=') {
                     self.bump();
-                    SyntaxKind::Walrus
+                    SyntaxToken::Walrus
                 } else {
-                    SyntaxKind::Colon
+                    SyntaxToken::Colon
                 }
             }
             b'<' => {
                 if self.peek() == Some(b'=') {
                     self.bump();
-                    SyntaxKind::Le
+                    SyntaxToken::Le
                 } else {
-                    SyntaxKind::Lt
+                    SyntaxToken::Lt
                 }
             }
             b'>' => {
                 if self.peek() == Some(b'=') {
                     self.bump();
-                    SyntaxKind::Ge
+                    SyntaxToken::Ge
                 } else {
-                    SyntaxKind::Gt
+                    SyntaxToken::Gt
                 }
             }
             b'!' if self.peek() == Some(b'=') => {
                 self.bump();
-                SyntaxKind::Ne
+                SyntaxToken::Ne
             }
             b'|' if self.peek() == Some(b'>') => {
                 self.bump();
-                SyntaxKind::Pipe
+                SyntaxToken::Pipe
             }
-            b'*' => SyntaxKind::Mul,
-            b'/' => SyntaxKind::Div,
-            b'^' => SyntaxKind::Exp,
-            b'%' => SyntaxKind::Mod,
+            b'*' => SyntaxToken::Mul,
+            b'/' => SyntaxToken::Div,
+            b'^' => SyntaxToken::Exp,
+            b'%' => SyntaxToken::Mod,
             _ => unreachable!()
         };
 
@@ -247,7 +249,7 @@ impl<'src> Lexer<'src> {
         kind
     }
 
-    fn number(&mut self, prefix: bool) -> SyntaxKind {
+    fn number(&mut self, prefix: bool) -> SyntaxToken {
         if prefix {
             self.bump();
         }
@@ -270,10 +272,10 @@ impl<'src> Lexer<'src> {
             _ => {}
         }
 
-        SyntaxKind::Number
+        SyntaxToken::Number
     }
 
-    fn string(&mut self) -> SyntaxKind {
+    fn string(&mut self) -> SyntaxToken {
         let mut string = String::new();
 
         loop {
@@ -307,7 +309,7 @@ impl<'src> Lexer<'src> {
             }
         }
 
-        self.value(string, SyntaxKind::String)
+        self.value(string, SyntaxToken::String)
     }
 
     fn is_number(ch: Option<u8>) -> bool {
@@ -331,14 +333,14 @@ impl<'src> Lexer<'src> {
         matches!(ch, Some(b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'))
     }
 
-    fn comment(&mut self) -> SyntaxKind {
+    fn comment(&mut self) -> SyntaxToken {
         self.bump_while(|ch| !matches!(ch, Some(b'\n') | None));
-        SyntaxKind::Comment
+        SyntaxToken::Comment
     }
 
-    fn space(&mut self) -> SyntaxKind {
+    fn space(&mut self) -> SyntaxToken {
         self.bump_while(|ch| matches!(ch, Some(b' ' | b'\t' | b'\n' | b'\r')));
-        SyntaxKind::Space
+        self.next()
     }
 
     fn bump_while<P>(&mut self, pred: P)
@@ -348,12 +350,12 @@ impl<'src> Lexer<'src> {
         while pred(self.curr) { self.bump(); }
     }
 
-    fn error(&mut self, value: impl Into<String>) -> SyntaxKind {
+    fn error(&mut self, value: impl Into<String>) -> SyntaxToken {
         self.value = Some(value.into());
-        SyntaxKind::Error
+        SyntaxToken::Error
     }
 
-    fn value(&mut self, value: impl Into<String>, kind: SyntaxKind) -> SyntaxKind {
+    fn value(&mut self, value: impl Into<String>, kind: SyntaxToken) -> SyntaxToken {
         self.value = Some(value.into());
         kind
     }
@@ -377,185 +379,136 @@ mod tests {
     fn identifier() {
         let mut lexer = Lexer::new("variable True CONST _");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Lower, "variable");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Upper, "True");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Lower, "CONST");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Lower, "_");
+        assert_syntax_kind!(lexer, SyntaxToken::Lower, "variable");
+        assert_syntax_kind!(lexer, SyntaxToken::Upper, "True");
+        assert_syntax_kind!(lexer, SyntaxToken::Lower, "CONST");
+        assert_syntax_kind!(lexer, SyntaxToken::Lower, "_");
     }
 
     #[test]
     fn keywords() {
         let mut lexer = Lexer::new("and or is not if then else case yield break where import");
 
-        assert_syntax_kind!(lexer, SyntaxKind::And);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Or);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Is);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Not);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::If);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Then);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Else);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Case);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Yield);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Break);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Where);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Import);
+        assert_syntax_kind!(lexer, SyntaxToken::And);
+        assert_syntax_kind!(lexer, SyntaxToken::Or);
+        assert_syntax_kind!(lexer, SyntaxToken::Is);
+        assert_syntax_kind!(lexer, SyntaxToken::Not);
+        assert_syntax_kind!(lexer, SyntaxToken::If);
+        assert_syntax_kind!(lexer, SyntaxToken::Then);
+        assert_syntax_kind!(lexer, SyntaxToken::Else);
+        assert_syntax_kind!(lexer, SyntaxToken::Case);
+        assert_syntax_kind!(lexer, SyntaxToken::Yield);
+        assert_syntax_kind!(lexer, SyntaxToken::Break);
+        assert_syntax_kind!(lexer, SyntaxToken::Where);
+        assert_syntax_kind!(lexer, SyntaxToken::Import);
     }
 
     #[test]
     fn punctuation() {
         let mut lexer = Lexer::new(". , ; ( ) [ ] { }");
-        assert_syntax_kind!(lexer, SyntaxKind::Dot);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Comma);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Semi);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::LParen);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::RParen);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::LBracket);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::RBracket);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::LBrace);
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::RBrace);
+        assert_syntax_kind!(lexer, SyntaxToken::Dot);
+        assert_syntax_kind!(lexer, SyntaxToken::Comma);
+        assert_syntax_kind!(lexer, SyntaxToken::Semi);
+        assert_syntax_kind!(lexer, SyntaxToken::LParen);
+        assert_syntax_kind!(lexer, SyntaxToken::RParen);
+        assert_syntax_kind!(lexer, SyntaxToken::LBracket);
+        assert_syntax_kind!(lexer, SyntaxToken::RBracket);
+        assert_syntax_kind!(lexer, SyntaxToken::LBrace);
+        assert_syntax_kind!(lexer, SyntaxToken::RBrace);
     }
 
     #[test]
     fn operators() {
         let mut lexer = Lexer::new(". -> : := = == != + - * / % ^ > < >= <= |> ..");
-        assert_syntax_kind!(lexer, SyntaxKind::Dot, ".");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Arrow, "->");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Colon, ":");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Walrus, ":=");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Equals, "=");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Eq, "==");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Ne, "!=");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Add, "+");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Sub, "-");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Mul, "*");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Div, "/");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Mod, "%");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Exp, "^");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Gt, ">");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Lt, "<");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Ge, ">=");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Le, "<=");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Pipe, "|>");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Range, "..");
-        lexer.next(); // space
+        assert_syntax_kind!(lexer, SyntaxToken::Dot, ".");
+        assert_syntax_kind!(lexer, SyntaxToken::Arrow, "->");
+        assert_syntax_kind!(lexer, SyntaxToken::Colon, ":");
+        assert_syntax_kind!(lexer, SyntaxToken::Walrus, ":=");
+        assert_syntax_kind!(lexer, SyntaxToken::Equals, "=");
+        assert_syntax_kind!(lexer, SyntaxToken::Eq, "==");
+        assert_syntax_kind!(lexer, SyntaxToken::Ne, "!=");
+        assert_syntax_kind!(lexer, SyntaxToken::Add, "+");
+        assert_syntax_kind!(lexer, SyntaxToken::Sub, "-");
+        assert_syntax_kind!(lexer, SyntaxToken::Mul, "*");
+        assert_syntax_kind!(lexer, SyntaxToken::Div, "/");
+        assert_syntax_kind!(lexer, SyntaxToken::Mod, "%");
+        assert_syntax_kind!(lexer, SyntaxToken::Exp, "^");
+        assert_syntax_kind!(lexer, SyntaxToken::Gt, ">");
+        assert_syntax_kind!(lexer, SyntaxToken::Lt, "<");
+        assert_syntax_kind!(lexer, SyntaxToken::Ge, ">=");
+        assert_syntax_kind!(lexer, SyntaxToken::Le, "<=");
+        assert_syntax_kind!(lexer, SyntaxToken::Pipe, "|>");
+        assert_syntax_kind!(lexer, SyntaxToken::Range, "..");
     }
 
     #[test]
     fn number() {
         let mut lexer = Lexer::new("42 3.14 0xABCDEF 0b0101");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Number, "42");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Number, "3.14");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Number, "0xABCDEF");
-        lexer.next(); // space
-        assert_syntax_kind!(lexer, SyntaxKind::Number, "0b0101");
-        lexer.next(); // space
+        assert_syntax_kind!(lexer, SyntaxToken::Number, "42");
+        assert_syntax_kind!(lexer, SyntaxToken::Number, "3.14");
+        assert_syntax_kind!(lexer, SyntaxToken::Number, "0xABCDEF");
+        assert_syntax_kind!(lexer, SyntaxToken::Number, "0b0101");
     }
 
     #[test]
     fn simple_string() {
         let mut lexer = Lexer::new(r#""Hello, World""#);
 
-        assert_syntax_kind!(lexer, SyntaxKind::String, "Hello, World");
+        assert_syntax_kind!(lexer, SyntaxToken::String, "Hello, World");
     }
 
     #[test]
     fn nested_string() {
         let mut lexer = Lexer::new(r#""code = \"n = 42\"""#);
 
-        assert_syntax_kind!(lexer, SyntaxKind::String, r#"code = "n = 42""#);
+        assert_syntax_kind!(lexer, SyntaxToken::String, r#"code = "n = 42""#);
     }
 
     #[test]
     fn empty_lines() {
         let mut lexer = Lexer::new("\n\n\n");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Space);
+        assert_syntax_kind!(lexer, SyntaxToken::EOF);
     }
 
     #[test]
     fn unterminated_string() {
         let mut lexer = Lexer::new(r#""Hello"#);
 
-        assert_syntax_kind!(lexer, SyntaxKind::Error, "unterminated string");
+        assert_syntax_kind!(lexer, SyntaxToken::Error, "unterminated string");
     }
 
     #[test]
     fn unbalanced_quotes() {
         let mut lexer = Lexer::new(r#""Hello"""#);
 
-        assert_syntax_kind!(lexer, SyntaxKind::String, "Hello");
-        assert_syntax_kind!(lexer, SyntaxKind::Error, "unterminated string");
+        assert_syntax_kind!(lexer, SyntaxToken::String, "Hello");
+        assert_syntax_kind!(lexer, SyntaxToken::Error, "unterminated string");
     }
 
     #[test]
     fn invalid_escaped_string() {
         let mut lexer = Lexer::new(r#""escape \a""#);
 
-        assert_syntax_kind!(lexer, SyntaxKind::Error, "invalid escape character");
+        assert_syntax_kind!(lexer, SyntaxToken::Error, "invalid escape character");
     }
 
     #[test]
     fn unexpected_character() {
         let mut lexer = Lexer::new("😀");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Error, "unexpected character");
+        assert_syntax_kind!(lexer, SyntaxToken::Error, "unexpected character");
     }
 
     #[test]
     fn lookahead() {
         let mut lexer = Lexer::new("a 1 c");
 
-        assert_syntax_kind!(lexer, SyntaxKind::Lower, "a");
-
-        assert_eq!(lexer.lookahead(0), SyntaxKind::Number);
-        assert_eq!(lexer.lookahead(1), SyntaxKind::Lower);
-
-        assert_syntax_kind!(lexer, SyntaxKind::Space);
-        assert_syntax_kind!(lexer, SyntaxKind::Number, "1");
-        assert_syntax_kind!(lexer, SyntaxKind::Space);
-        assert_syntax_kind!(lexer, SyntaxKind::Lower, "c");
+        assert_syntax_kind!(lexer, SyntaxToken::Lower, "a");
+        assert_eq!(lexer.lookahead(0), SyntaxToken::Number);
+        assert_eq!(lexer.lookahead(1), SyntaxToken::Lower);
+        assert_syntax_kind!(lexer, SyntaxToken::Number, "1");
+        assert_syntax_kind!(lexer, SyntaxToken::Lower, "c");
     }
 }

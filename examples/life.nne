@@ -1,10 +1,9 @@
 // game of life
 
 neighbors((x, y)) =
-  (-1..1) { dx ->
-    (-1..1) { dy ->
-      if (dx, dy) != (0, 0)
-        yield (x + dx, y + dy)
+  -1..1 { dx ->
+    -1..1 { dy ->
+      if (dx, dy) != (0, 0) yield (x + dx, y + dy)
     }
   }
 
@@ -14,15 +13,15 @@ frequency(collection) =
 tick(state) = {
   sides = frequency(flatmap(state, neighbors))
   cells = frequency(state)
-  entries(sides) { (coordinate, count) ->
-    if count == 3 or count == 2 and contains?(cells, coordinate)
-      yield coordinate
+  entries(sides) { (coord, count) ->
+    if count == 3 or count == 2 and contains?(cells, coord)
+      yield coord
   }
 }
 
 draw(state, x, y, x', y') =
-  (x..x') { dx ->
-    (y..y') { dy ->
+  x..x' { dx ->
+    y..y' { dy ->
       if contains?(state, (dx, dy))
         write("# ")
       else

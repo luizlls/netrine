@@ -6,6 +6,6 @@ mod lexer;
 mod parser;
 pub mod node;
 
-pub fn parse(source: &Source) -> Vec<node::SyntaxNode> {
+pub fn parse(source: &Source) -> Vec<node::Node> {
     parser::Parser::new(&source.content).parse()
 }
