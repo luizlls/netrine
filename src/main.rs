@@ -2,6 +2,8 @@
 #![feature(box_patterns)]
 #![feature(let_chains)]
 
+mod analysis;
+mod arena;
 mod error;
 mod source;
 mod span;
