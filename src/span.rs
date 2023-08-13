@@ -5,20 +5,24 @@ use std::ops::Range;
 pub struct Span(pub u32, pub u32);
 
 impl Span {
-    pub fn combine(
-        left: Span,
-        right: Span,
+    pub fn from(
+        lo: &impl IntoSpan,
+        hi: &impl IntoSpan,
     ) -> Span {
-        Span(left.0, right.1)
+        Span(lo.span().lo(), hi.span().hi())
     }
 
-    pub fn start(self) -> u32 {
+    pub fn lo(self) -> u32 {
         self.0
     }
 
-    pub fn end(self) -> u32 {
+    pub fn hi(self) -> u32 {
         self.1
     }
+}
+
+pub trait IntoSpan {
+    fn span(&self) -> Span;
 }
 
 impl Display for Span {
@@ -36,5 +40,11 @@ impl From<Span> for Range<usize> {
 impl Span {
     pub fn range(self) -> Range<usize> {
         (self.0 as usize) .. (self.1 as usize)
+    }
+}
+
+impl IntoSpan for Span {
+    fn span(&self) -> Span {
+        *self
     }
 }

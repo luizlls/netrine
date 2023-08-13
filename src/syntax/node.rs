@@ -1,287 +1,203 @@
-use std::fmt;
+use crate::span::{Span, IntoSpan};
 
-use crate::span::Span;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Module {
+    pub nodes: Vec<Node>,
+}
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Node {
-    pub kind: NodeKind,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Node {
+
+    Let(Box<Let>),
+
+    Mut(Box<Mut>),
+
+    Get(Box<Get>),
+
+    Apply(Apply),
+
+    Unary(Box<Unary>),
+
+    Binary(Box<Binary>),
+
+    Field(Box<Field>),
+
+    Group(Box<Group>),
+
+    Block(Block),
+
+    Lambda(Lambda),
+
+    Name(Literal),
+
+    String(Literal),
+
+    Number(Literal),
+
+    List(List),
+
+    Record(Record),
+
+    Tuple(Tuple),
+
+    Empty(Span),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Constraint {
+    Unary(Box<Unary>),
+    
+    Binary(Box<Binary>),
+    
+    Apply(Apply),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parameter {
+    pub patt: Node,
+    pub value: Option<Node>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum NodeKind {
-    Node(SyntaxKind, String),
-    
-    Nodes(SyntaxKind, Vec<Node>),
-    
-    Token(SyntaxToken),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Let {
+    pub lvalue: Node,
+    pub rvalue: Node,
+    pub constraints: Vec<Constraint>,
+    pub span: Span,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mut {
+    pub lvalue: Node,
+    pub rvalue: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Get {
+    pub node: Node,
+    pub field: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Apply {
+    pub nodes: Vec<Node>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Group {
+    pub node: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Block {
+    pub nodes: Vec<Node>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unary {
+    pub operator: Operator,
+    pub expr: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binary {
+    pub operator: Operator,
+    pub lexpr: Node,
+    pub rexpr: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lambda {
+    pub parameters: Vec<Parameter>,
+    pub body: Block,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct If {
+    pub predicate: Node,
+    pub then: Node,
+    pub otherwise: Option<Node>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct List {
+    pub items: Vec<Node>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tuple {
+    pub items: Vec<Node>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Record {
+    pub properties: Vec<(Name, Node)>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Field {
+    pub value: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Literal {
+    pub value: String,
+    pub span: Span,
+}
+
+pub type Name = Literal;
 
 impl Node {
-    pub fn node(kind: SyntaxKind, value: String, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Node(kind, value),
-            span,
-        }
-    }
-
-    pub fn nodes(kind: SyntaxKind, nodes: Vec<Node>, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Nodes(kind, nodes),
-            span,
-        }
-    }
-
-    pub fn token(token: SyntaxToken, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Token(token),
-            span,
-        }
-    }
-
-    pub fn error(value: String, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Node(SyntaxKind::Error, value),
-            span,
-        }
-    }
-
-    pub fn is_trivia(&self) -> bool {
-        let NodeKind::Token(token) = self.kind else { return false };
-        token.is_trivia()
-    }
-
-    pub fn is_token(&self, expected: SyntaxToken) -> bool {
-        let NodeKind::Token(token) = self.kind else { return false; };
-        token == expected
-    }
-}
-
-impl Default for Node {
-    fn default() -> Node {
-        Node {
-            kind: NodeKind::Token(SyntaxToken::EOF),
-            span: Span(0, 0),
+    pub fn is_identifier(&self) -> bool {
+        match &self {
+            Node::Name(_) => true,
+            Node::Apply(Apply { nodes, .. }) => nodes.iter().all(Node::is_identifier),
+            _ => false
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-pub enum SyntaxKind {
-    #[default]
-    EOF,
-
-    Let,
-    Set,
-    Get,
-    Call,
-    Arguments,
-    Unary,
-    Binary,
-    Group,
-    Tuple,
-    List,
-    Record,
-    Property,
-    Empty,
-    Parameters,
-    Lambda,
-    LambdaCall,
-    Field,
-    Spread,
-    Variant,
-    Pipe,
-    TypeAnnotation,
-
-    If,
-    Then,
-    Else,
-    Case,
-    Yield,
-    Break,
-    Import,
-    Where,
-
-    Lower,
-    Upper,
-    Number,
-    String,
-
-    Expr,
-    Error,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperatorKind {
+    Is,   // is
+    And,  // and
+    Or,   // or
+    Not,  // not
+    Pos,  // +
+    Neg,  // -
+    Add,  // +
+    Sub,  // -
+    Mul,  // *
+    Div,  // /
+    Mod,  // %
+    Exp,  // ^
+    Eq,   // ==
+    Ne,   // !=
+    Lt,   // <
+    Le,   // <=
+    Gt,   // >
+    Ge,   // >=
+    Range // ..
 }
 
-impl fmt::Display for SyntaxKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let description = match self {
-            SyntaxKind::EOF => "end of file",
-            SyntaxKind::Let => "let",
-            SyntaxKind::Set => "set",
-            SyntaxKind::Get => "get",
-            SyntaxKind::Call => "function call",
-            SyntaxKind::Arguments => "function arguments",
-            SyntaxKind::Unary => "unary expression",
-            SyntaxKind::Binary => "binary expression",
-            SyntaxKind::Group => "group",
-            SyntaxKind::Tuple => "tuple",
-            SyntaxKind::List => "list",
-            SyntaxKind::Record => "record",
-            SyntaxKind::Property => "record property",
-            SyntaxKind::Lambda => "lambda",
-            SyntaxKind::LambdaCall => "trailing lambda",
-            SyntaxKind::Parameters => "parameters",
-            SyntaxKind::Variant => "type variant",
-            SyntaxKind::TypeAnnotation => "type annotation",
-            SyntaxKind::Pipe => "|>",
-            SyntaxKind::Spread => "..",
-            SyntaxKind::Empty => "()",
-            SyntaxKind::If => "if",
-            SyntaxKind::Then => "then",
-            SyntaxKind::Else => "else",
-            SyntaxKind::Case => "case",
-            SyntaxKind::Yield => "yield",
-            SyntaxKind::Break => "break",
-            SyntaxKind::Where => "where",
-            SyntaxKind::Import => "import",
-            SyntaxKind::Lower => "lowercase identifier",
-            SyntaxKind::Upper => "uppercase identifier",
-            SyntaxKind::Number => "number",
-            SyntaxKind::String => "string",
-            SyntaxKind::Field => "field",
-            SyntaxKind::Expr => "expression",
-            SyntaxKind::Error => "error",
-        };
-        write!(f, "{description}")
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-pub enum SyntaxToken {
-    #[default]
-    EOF,
-
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
-
-    Dot,    // .
-    Comma,  // ,
-    Semi,   // ;
-    Colon,  // :
-    Equals, // =
-    Walrus, // :=
-    Arrow,  // ->
-
-    If,
-    Then,
-    Else,
-    Case,
-    Yield,
-    Break,
-    Import,
-    Where,
-
-    And,    // and
-    Or,     // or
-    Not,    // not
-    Is,     // is
-    Pos,    // +
-    Neg,    // -
-    Add,    // +
-    Sub,    // -
-    Mul,    // *
-    Div,    // /
-    Exp,    // ^
-    Mod,    // %
-    Eq,     // ==
-    Ne,     // !=
-    Lt,     // <
-    Le,     // <=
-    Gt,     // >
-    Ge,     // >=
-    Pipe,   // |>
-    Range,  // ..
-
-    Lower,
-    Upper,
-    Number,
-    String,
-
-    Space,
-    Comment,
-
-    Error,
-}
-
-impl fmt::Display for SyntaxToken {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let description = match self {
-            SyntaxToken::EOF => "end of file",
-            SyntaxToken::LParen => "(",
-            SyntaxToken::RParen => ")",
-            SyntaxToken::LBrace => "{",
-            SyntaxToken::RBrace => "}",
-            SyntaxToken::LBracket => "[",
-            SyntaxToken::RBracket => "]",
-            SyntaxToken::Dot => ".",
-            SyntaxToken::Comma => ",",
-            SyntaxToken::Colon => ":",
-            SyntaxToken::Semi => ";",
-            SyntaxToken::Equals => "=",
-            SyntaxToken::Walrus => ":=",
-            SyntaxToken::Arrow => "=>",
-            SyntaxToken::And => "and",
-            SyntaxToken::Or => "or",
-            SyntaxToken::Not => "not",
-            SyntaxToken::Is => "is",
-            SyntaxToken::Pos => "+",
-            SyntaxToken::Neg => "-",
-            SyntaxToken::Add => "+",
-            SyntaxToken::Sub => "-",
-            SyntaxToken::Mul => "*",
-            SyntaxToken::Div => "/",
-            SyntaxToken::Exp => "^",
-            SyntaxToken::Mod => "%",
-            SyntaxToken::Eq => "==",
-            SyntaxToken::Ne => "!=",
-            SyntaxToken::Lt => "<",
-            SyntaxToken::Le => "<=",
-            SyntaxToken::Gt => ">",
-            SyntaxToken::Ge => ">=",
-            SyntaxToken::Pipe => "|>",
-            SyntaxToken::Range => "..",
-            SyntaxToken::If => "if",
-            SyntaxToken::Then => "then",
-            SyntaxToken::Else => "else",
-            SyntaxToken::Case => "case",
-            SyntaxToken::Yield => "yield",
-            SyntaxToken::Break => "break",
-            SyntaxToken::Where => "where",
-            SyntaxToken::Import => "import",
-            SyntaxToken::Lower => "lowercase identifier",
-            SyntaxToken::Upper => "uppercase identifier",
-            SyntaxToken::Number => "number",
-            SyntaxToken::String => "string",
-            SyntaxToken::Space => "space",
-            SyntaxToken::Comment => "comment",
-            SyntaxToken::Error => "error",
-        };
-        write!(f, "{description}")
-    }
-}
-
-impl SyntaxToken {
-    pub fn is_terminal(self) -> bool {
-        matches!(self, SyntaxToken::Semi | SyntaxToken::RBrace | SyntaxToken::Else
-                     | SyntaxToken::Case | SyntaxToken::EOF)
-    }
-
-    pub fn is_trivia(self) -> bool {
-        matches!(self, SyntaxToken::Space | SyntaxToken::Comment)
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Operator {
+    pub kind: OperatorKind,
+    pub span: Span,
 }
 
 pub type Precedence = i8;
@@ -293,31 +209,79 @@ pub enum Associativity {
     Right,
 }
 
-impl SyntaxToken {
-    pub fn precedence(self) -> Option<(Precedence, Associativity)> {
-        Some(match self {
-            SyntaxToken::Pos
-          | SyntaxToken::Neg
-          | SyntaxToken::Not => (0, Associativity::None),
-            SyntaxToken::Exp => (9, Associativity::Right),
-            SyntaxToken::Mul
-          | SyntaxToken::Div => (8, Associativity::Left),
-            SyntaxToken::Add
-          | SyntaxToken::Sub => (7, Associativity::Left),
-            SyntaxToken::Mod => (6, Associativity::Left),
-            SyntaxToken::Lt
-          | SyntaxToken::Le
-          | SyntaxToken::Gt
-          | SyntaxToken::Ge
-          | SyntaxToken::Ne
-          | SyntaxToken::Eq => (5, Associativity::Left),
-            SyntaxToken::Is => (4, Associativity::Left),
-            SyntaxToken::And => (3, Associativity::Left),
-            SyntaxToken::Or => (2, Associativity::Left),
-            SyntaxToken::Range => (1, Associativity::Left),
-            _ => {
-                return None;
-            }
-        })
+impl Operator {
+    pub fn is_unary(self) -> bool {
+        matches!(self.kind, OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not)
+    }
+
+    pub fn precedence(self) -> Precedence {
+        match self.kind {
+            OperatorKind::Pos
+          | OperatorKind::Neg
+          | OperatorKind::Not => -1,
+            OperatorKind::Exp => 9,
+            OperatorKind::Mul
+          | OperatorKind::Div => 8,
+            OperatorKind::Add
+          | OperatorKind::Sub => 7,
+            OperatorKind::Mod => 6,
+            OperatorKind::Lt
+          | OperatorKind::Le
+          | OperatorKind::Gt
+          | OperatorKind::Ge
+          | OperatorKind::Ne
+          | OperatorKind::Eq => 5,
+            OperatorKind::Is => 4,
+            OperatorKind::And => 3,
+            OperatorKind::Or => 2,
+            OperatorKind::Range => 1,
+        }
+    }
+
+    pub fn associativity(self) -> Associativity {
+        match self.kind {
+            OperatorKind::Pos
+          | OperatorKind::Neg
+          | OperatorKind::Not => Associativity::None,
+            OperatorKind::Exp => Associativity::Right,
+            _ => Associativity::Left,
+        }
+    }
+}
+
+impl IntoSpan for Node {
+    fn span(&self) -> Span {
+        match self {
+            Node::Let(node) => node.span,
+            Node::Mut(node) => node.span,
+            Node::Get(node) => node.span,
+            Node::Apply(node) => node.span,
+            Node::Unary(node) => node.span,
+            Node::Binary(node) => node.span,
+            Node::Field(node) => node.span,
+            Node::Group(node) => node.span,
+            Node::Block(node) => node.span,
+            Node::Lambda(node) => node.span,
+            Node::List(node) => node.span,
+            Node::Record(node) => node.span,
+            Node::Tuple(node) => node.span,
+            Node::Name(node) => node.span,
+            Node::String(node) => node.span,
+            Node::Number(node) => node.span,
+            Node::Empty(span) => *span,
+
+        }
+    }
+}
+
+impl IntoSpan for Operator {
+    fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl IntoSpan for Literal {
+    fn span(&self) -> Span {
+        self.span
     }
 }

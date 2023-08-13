@@ -1,26 +1,20 @@
 // A simple bump/arena allocator. Based on bumpalo
 
 use std::alloc::{alloc, Layout, dealloc};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::ptr::{NonNull, self};
 
 const CHUNK_SIZE: usize = std::mem::size_of::<Chunk>();
 const CHUNK_ALIGN: usize = std::mem::align_of::<Chunk>();
 const CHUNK_OVERHEAD: usize = (CHUNK_SIZE + CHUNK_ALIGN - 1) & !(CHUNK_ALIGN - 1);
 
-const DEFAULT_CHUNK_DATA_SIZE: usize = 1 << 15;
+const DEFAULT_CHUNK_DATA_SIZE: usize = 1 << 10;
 const DEFAULT_CHUNK_DATA_ALIGN: usize = 16;
-
-#[inline(never)]
-const fn out_of_memory() -> ! {
-    panic!("[ARENA]: out of memory");
-}
 
 #[derive(Debug)]
 struct Chunk {
     ptr: Cell<NonNull<u8>>,
-    data: NonNull<u8>,
-    prev: Cell<Option<NonNull<Chunk>>>,
+    data: Cell<NonNull<u8>>,
     layout: Layout,
 }
 
@@ -28,11 +22,11 @@ impl Chunk {
     fn new() -> NonNull<Chunk> {
         unsafe {
             let layout = Layout::from_size_align_unchecked(DEFAULT_CHUNK_DATA_SIZE, DEFAULT_CHUNK_DATA_ALIGN);
-            Chunk::from_layout(layout, None)
+            Chunk::from_layout(layout)
         }
     }
 
-    fn from_layout(layout: Layout, prev: Option<NonNull<Chunk>>) -> NonNull<Chunk> {
+    fn from_layout(layout: Layout) -> NonNull<Chunk> {
         unsafe {
             let final_size = layout.size().max(DEFAULT_CHUNK_DATA_SIZE);
             let final_align = layout.align().max(DEFAULT_CHUNK_DATA_ALIGN);
@@ -41,7 +35,7 @@ impl Chunk {
             let data = alloc(layout);
 
             if data.is_null() {
-                out_of_memory();
+                panic!("[ARENA]: out of memory");
             }
 
             let data = NonNull::new_unchecked(data);
@@ -51,9 +45,9 @@ impl Chunk {
             let chunk_ptr = chunk_ptr as *mut Chunk;
 
             let ptr = Cell::new(NonNull::new_unchecked(chunk_ptr as *mut u8));
-            let prev = Cell::new(prev);
+            let data = Cell::new(data);
 
-            ptr::write(chunk_ptr, Chunk { ptr, data, prev, layout });
+            ptr::write(chunk_ptr, Chunk { ptr, data, layout });
 
             // the chunk available space starts after the chunk ptr
             NonNull::new_unchecked(chunk_ptr)
@@ -64,12 +58,15 @@ impl Chunk {
 #[derive(Debug)]
 pub struct Arena {
     chunk: Cell<NonNull<Chunk>>,
+    chunks: RefCell<Vec<NonNull<Chunk>>>,
 }
 
 impl Arena {
     pub fn new() -> Arena {
+        let chunk = Chunk::new();
         Arena {
-            chunk: Cell::new(Chunk::new()),
+            chunk: Cell::new(chunk),
+            chunks: RefCell::new(vec![chunk]),
         }
     }
 
@@ -89,14 +86,14 @@ impl Arena {
         } else if let Some(ptr) = self.try_alloc_slow(layout) {
             ptr
         } else {
-            out_of_memory();
+            panic!("[ARENA]: out of memory");
         }
     }
 
     fn try_alloc_fast(&self, layout: Layout) -> Option<NonNull<u8>> {
         unsafe {
             let chunk = self.chunk.get().as_ref();
-            let start = chunk.data.as_ptr();
+            let start = chunk.data.get().as_ptr();
             let mut ptr = chunk.ptr.get().as_ptr();
 
             // not enough space
@@ -120,8 +117,9 @@ impl Arena {
 
     fn try_alloc_slow(&self, layout: Layout) -> Option<NonNull<u8>> {
         unsafe {
-            let chunk = Chunk::from_layout(layout, Some(self.chunk.get()));
+            let chunk = Chunk::from_layout(layout);
             self.chunk.set(chunk);
+            self.chunks.borrow_mut().push(chunk);
 
             let mut ptr = chunk.as_ref().ptr.as_ptr();
             ptr = ptr.sub(layout.size());
@@ -135,10 +133,8 @@ impl Arena {
 impl Drop for Arena {
     fn drop(&mut self) {
         unsafe {
-            let mut pending = Some(self.chunk.get());
-            while let Some(chunk) = pending {
-                dealloc(chunk.as_ref().data.as_ptr(), chunk.as_ref().layout);
-                pending = chunk.as_ref().prev.get();
+            for &mut chunk in self.chunks.get_mut() {
+                dealloc(chunk.as_ref().data.get().as_ptr(), chunk.as_ref().layout);
             }
         }
     }
@@ -165,7 +161,7 @@ mod tests {
     }
 
     #[test]
-    fn just_struct() {
+    fn struct_simple() {
         let arena = Arena::new();
 
         let simple = arena.alloc(TestEnum::Simple);

@@ -1,0 +1,16 @@
+f(0) = 1
+f(1) = 1
+f(n) = f(n - 1) + f(n - 2)
+where
+  n > 1
+
+
+sing (n) bottles of beer = {
+  write "{n} bottles of beer on the wall"
+  write "{n} bottles of beer"
+  write "take one down, pass it around..."
+  sing (n - 1) bottles of beer
+}
+
+sing (0) bottles of beer =
+  write "No more bottles of beer"

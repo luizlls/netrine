@@ -1,9 +1,6 @@
-#![feature(box_syntax)]
-#![feature(box_patterns)]
 #![feature(let_chains)]
 
-mod analysis;
-mod arena;
+// mod arena;
 mod error;
 mod source;
 mod span;
@@ -28,8 +25,7 @@ fn main() {
 fn file(file: String) {
     let path = PathBuf::from(file);
     let content = fs::read_to_string(&path).expect("Couldn't open the file");
-    let source = Source::new(&content, path);
-    exec(&source);
+    exec(Source::new(&content, path));
 }
 
 fn repl() {
@@ -39,7 +35,7 @@ fn repl() {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            exec(&Source::new(input.trim_end(), PathBuf::from("repl")));
+            exec(Source::new(input.trim_end(), PathBuf::from("repl")));
             input.clear();
         } else {
             input.push_str(&line);
@@ -60,6 +56,6 @@ fn read_line() -> Result<String, ()> {
     }
 }
 
-fn exec(source: &Source) {
+fn exec(source: Source) {
     println!("{:#?}", parse(source));
 }
