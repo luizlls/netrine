@@ -5,10 +5,7 @@ use std::ops::Range;
 pub struct Span(pub u32, pub u32);
 
 impl Span {
-    pub fn from(
-        lo: &impl IntoSpan,
-        hi: &impl IntoSpan,
-    ) -> Span {
+    pub fn from(lo: &impl IntoSpan, hi: &impl IntoSpan) -> Span {
         Span(lo.span().lo(), hi.span().hi())
     }
 
@@ -39,7 +36,7 @@ impl From<Span> for Range<usize> {
 
 impl Span {
     pub fn range(self) -> Range<usize> {
-        (self.0 as usize) .. (self.1 as usize)
+        (self.0 as usize)..(self.1 as usize)
     }
 }
 

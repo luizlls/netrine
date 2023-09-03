@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::span::Span;
+use crate::span::{IntoSpan, Span};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub struct Token {
@@ -12,7 +12,6 @@ pub struct Token {
 pub enum TokenKind {
     #[default]
     EOF,
-    EOL,
 
     LParen,
     RParen,
@@ -26,30 +25,35 @@ pub enum TokenKind {
     Semi,   // ;
     Colon,  // :
     Equals, // =
-    Walrus, // :=
     Arrow,  // =>
-    Pipe,   // |>
 
     And,
     Or,
     Not,
     Is,
+    Mut,
+    If,
+    Else,
+    Match,
+    Case,
+    Yield,
+    Return,
     Where,
     Import,
 
-    Plus,    // +
-    Minus,   // -
-    Star,    // *
-    Slash,   // /
-    Mod,     // %
-    Caret,   // ^
-    EqEq,    // ==
-    NoEq,    // !=
-    Lt,      // <
-    LtEq,    // <=
-    Gt,      // >
-    GtEq,    // >=
-    DotDot,  // ..
+    Plus,  // +
+    Minus, // -
+    Star,  // *
+    Slash, // /
+    Mod,   // %
+    Caret, // ^
+    EqEq,  // ==
+    NoEq,  // !=
+    Lt,    // <
+    LtEq,  // <=
+    Gt,    // >
+    GtEq,  // >=
+    Dots,  // ..
 
     Ident,
     Number,
@@ -63,7 +67,6 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
             TokenKind::EOF => "end of input",
-            TokenKind::EOL => "end of line",
             TokenKind::LParen => "(",
             TokenKind::RParen => ")",
             TokenKind::LBrace => "{",
@@ -75,13 +78,18 @@ impl fmt::Display for TokenKind {
             TokenKind::Colon => ":",
             TokenKind::Semi => ";",
             TokenKind::Equals => "=",
-            TokenKind::Walrus => ":=",
             TokenKind::Arrow => "=>",
-            TokenKind::Pipe => "|>",
             TokenKind::And => "and",
             TokenKind::Or => "or",
             TokenKind::Is => "is",
+            TokenKind::Mut => "mut",
+            TokenKind::If => "if",
+            TokenKind::Else => "else",
+            TokenKind::Match => "match",
+            TokenKind::Case => "case",
             TokenKind::Not => "not",
+            TokenKind::Yield => "yield",
+            TokenKind::Return => "return",
             TokenKind::Where => "where",
             TokenKind::Import => "import",
             TokenKind::Plus => "+",
@@ -96,7 +104,7 @@ impl fmt::Display for TokenKind {
             TokenKind::LtEq => "<=",
             TokenKind::Gt => ">",
             TokenKind::GtEq => ">=",
-            TokenKind::DotDot => "..",
+            TokenKind::Dots => "..",
             TokenKind::Ident => "identifier",
             TokenKind::Number => "number",
             TokenKind::String => "string",
@@ -110,5 +118,11 @@ impl fmt::Display for TokenKind {
 impl TokenKind {
     pub fn is(self, kind: TokenKind) -> bool {
         self == kind
+    }
+}
+
+impl IntoSpan for Token {
+    fn span(&self) -> Span {
+        self.span
     }
 }

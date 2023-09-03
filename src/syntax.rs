@@ -7,13 +7,15 @@ use lexer::Lexer;
 use node::Node;
 use parser::Parser;
 
+pub mod node;
 mod lexer;
 mod parser;
 mod token;
-pub mod node;
 
 pub fn parse(source: Source) -> Result<Vec<Node>> {
     let mut lexer = Lexer::new(&source.content);
-    let mut parser = Parser::new(&source.content, lexer);
-    parser::parse(&mut parser)
+    let tokens = lexer::tokenize(&mut lexer);
+    let mut parser = Parser::new(&source.content, &tokens);
+    let nodes = parser::parse(&mut parser);
+    nodes
 }
