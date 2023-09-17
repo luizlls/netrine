@@ -12,7 +12,7 @@ mod lexer;
 mod parser;
 mod token;
 
-pub fn parse(source: Source) -> Result<Vec<Node>> {
+pub fn parse(source: &Source) -> Result<Vec<Node>> {
     let mut lexer = Lexer::new(&source.content);
     let tokens = lexer::tokenize(&mut lexer);
     let mut parser = Parser::new(&source.content, &tokens);

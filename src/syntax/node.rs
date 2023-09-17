@@ -15,13 +15,13 @@ pub struct Node {
 pub enum NodeKind {
     Function(Function),
 
-    Let(Let),
+    Define(Define),
 
-    Mut(Mut),
-
-    Set(Set),
+    Assign(Assign),
 
     Access(Access),
+
+    Mutable(Mutable),
 
     Apply(Apply),
 
@@ -35,13 +35,19 @@ pub enum NodeKind {
 
     Lambda(Lambda),
 
+    Match(Match),
+
     If(If),
 
-    Match(Match),
+    For(For),
 
     Yield(Yield),
 
+    Break,
+
     Return(Return),
+
+    Import(Import),
 
     Record(Record),
 
@@ -56,50 +62,23 @@ pub enum NodeKind {
     String(Literal),
 
     Number(Literal),
+
+    Empty,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Let {
-    pub kind: LetKind,
+pub struct Define {
     pub lvalue: Node,
     pub rvalue: Node,
-    pub constraints: Vec<Constraint>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LetKind {
-    Equals,
-    Arrow,
+    pub constraints: Option<Vec<Node>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub name: Name,
     pub parameters: Vec<Parameter>,
-    pub body: Node,
-    pub constraints: Vec<Constraint>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Lambda {
-    pub paramters: Vec<Parameter>,
-    pub body: Node,
-    pub constraints: Vec<Constraint>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Constraint {
-    pub kind: ConstraintKind,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConstraintKind {
-    Unary(Unary),
-
-    Binary(Binary),
-
-    Apply(Apply),
+    pub value: Node,
+    pub constraints: Option<Vec<Node>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,15 +89,35 @@ pub struct Parameter {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mut {
-    pub name: Name,
-    pub value: Option<Node>,
+pub struct Lambda {
+    pub parameters: Vec<Node>,
+    pub value: Vec<Node>,
+    pub constraints: Option<Vec<Node>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Set {
-    pub node: Node,
+pub struct Match {
+    pub cases: Vec<Case>,
+    pub otherwise: Option<Vec<Node>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Case {
+    pub cases: Vec<Node>,
+    pub value: Vec<Node>,
+    pub constraints: Option<Vec<Node>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Mutable {
     pub value: Node,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Assign {
+    pub operator: Operator,
+    pub lvalue: Node,
+    pub rvalue: Node,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,17 +173,9 @@ pub struct If {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Match {
+pub struct For {
+    pub bindings: Vec<(Node, Node)>,
     pub value: Node,
-    pub cases: Vec<MatchCase>,
-    pub otherwise: Option<Node>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchCase {
-    pub case: Node,
-    pub then: Node,
-    pub guard: Option<Node>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,12 +190,24 @@ pub struct Tuple {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
-    pub fields: Vec<(Name, Option<Node>)>,
+    pub fields: Vec<RecordField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordField {
+    pub kind: RecordFieldKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordFieldKind {
+    Field(Name, Option<Node>),
+    Spread(Node),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
-    pub value: Node,
+    pub field: Node,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,10 +218,23 @@ pub struct Literal {
 
 pub type Name = Literal;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Import {
+    pub module: Name,
+    pub qualified: Vec<Name>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Operator {
     pub kind: OperatorKind,
+    pub mode: OperatorMode,
     pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperatorMode {
+    Regular,
+    Assign,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

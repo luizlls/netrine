@@ -57,5 +57,5 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn exec(source: Source) {
-    println!("{:#?}", parse(source));
+    println!("{:#?}", parse(&source));
 }

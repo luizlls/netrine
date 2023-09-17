@@ -34,26 +34,28 @@ pub enum TokenKind {
     Mut,
     If,
     Else,
-    Match,
+    For,
+    In,
     Case,
-    Yield,
-    Return,
     Where,
     Import,
+    Yield,
+    Break,
+    Return,
 
-    Plus,  // +
-    Minus, // -
-    Star,  // *
-    Slash, // /
-    Mod,   // %
-    Caret, // ^
-    EqEq,  // ==
-    NoEq,  // !=
-    Lt,    // <
-    LtEq,  // <=
-    Gt,    // >
-    GtEq,  // >=
-    Dots,  // ..
+    Plus,    // +
+    Minus,   // -
+    Star,    // *
+    Slash,   // /
+    Mod,     // %
+    Caret,   // ^
+    EqEq,    // ==
+    NoEq,    // !=
+    Lt,      // <
+    LtEq,    // <=
+    Gt,      // >
+    GtEq,    // >=
+    Dots,    // ..
 
     Ident,
     Number,
@@ -81,17 +83,19 @@ impl fmt::Display for TokenKind {
             TokenKind::Arrow => "=>",
             TokenKind::And => "and",
             TokenKind::Or => "or",
+            TokenKind::Not => "not",
             TokenKind::Is => "is",
             TokenKind::Mut => "mut",
             TokenKind::If => "if",
             TokenKind::Else => "else",
-            TokenKind::Match => "match",
+            TokenKind::For => "for",
+            TokenKind::In => "in",
             TokenKind::Case => "case",
-            TokenKind::Not => "not",
-            TokenKind::Yield => "yield",
-            TokenKind::Return => "return",
             TokenKind::Where => "where",
             TokenKind::Import => "import",
+            TokenKind::Yield => "yield",
+            TokenKind::Break => "break",
+            TokenKind::Return => "return",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
             TokenKind::Star => "*",

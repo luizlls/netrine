@@ -125,12 +125,14 @@ fn ident(l: &mut Lexer) -> TokenKind {
         "mut" => TokenKind::Mut,
         "if" => TokenKind::If,
         "else" => TokenKind::Else,
-        "match" => TokenKind::Match,
+        "for" => TokenKind::For,
+        "in" => TokenKind::In,
         "case" => TokenKind::Case,
+        "import" => TokenKind::Import,
         "yield" => TokenKind::Yield,
+        "break" => TokenKind::Break,
         "return" => TokenKind::Return,
         "where" => TokenKind::Where,
-        "import" => TokenKind::Import,
         _ => TokenKind::Ident,
     }
 }
@@ -274,7 +276,7 @@ mod tests {
     #[test]
     fn keywords() {
         let mut lexer =
-            Lexer::new("and or not is mut if else match case yield return where import");
+            Lexer::new("and or not is mut if else for in case yield break return import where");
 
         assert_token!(lexer, TokenKind::And);
         assert_token!(lexer, TokenKind::Or);
@@ -283,12 +285,14 @@ mod tests {
         assert_token!(lexer, TokenKind::Mut);
         assert_token!(lexer, TokenKind::If);
         assert_token!(lexer, TokenKind::Else);
-        assert_token!(lexer, TokenKind::Match);
+        assert_token!(lexer, TokenKind::For);
+        assert_token!(lexer, TokenKind::In);
         assert_token!(lexer, TokenKind::Case);
         assert_token!(lexer, TokenKind::Yield);
+        assert_token!(lexer, TokenKind::Break);
         assert_token!(lexer, TokenKind::Return);
-        assert_token!(lexer, TokenKind::Where);
         assert_token!(lexer, TokenKind::Import);
+        assert_token!(lexer, TokenKind::Where);
     }
 
     #[test]
