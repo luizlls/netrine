@@ -25,8 +25,8 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "error")?;
 
-        if let Some(Span(start, end)) = self.span {
-            write!(f, " [{start}..{end}]")?;
+        if let Some(span) = self.span {
+            write!(f, " [{span}]")?;
         }
 
         write!(f, ": {}", self.error)
@@ -36,13 +36,12 @@ impl Display for Error {
 impl Error {
     pub fn report(&self, source: &Source, buf: &mut String) -> fmt::Result {
         if self.span.is_none() {
-            return writeln!(buf, "error: {}", self.error);
+            return writeln!(buf, "error: {}\n", self.error);
         }
 
         let path = source.path.as_path().display().to_string();
 
-        let span = self.span.unwrap();
-        let Span(start, end) = span;
+        let Span { lo: start, hi: end } = self.span.unwrap();
         let line = Self::find_line(source, start as usize);
 
         let (left, right) = source.content.split_at(start as usize);
@@ -59,7 +58,7 @@ impl Error {
 
         let format_line = |n: usize| format!("{n:>padding_length$}");
 
-        writeln!(buf, "\nerror: {}", self.error)?;
+        writeln!(buf, "\nerror: {}\n", self.error)?;
 
         writeln!(buf, "{number_padding}--> {path} at line {line}")?;
         writeln!(buf, "{number_padding} |")?;

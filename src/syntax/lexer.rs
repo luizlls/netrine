@@ -51,7 +51,10 @@ impl<'src> Lexer<'src> {
     }
 
     fn span(&self) -> Span {
-        Span(self.start as u32, self.index as u32)
+        Span {
+            lo: self.start as u32,
+            hi: self.index as u32,
+        }
     }
 
     fn bump_while<P>(&mut self, pred: P)
@@ -98,12 +101,12 @@ fn kind(l: &mut Lexer) -> TokenKind {
         _ if is_symbol(l.curr) => {
             return operator(l);
         }
-        b'(' => TokenKind::LParen,
-        b')' => TokenKind::RParen,
-        b'{' => TokenKind::LBrace,
-        b'}' => TokenKind::RBrace,
-        b'[' => TokenKind::LBracket,
-        b']' => TokenKind::RBracket,
+        b'(' => TokenKind::OpenParen,
+        b')' => TokenKind::CloseParen,
+        b'{' => TokenKind::OpenBrace,
+        b'}' => TokenKind::CloseBrace,
+        b'[' => TokenKind::OpenBracket,
+        b']' => TokenKind::CloseBracket,
         b';' => TokenKind::Semi,
         b',' => TokenKind::Comma,
         0 => TokenKind::EOF,
@@ -237,7 +240,7 @@ fn string(l: &mut Lexer) -> TokenKind {
 
 fn newline(l: &mut Lexer) -> TokenKind {
     trivia(l);
-    kind(l)
+    kind(l) // TokenKind::EOL
 }
 
 fn comment(l: &mut Lexer) -> TokenKind {
@@ -301,12 +304,12 @@ mod tests {
         assert_token!(lexer, TokenKind::Dot);
         assert_token!(lexer, TokenKind::Comma);
         assert_token!(lexer, TokenKind::Semi);
-        assert_token!(lexer, TokenKind::LParen);
-        assert_token!(lexer, TokenKind::RParen);
-        assert_token!(lexer, TokenKind::LBracket);
-        assert_token!(lexer, TokenKind::RBracket);
-        assert_token!(lexer, TokenKind::LBrace);
-        assert_token!(lexer, TokenKind::RBrace);
+        assert_token!(lexer, TokenKind::OpenParen);
+        assert_token!(lexer, TokenKind::CloseParen);
+        assert_token!(lexer, TokenKind::OpenBracket);
+        assert_token!(lexer, TokenKind::CloseBracket);
+        assert_token!(lexer, TokenKind::OpenBrace);
+        assert_token!(lexer, TokenKind::CloseBrace);
     }
 
     #[test]

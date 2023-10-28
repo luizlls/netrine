@@ -25,7 +25,7 @@ fn main() {
 fn file(file: String) {
     let path = PathBuf::from(file);
     let content = fs::read_to_string(&path).expect("Couldn't open the file");
-    exec(Source::new(&content, path));
+    exec(&Source::new(&content, path));
 }
 
 fn repl() {
@@ -35,7 +35,7 @@ fn repl() {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            exec(Source::new(input.trim_end(), PathBuf::from("repl")));
+            exec(&Source::new(input.trim_end(), PathBuf::from("repl")));
             input.clear();
         } else {
             input.push_str(&line);
@@ -56,6 +56,14 @@ fn read_line() -> Result<String, ()> {
     }
 }
 
-fn exec(source: Source) {
-    println!("{:#?}", parse(&source));
+fn exec(source: &Source) {
+
+    match parse(source) {
+        Ok(nodes) => println!("{nodes:#?}"),
+        Err(error) => {
+            let mut buffer = String::new();
+            let _ = error.report(source, &mut buffer);
+            eprintln!("{buffer}");
+        }
+    }
 }

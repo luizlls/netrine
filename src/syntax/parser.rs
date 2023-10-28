@@ -32,54 +32,29 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn token(&self) -> TokenKind {
-        self.nth(self.index).kind
+    fn token(&self) -> Token {
+        self.nth(self.index)
     }
 
-    fn peek(&self) -> TokenKind {
-        self.nth(self.index + 1).kind
+    fn peek(&self) -> Token {
+        self.nth(self.index + 1)
     }
 
-    fn span(&self) -> Span {
-        self.nth(self.index).span
+    fn start(&self) -> Span {
+        self.token().span
     }
 
-    fn last(&self) -> Span {
-        self.nth(self.index - 1).span
+    fn span(&self, start: Span) -> Span {
+        let end = self.nth(self.index - 1).span;
+        start.to(end)
     }
 
     fn at(&self, kind: TokenKind) -> bool {
-        self.token() == kind
+        self.token().kind == kind
     }
 
     fn slice(&self, span: Span) -> &str {
         &self.source[span.range()]
-    }
-
-    fn attempt<F, T>(&mut self, mut parse: F) -> Result<Option<T>>
-    where
-      F: FnMut(&mut Self) -> Result<T>
-    {
-        let index = self.index;
-
-        match parse(self) {
-            Ok(value) => Ok(Some(value)),
-            Err(error) if self.index != index => Err(error),
-            Err(_) => Ok(None), 
-        }
-    }
-
-    fn lookahead<F, T>(&self, mut looker: F) -> T
-    where
-      F: FnMut(&Token) -> Option<T>
-    {
-        let mut idx = self.index + 1;
-        loop {
-            if let Some(value) = looker(&self.nth(idx)) {
-                return value;
-            }
-            idx += 1;
-        }
     }
 
     fn fail(&self, message: String, span: Span) -> Error {
@@ -98,57 +73,87 @@ pub fn parse(p: &mut Parser) -> Result<Vec<Node>> {
 }
 
 fn top_level(p: &mut Parser) -> Result<Node> {
-    match p.token() {
+    match p.token().kind {
         TokenKind::Import => import(p),
-        TokenKind::Yield  => r#yield(p),
-        TokenKind::Break  => r#break(p),
-        TokenKind::Return => r#return(p),
-        TokenKind::If => r#if(p),
-        TokenKind::For => r#for(p),
-        _ => define(p)
+        TokenKind::Yield  => yield_expr(p),
+        TokenKind::Break  => break_stmt(p),
+        TokenKind::Return => return_stmt(p),
+        TokenKind::If  => if_expr(p),
+        TokenKind::For => for_expr(p),
+        _ => default(p),
     }
 }
 
-fn define(p: &mut Parser) -> Result<Node> {
-    let lvalue = lvalue(p)?;
+fn default(p: &mut Parser) -> Result<Node> {
+    let lvalue = expr(p)?;
 
-    if !maybe(p, TokenKind::Equals) {
-        return Ok(lvalue);
+    match p.token().kind {
+        TokenKind::Equals => define(p, lvalue),
+        TokenKind::Arrow => lambda(p, lvalue),
+        TokenKind::Colon => typedef(p, lvalue),
+        _ => Ok(lvalue),
     }
+}
 
-    let rvalue = rvalue(p)?;
-
-    let constraints
-        = maybe_parse(p, TokenKind::Where, |parser| seq(parser, expr))?;
-
-    let span = Span::from(&lvalue, &p.last());
+fn define(p: &mut Parser, pattern: Node) -> Result<Node> {
+    let start = pattern.span;
+    expect(p, TokenKind::Equals)?;
+    let lvalue = pattern;
+    let rvalue = expr(p)?;
+    let constraints = when(p, TokenKind::Where, |p| seq1(p, expr))?;
 
     Ok(node(
-        NodeKind::Define(Define { lvalue, rvalue, constraints }),
-        span,
+        NodeKind::Define(Define {
+            lvalue,
+            rvalue,
+            constraints,
+        }),
+        p.span(start),
     ))
 }
 
+fn lambda(p: &mut Parser, pattern: Node) -> Result<Node> {
+    let start = pattern.span;
+    expect(p, TokenKind::Arrow)?;
+    let parameters = vec![pattern];
+    let value = expr(p)?;
+    let constraints = when(p, TokenKind::Where, |p| seq1(p, expr))?;
+
+    Ok(node(
+        NodeKind::Lambda(Lambda {
+            parameters,
+            value,
+            constraints,
+        }),
+        p.span(start),
+    ))
+}
+
+fn typedef(p: &mut Parser, _pattern: Node) -> Result<Node> {
+    todo!()
+}
+
 fn expr(p: &mut Parser) -> Result<Node> {
-    match p.token() {
-        TokenKind::Yield => r#yield(p),
-        TokenKind::If => r#if(p),
-        TokenKind::For => r#for(p),
-        _ => binary(p, 0 as Precedence)
+    match p.token().kind {
+        TokenKind::Yield => yield_expr(p),
+        TokenKind::If  => if_expr(p),
+        TokenKind::For => for_expr(p),
+        _ => binary(p, 0 as Precedence),
     }
 }
 
 fn atom(p: &mut Parser) -> Result<Node> {
-    match p.token() {
+    let Token { kind, span } = p.token();
+    match kind {
         TokenKind::Ident => ident(p),
         TokenKind::Number => number(p),
         TokenKind::String => string(p),
-        TokenKind::LParen => parens(p),
-        TokenKind::LBrace => braces(p),
-        TokenKind::LBracket => brackets(p),
+        TokenKind::OpenParen => parens(p),
+        TokenKind::OpenBrace => braces(p),
+        TokenKind::OpenBracket => brackets(p),
         TokenKind::Dot => field(p),
         TokenKind::Mut => mutable(p),
-        _ => Err(p.fail("expected an expression".to_string(), p.span())),
+        _ => Err(p.fail("expected an expression".to_string(), span)),
     }
 }
 
@@ -192,32 +197,22 @@ fn field(p: &mut Parser) -> Result<Node> {
     let start = expect(p, TokenKind::Dot)?;
     let field = atom(p)?;
 
-    let span = Span::from(&start, &field);
-
-    Ok(node(
-        NodeKind::Field(Field { field }),
-        span,
-    ))
+    Ok(node(NodeKind::Field(Field { field }), p.span(start)))
 }
 
 fn mutable(p: &mut Parser) -> Result<Node> {
     let start = expect(p, TokenKind::Mut)?;
     let value = expr(p)?;
 
-    let span = Span::from(&start, &value);
-
-    Ok(node(
-        NodeKind::Mutable(Mutable { value }),
-        span,
-    ))
+    Ok(node(NodeKind::Mutable(Mutable { value }), p.span(start)))
 }
 
 fn parens(p: &mut Parser) -> Result<Node> {
-    let start = expect(p, TokenKind::LParen)?;
-    let nodes = seq(p, expr)?;
-    let end = expect(p, TokenKind::RParen)?;
+    let start = p.start();
 
-    let span = Span::from(&start, &end);
+    expect(p, TokenKind::OpenParen)?;
+    let nodes = seq(p, expr)?;
+    expect(p, TokenKind::CloseParen)?;
 
     Ok(node(
         match_vec(
@@ -226,101 +221,74 @@ fn parens(p: &mut Parser) -> Result<Node> {
             |items| NodeKind::Tuple(Tuple { items }),
             || NodeKind::Empty,
         ),
-        span,
+        p.span(start),
     ))
 }
 
 fn brackets(p: &mut Parser) -> Result<Node> {
-    let start = expect(p, TokenKind::LBracket)?;
+    let start = p.start();
+    expect(p, TokenKind::OpenBracket)?;
     let items = seq(p, expr)?;
-    let end = expect(p, TokenKind::RBracket)?;
+    expect(p, TokenKind::CloseBracket)?;
 
-    let span = Span::from(&start, &end);
-
-    Ok(node(
-        NodeKind::List(List { items }),
-        span,
-    ))
+    Ok(node(NodeKind::List(List { items }), p.span(start)))
 }
 
 fn braces(p: &mut Parser) -> Result<Node> {
-    if matches!(p.peek(), TokenKind::Dot | TokenKind::Dots) {
-        record(p)
-    } else if is_match(p) {
-        r#match(p)
-    } else if is_lambda(p) {
-        lambda(p)
-    } else {
-        block(p)
+    match p.peek().kind {
+        TokenKind::Case => cases(p),
+        TokenKind::Dot
+      | TokenKind::Dots => record(p),
+        _ => block(p)
     }
 }
 
-fn block(p: &mut Parser) -> Result<Node> {
-    let start = expect(p, TokenKind::LBrace)?;
-    let nodes = many(p, top_level)?;
-    let end = expect(p, TokenKind::RBrace)?;
-
-    let span = Span::from(&start, &end);
-
-    Ok(node(
-        NodeKind::Block(Block { nodes }),
-        span,
-    ))
-}
-
 fn record(p: &mut Parser) -> Result<Node> {
-    let start = expect(p, TokenKind::LBrace)?;
+    let start = p.start();
+    expect(p, TokenKind::OpenBrace)?;
     let fields = seq(p, record_field)?;
-    let end = expect(p, TokenKind::RBrace)?;
+    expect(p, TokenKind::CloseBrace)?;
 
-    let span = Span::from(&start, &end);
-
-    Ok(node(
-        NodeKind::Record(Record { fields }),
-        span,
-    ))
+    Ok(node(NodeKind::Record(Record { fields }), p.span(start)))
 }
 
 fn record_field(p: &mut Parser) -> Result<RecordField> {
-    match p.token() {
+    match p.token().kind {
         TokenKind::Dots => {
             let start = expect(p, TokenKind::Dots)?;
             let value = expr(p)?;
-            let span = Span::from(&start, &value);
 
             Ok(RecordField {
                 kind: RecordFieldKind::Spread(value),
-                span,
+                span: p.span(start),
             })
         }
 
         TokenKind::Dot => {
             let start = expect(p, TokenKind::Dot)?;
             let name = name(p)?;
-            let value = match p.token() {
+            let value = match p.token().kind {
                 TokenKind::Equals => {
                     expect(p, TokenKind::Equals)?;
                     Some(expr(p)?)
                 }
-                TokenKind::LBrace => {
+                TokenKind::OpenBrace => {
                     Some(record(p)?)
                 }
                 TokenKind::Comma
-              | TokenKind::RBrace => {
-                    None   
+              | TokenKind::CloseBrace => {
+                    None
                 }
                 _ => return Err(unexpected(p, &[
                     TokenKind::Equals,
                     TokenKind::Comma,
-                    TokenKind::RBrace,
+                    TokenKind::CloseBrace,
                 ]))
             };
 
-            let span = Span::from(&start, &p.last());
-
             Ok(RecordField {
                 kind: RecordFieldKind::Field(name, value),
-                span,
+                span: p.span(start),
             })
         }
 
@@ -331,100 +299,105 @@ fn record_field(p: &mut Parser) -> Result<RecordField> {
     }
 }
 
-fn lambda(p: &mut Parser) -> Result<Node> {
-    let start = expect(p, TokenKind::LBrace)?;
+fn cases(p: &mut Parser) -> Result<Node> {
+    let start = p.start();
 
-    let parameters = seq(p, atom)?;
-    let constraints = maybe_parse(p, TokenKind::Where, |parser| seq(parser, expr))?;
-    expect(p, TokenKind::Arrow)?;
-    let value = many(p, top_level)?;
+    expect(p, TokenKind::OpenBrace)?;
 
-    let end = expect(p, TokenKind::RBrace)?;
-
-    let span = Span::from(&start, &end);
-
-    Ok(node(
-        NodeKind::Lambda(Lambda { parameters, value, constraints }),
-        span,
-    ))
-}
-
-fn is_lambda(p: &Parser) -> bool {
-    let mut nest_level = 1;
-
-    p.lookahead(move |&token| {
-        match token.kind {
-            TokenKind::Arrow if nest_level == 1 => Some(true),
-            TokenKind::RBrace if nest_level == 1 => Some(false),
-            TokenKind::LBrace => { nest_level += 1; None },
-            TokenKind::RBrace => { nest_level -= 1; None },
-            _ => if nest_level > 0 {
-                None
-            } else {
-                Some(false)
-            }
-        }
-    })
-}
-
-fn r#match(p: &mut Parser) -> Result<Node> {
-    let start = expect(p, TokenKind::LBrace)?;
-
-    let mut match_cases = vec![];
+    let mut cases = vec![];
 
     while maybe(p, TokenKind::Case) {
-        let mut cases = vec![];
+        let mut patterns = vec![];
         loop {
-            cases.push(atom(p)?);
+            patterns.push(atom(p)?);
             if !maybe(p, TokenKind::Or) {
                 break;
             }
         }
-        let constraints = maybe_parse(p, TokenKind::Where, |parser| seq(parser, expr))?;
+
+        let guards = when(p, TokenKind::Where, |p| seq1(p, expr))?;
         expect(p, TokenKind::Arrow)?;
         let value = many(p, top_level)?;
 
-        match_cases.push(Case { cases, value, constraints });
+        cases.push(Case {
+            patterns,
+            value,
+            guards,
+        });
     }
 
-    let otherwise = maybe_parse(p, TokenKind::Else, |parser| many(parser, top_level))?;
+    let otherwise = when(p, TokenKind::Else, |p| many(p, top_level))?;
 
-    let end = expect(p, TokenKind::RBrace)?;
-
-    let span = Span::from(&start, &end);
+    expect(p, TokenKind::CloseBrace)?;
 
     Ok(node(
-        NodeKind::Match(Match { cases: match_cases, otherwise }),
-        span,
+        NodeKind::Cases(Cases {
+            cases,
+            otherwise,
+        }),
+        p.span(start),
     ))
 }
 
-fn is_match(p: &Parser) -> bool {
-    p.token().is(TokenKind::LBrace) && p.peek().is(TokenKind::Case)
+fn block(p: &mut Parser) -> Result<Node> {
+    let start = p.start();
+
+    expect(p, TokenKind::OpenBrace)?;
+
+    let nodes = many(p, top_level)?;
+
+    if matches!(p.token().kind, TokenKind::Arrow | TokenKind::Where) {
+        let parameters = nodes;
+        let constraints = when(p, TokenKind::Where, |p| seq1(p, expr))?;
+
+        let block = expect(p, TokenKind::Arrow)?;
+        let nodes = many(p, top_level)?;
+        let value = node(NodeKind::Block(Block { nodes }), p.span(block));
+
+        expect(p, TokenKind::CloseBrace)?;
+
+        return Ok(node(
+            NodeKind::Lambda(Lambda {
+                parameters,
+                value,
+                constraints,
+            }),
+            p.span(start),
+        ));
+    }
+
+    expect(p, TokenKind::CloseBrace)?;
+
+    Ok(node(NodeKind::Block(Block { nodes }), p.span(start)))
 }
 
 fn access(p: &mut Parser, expr: Node) -> Result<Node> {
-    let _span = expect(p, TokenKind::Dot)?;
+    let start = expr.span;
+    expect(p, TokenKind::Dot)?;
     let field = atom(p)?;
 
-    let span = Span::from(&expr, &field);
-
-    Ok(node(
-        NodeKind::Access(Access { node: expr, field }),
-        span,
-    ))
+    Ok(node(NodeKind::Access(Access { node: expr, field }), p.span(start)))
 }
 
 fn apply(p: &mut Parser, callee: Node) -> Result<Node> {
-    expect(p, TokenKind::LParen)?;
+    let start = callee.span;
+    expect(p, TokenKind::OpenParen)?;
     let arguments = seq(p, expr)?;
-    expect(p, TokenKind::RParen)?;
-    
-    let span = Span::from(&callee, &p.last());
+    expect(p, TokenKind::CloseParen)?;
+
+    Ok(node(NodeKind::Apply(Apply { callee, arguments }), p.span(start)))
+}
+
+fn accept(p: &mut Parser, callee: Node) -> Result<Node> {
+    let start = callee.span;
+    let lambda = braces(p)?;
 
     Ok(node(
-        NodeKind::Apply(Apply { callee, arguments }),
-        span,
+        NodeKind::Accept(Accept {
+            callee,
+            lambda,
+        }),
+        p.span(start),
     ))
 }
 
@@ -432,9 +405,10 @@ fn basic(p: &mut Parser) -> Result<Node> {
     let mut value = atom(p)?;
 
     loop {
-        value = match p.token() {
-            TokenKind::Dot    => access(p, value)?,
-            TokenKind::LParen => apply(p, value)?,
+        value = match p.token().kind {
+            TokenKind::OpenParen => apply(p, value)?,
+            TokenKind::OpenBrace => accept(p, value)?,
+            TokenKind::Dot => access(p, value)?,
             _ => break,
         }
     }
@@ -443,16 +417,20 @@ fn basic(p: &mut Parser) -> Result<Node> {
 }
 
 fn unary(p: &mut Parser) -> Result<Node> {
+    let start = p.start();
+
     if let Some(operator) = operator(p, true) && operator.is_unary() {
         p.bump();
 
         let expr = basic(p)?;
-        let span = Span::from(&operator, &expr);
 
         return Ok(node(
-            NodeKind::Unary(Unary { operator, expr }),
-            span,
-        ))
+            NodeKind::Unary(Unary {
+                expr,
+                operator,
+            }),
+            p.span(start),
+        ));
     }
 
     basic(p)
@@ -477,18 +455,25 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
 
         let rexpr = binary(p, precedence)?;
         let lexpr = expr;
-        let span = Span::from(&lexpr, &rexpr);
+        let span = lexpr.span.to(rexpr.span);
 
-        expr = node(NodeKind::Binary(Binary { operator, lexpr, rexpr }), span);
+        expr = node(
+            NodeKind::Binary(Binary {
+                lexpr,
+                rexpr,
+                operator,
+            }),
+            span,
+        );
     }
 
     Ok(expr)
 }
 
 fn operator(p: &mut Parser, unary: bool) -> Option<Operator> {
-    let span = p.span();
+    let span = p.start();
 
-    let kind = match p.token() {
+    let kind = match p.token().kind {
         TokenKind::Plus  if unary => OperatorKind::Pos,
         TokenKind::Minus if unary => OperatorKind::Neg,
         TokenKind::Not   if unary => OperatorKind::Not,
@@ -521,32 +506,38 @@ fn operator(p: &mut Parser, unary: bool) -> Option<Operator> {
 }
 
 fn assign(p: &mut Parser, lvalue: Node, operator: Operator) -> Result<Node> {
+    let start = lvalue.span;
     let rvalue = rvalue(p)?;
-    let span = Span::from(&lvalue, &rvalue);
 
     Ok(node(
-        NodeKind::Assign(Assign { operator, lvalue, rvalue }),
-        span,
+        NodeKind::Assign(Assign {
+            operator,
+            lvalue,
+            rvalue,
+        }),
+        p.span(start),
     ))
 }
 
-fn r#if(p: &mut Parser) -> Result<Node> {
+fn if_expr(p: &mut Parser) -> Result<Node> {
     let start = expect(p, TokenKind::If)?;
     let value = lvalue(p)?;
     let then = rvalue(p)?;
-    let otherwise = maybe_parse(p, TokenKind::Else, rvalue)?;
-
-    let span = Span::from(&start, &p.last());
+    let otherwise = when(p, TokenKind::Else, rvalue)?;
 
     Ok(node(
-        NodeKind::If(If { value, then, otherwise }),
-        span,
+        NodeKind::If(If {
+            value,
+            then,
+            otherwise,
+        }),
+        p.span(start),
     ))
 }
 
-fn r#for(p: &mut Parser) -> Result<Node> {
+fn for_expr(p: &mut Parser) -> Result<Node> {
     let start = expect(p, TokenKind::For)?;
-    
+
     let mut bindings = vec![];
 
     loop {
@@ -563,45 +554,27 @@ fn r#for(p: &mut Parser) -> Result<Node> {
 
     let value = expr(p)?;
 
-    let span = Span::from(&start, &value);
-
-    Ok(node(
-        NodeKind::For(For { bindings, value }),
-        span,
-    ))
+    Ok(node(NodeKind::For(For { bindings, value }), p.span(start)))
 }
 
-fn r#yield(p: &mut Parser) -> Result<Node> {
+fn yield_expr(p: &mut Parser) -> Result<Node> {
     let start = expect(p, TokenKind::Yield)?;
     let value = expr(p)?;
 
-    let span = Span::from(&start, &value);
-
-    Ok(node(
-        NodeKind::Yield(Yield { value }),
-        span,
-    ))
+    Ok(node(NodeKind::Yield(Yield { value }), p.span(start)))
 }
 
-fn r#break(p: &mut Parser) -> Result<Node> {
+fn break_stmt(p: &mut Parser) -> Result<Node> {
     let span = expect(p, TokenKind::Break)?;
-    
-    Ok(node(
-        NodeKind::Break,
-        span,
-    ))
+
+    Ok(node(NodeKind::Break, span))
 }
 
-fn r#return(p: &mut Parser) -> Result<Node> {
+fn return_stmt(p: &mut Parser) -> Result<Node> {
     let start = expect(p, TokenKind::Return)?;
     let value = expr(p)?;
 
-    let span = Span::from(&start, &value);
-
-    Ok(node(
-        NodeKind::Return(Return { value }),
-        span,
-    ))
+    Ok(node(NodeKind::Return(Return { value }), p.span(start)))
 }
 
 fn import(p: &mut Parser) -> Result<Node> {
@@ -609,20 +582,22 @@ fn import(p: &mut Parser) -> Result<Node> {
 
     let module = name(p)?;
 
-    let qualified = if p.at(TokenKind::LParen) {
-        expect(p, TokenKind::LParen)?;
+    let names = if p.at(TokenKind::OpenParen) {
+        expect(p, TokenKind::OpenParen)?;
         let names = seq(p, name)?;
-        expect(p, TokenKind::RParen)?;
+        expect(p, TokenKind::CloseParen)?;
         names
     } else {
         vec![]
     };
 
-    let span = Span::from(&start, &p.last());
-
     Ok(node(
-        NodeKind::Import(Import { module, qualified }),
-        span,
+        NodeKind::Import(Import {
+            module,
+            names,
+            // alias,
+        }),
+        p.span(start),
     ))
 }
 
@@ -633,45 +608,11 @@ fn node(kind: NodeKind, span: Span) -> Node {
     }
 }
 
-fn seq<T, F>(p: &mut Parser, mut parse: F) -> Result<Vec<T>>
+fn when<T, F>(p: &mut Parser, when: TokenKind, mut parse: F) -> Result<Option<T>>
 where
     F: FnMut(&mut Parser) -> Result<T>,
 {
-    let mut result = vec![];
-
-    while let Some(value) = p.attempt(&mut parse)? {
-        result.push(value);
-
-        if !maybe(p, TokenKind::Comma) {
-            break;
-        }
-    }
-
-    Ok(result)
-}
-
-fn many<T, F>(p: &mut Parser, mut parse: F) -> Result<Vec<T>>
-where
-    F: FnMut(&mut Parser) -> Result<T>,
-{
-    let mut result = vec![];
-
-    while let Some(value) = p.attempt(&mut parse)? {
-        result.push(value);
-    }
-
-    Ok(result)
-}
-
-fn maybe_parse<T, F>(
-    p: &mut Parser,
-    expected: TokenKind,
-    mut parse: F,
-) -> Result<Option<T>>
-where
-  F: FnMut(&mut Parser) -> Result<T>,
-{
-    if maybe(p, expected) {
+    if maybe(p, when) {
         Ok(Some(parse(p)?))
     } else {
         Ok(None)
@@ -679,7 +620,7 @@ where
 }
 
 fn maybe(p: &mut Parser, expected: TokenKind) -> bool {
-    if p.token() == expected {
+    if p.token().kind == expected {
         p.bump();
         true
     } else {
@@ -687,40 +628,98 @@ fn maybe(p: &mut Parser, expected: TokenKind) -> bool {
     }
 }
 
-fn match_vec<T, U, O, M, E>(mut value: Vec<T>, one: O, many: M, empty: E) -> U
+fn match_vec<T, U, O, M, E>(mut vec: Vec<T>, one: O, many: M, empty: E) -> U
 where
-    O: Fn(T) -> U,
-    M: Fn(Vec<T>) -> U,
-    E: Fn() -> U,
+    O: FnOnce(T) -> U,
+    M: FnOnce(Vec<T>) -> U,
+    E: FnOnce() -> U,
 {
-    match value.len() {
+    match vec.len() {
         0 => empty(),
-        1 => one(value.pop().unwrap()),
-        _ => many(value),
+        1 => one(vec.pop().unwrap()),
+        _ => many(vec),
     }
 }
 
 fn expect(p: &mut Parser, expected: TokenKind) -> Result<Span> {
-    if p.token() == expected {
-        let span = p.span();
+    let Token { kind, span } = p.token();
+    if kind == expected {
         p.bump();
         Ok(span)
     } else {
-        Err(p.fail(format!("Expected `{expected}`"), p.span()))
+        Err(p.fail(format!("Expected `{expected}`"), span))
     }
 }
 
 fn unexpected(p: &mut Parser, expected: &[TokenKind]) -> Error {
     let formatted = expected
         .iter()
-        .map(|it| {
-            format!("`{it}`")
-        })
+        .map(|it| format!("`{it}`"))
         .collect::<Vec<_>>()
         .join(" or ");
-
-    let span = p.span();
-    
+    let span = p.token().span;
     p.bump();
     p.fail(format!("expected {formatted}"), span)
+}
+
+fn sequential<T, F, P>(
+    p: &mut Parser,
+    mut parse: F,
+    allow_empty: bool,
+    mut stop: P,
+) -> Result<Vec<T>>
+where
+    F: FnMut(&mut Parser) -> Result<T>,
+    P: FnMut(&mut Parser) -> bool,
+{
+    fn attempt<F, T>(p: &mut Parser, mut parse: F) -> Result<Option<T>>
+    where
+        F: FnMut(&mut Parser) -> Result<T>,
+    {
+        let index = p.index;
+        match parse(p) {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if p.index != index => Err(error),
+            Err(_) => Ok(None),
+        }
+    }
+
+    let mut result = vec![];
+
+    if !allow_empty {
+        result.push(parse(p)?);
+        if stop(p) {
+            return Ok(result);
+        }
+    }
+
+    while let Some(value) = attempt(p, &mut parse)? {
+        result.push(value);
+        if stop(p) {
+            return Ok(result);
+        }
+    }
+
+    Ok(result)
+}
+
+fn seq<T, F>(p: &mut Parser, parse: F) -> Result<Vec<T>>
+where
+    F: FnMut(&mut Parser) -> Result<T>,
+{
+    sequential(p, parse, true, |p| !maybe(p, TokenKind::Comma))
+}
+
+fn seq1<T, F>(p: &mut Parser, parse: F) -> Result<Vec<T>>
+where
+    F: FnMut(&mut Parser) -> Result<T>,
+{
+    sequential(p, parse, false, |p| !maybe(p, TokenKind::Comma))
+}
+
+fn many<T, F>(p: &mut Parser, parse: F) -> Result<Vec<T>>
+where
+    F: FnMut(&mut Parser) -> Result<T>,
+{
+    sequential(p, parse, true, |_| false)
 }

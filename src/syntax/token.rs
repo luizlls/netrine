@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::span::{IntoSpan, Span};
+use crate::span::Span;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub struct Token {
@@ -12,13 +12,14 @@ pub struct Token {
 pub enum TokenKind {
     #[default]
     EOF,
+    EOL,
 
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
+    OpenParen,
+    CloseParen,
+    OpenBrace,
+    CloseBrace,
+    OpenBracket,
+    CloseBracket,
 
     Dot,    // .
     Comma,  // ,
@@ -69,12 +70,13 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
             TokenKind::EOF => "end of input",
-            TokenKind::LParen => "(",
-            TokenKind::RParen => ")",
-            TokenKind::LBrace => "{",
-            TokenKind::RBrace => "}",
-            TokenKind::LBracket => "[",
-            TokenKind::RBracket => "]",
+            TokenKind::EOL => "end of line",
+            TokenKind::OpenParen => "(",
+            TokenKind::CloseParen => ")",
+            TokenKind::OpenBrace => "{",
+            TokenKind::CloseBrace => "}",
+            TokenKind::OpenBracket => "[",
+            TokenKind::CloseBracket => "]",
             TokenKind::Dot => ".",
             TokenKind::Comma => ",",
             TokenKind::Colon => ":",
@@ -119,14 +121,8 @@ impl fmt::Display for TokenKind {
     }
 }
 
-impl TokenKind {
+impl Token {
     pub fn is(self, kind: TokenKind) -> bool {
-        self == kind
-    }
-}
-
-impl IntoSpan for Token {
-    fn span(&self) -> Span {
-        self.span
+        self.kind == kind
     }
 }

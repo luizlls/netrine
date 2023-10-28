@@ -1,4 +1,4 @@
-use crate::span::{IntoSpan, Span};
+use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
@@ -24,6 +24,8 @@ pub enum NodeKind {
     Mutable(Mutable),
 
     Apply(Apply),
+    
+    Accept(Accept),
 
     Unary(Unary),
 
@@ -35,7 +37,7 @@ pub enum NodeKind {
 
     Lambda(Lambda),
 
-    Match(Match),
+    Cases(Cases),
 
     If(If),
 
@@ -91,21 +93,21 @@ pub struct Parameter {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lambda {
     pub parameters: Vec<Node>,
-    pub value: Vec<Node>,
+    pub value: Node,
     pub constraints: Option<Vec<Node>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Match {
+pub struct Cases {
     pub cases: Vec<Case>,
     pub otherwise: Option<Vec<Node>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Case {
-    pub cases: Vec<Node>,
+    pub patterns: Vec<Node>,
     pub value: Vec<Node>,
-    pub constraints: Option<Vec<Node>>,
+    pub guards: Option<Vec<Node>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +135,12 @@ pub struct Apply {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Accept {
+    pub callee: Node,
+    pub lambda: Node,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Group {
     pub node: Node,
 }
@@ -154,15 +162,15 @@ pub struct Block {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unary {
-    pub operator: Operator,
     pub expr: Node,
+    pub operator: Operator,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binary {
-    pub operator: Operator,
     pub lexpr: Node,
     pub rexpr: Node,
+    pub operator: Operator,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -221,7 +229,7 @@ pub type Name = Literal;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Import {
     pub module: Name,
-    pub qualified: Vec<Name>,
+    pub names: Vec<Name>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -302,23 +310,5 @@ impl Operator {
             OperatorKind::Exp => Associativity::Right,
             _ => Associativity::Left,
         }
-    }
-}
-
-impl IntoSpan for Node {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl IntoSpan for Operator {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl IntoSpan for Literal {
-    fn span(&self) -> Span {
-        self.span
     }
 }
