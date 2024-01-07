@@ -1,24 +1,3 @@
 f(0) = 0
 f(1) = 1
 f(n) = f(n - 1) + f(n - 2)
-where
-  n > 1
-
-count(event) = {
-  count = mut 0
-  event { count += 1 }
-  yield count
-}
-
-direction = Keyboard.press {
-  case A => Left
-  case S => Down
-  case W => Up
-  case D => Right
-  else direction
-}
-
-employees
-  .skip(.salary > 100000)
-  .map(.salary *= 1.20)
-  .map({ employee where employee.job is Manager => promote(employee, SrManager) })

@@ -1,6 +1,9 @@
 use crate::span::Span;
 
-use super::token::{Token, TokenKind::{self, *}};
+use super::token::{
+    Token,
+    TokenKind::{self, *},
+};
 
 #[derive(Debug, Clone)]
 pub struct Lexer<'src> {
@@ -217,9 +220,7 @@ fn number(l: &mut Lexer) -> TokenKind {
             l.bump();
             l.bump_while(|chr| chr.is_ascii_hexdigit());
         }
-        _ => {
-            return Integer
-        }
+        _ => return Integer,
     }
 
     Number

@@ -44,19 +44,19 @@ pub enum TokenKind {
     Break,
     Return,
 
-    Plus,    // +
-    Minus,   // -
-    Star,    // *
-    Slash,   // /
-    Mod,     // %
-    Caret,   // ^
-    EqEq,    // ==
-    NoEq,    // !=
-    Lt,      // <
-    LtEq,    // <=
-    Gt,      // >
-    GtEq,    // >=
-    Dots,    // ..
+    Plus,  // +
+    Minus, // -
+    Star,  // *
+    Slash, // /
+    Mod,   // %
+    Caret, // ^
+    EqEq,  // ==
+    NoEq,  // !=
+    Lt,    // <
+    LtEq,  // <=
+    Gt,    // >
+    GtEq,  // >=
+    Dots,  // ..
 
     Ident,
     Number,

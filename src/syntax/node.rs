@@ -65,7 +65,12 @@ pub struct Function {
 impl Node {
     pub fn function(name: Name, parameters: Vec<Parameter>, value: Node, span: Span) -> Node {
         Node {
-            kind: NodeKind::Function(Function { name, parameters, value }).into(),
+            kind: NodeKind::Function(Function {
+                name,
+                parameters,
+                value,
+            })
+            .into(),
             span,
         }
     }
@@ -80,11 +85,7 @@ pub struct Parameter {
 
 impl Parameter {
     pub fn new(patt: Node, value: Option<Node>, span: Span) -> Parameter {
-        Parameter {
-            patt,
-            value,
-            span,
-        }
+        Parameter { patt, value, span }
     }
 }
 
@@ -141,11 +142,7 @@ pub struct Argument {
 
 impl Argument {
     pub fn new(value: Node, name: Option<Name>, span: Span) -> Argument {
-        Argument {
-            value,
-            name,
-            span,
-        }
+        Argument { value, name, span }
     }
 }
 
@@ -189,7 +186,12 @@ pub struct Binary {
 impl Node {
     pub fn binary(operator: Operator, lexpr: Node, rexpr: Node, span: Span) -> Node {
         Node {
-            kind: NodeKind::Binary(Binary { operator, lexpr, rexpr }).into(),
+            kind: NodeKind::Binary(Binary {
+                operator,
+                lexpr,
+                rexpr,
+            })
+            .into(),
             span,
         }
     }
@@ -205,7 +207,12 @@ pub struct Set {
 impl Node {
     pub fn set(operator: Operator, node: Node, value: Node, span: Span) -> Node {
         Node {
-            kind: NodeKind::Set(Set { operator, node, value }).into(),
+            kind: NodeKind::Set(Set {
+                operator,
+                node,
+                value,
+            })
+            .into(),
             span,
         }
     }
@@ -315,12 +322,12 @@ pub enum OperatorKind {
     Range, // ..
 
     // Assignment
-    Sets,  // :=
-    Adds,  // +
-    Subs,  // -
-    Muls,  // *
-    Divs,  // /
-    Mods,  // %
+    Sets, // :=
+    Adds, // +
+    Subs, // -
+    Muls, // *
+    Divs, // /
+    Mods, // %
 }
 
 pub type Precedence = i8;
@@ -334,19 +341,21 @@ pub enum Associativity {
 
 impl Operator {
     pub fn new(kind: OperatorKind, span: Span) -> Operator {
-        Operator {
-            kind,
-            span,
-        }
+        Operator { kind, span }
     }
 
     pub fn is_unary(self) -> bool {
-        matches!(self.kind, OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not)
+        matches!(
+            self.kind,
+            OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not
+        )
     }
 
     pub fn precedence(self) -> Precedence {
         match self.kind {
-            OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not => -1,
+            OperatorKind::Pos
+          | OperatorKind::Neg
+          | OperatorKind::Not => -1,
             OperatorKind::Exp => 9,
             OperatorKind::Mul | OperatorKind::Div => 8,
             OperatorKind::Add | OperatorKind::Sub => 7,
@@ -357,8 +366,7 @@ impl Operator {
           | OperatorKind::Ge
           | OperatorKind::Ne
           | OperatorKind::Eq => 5,
-            OperatorKind::Is
-          | OperatorKind::In => 4,
+            OperatorKind::Is | OperatorKind::In => 4,
             OperatorKind::And => 3,
             OperatorKind::Or => 2,
             OperatorKind::Range => 1,

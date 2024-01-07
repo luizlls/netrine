@@ -24,10 +24,7 @@ pub enum SyntaxErrorKind {
 
 impl SyntaxError {
     pub fn new(kind: SyntaxErrorKind, span: Span) -> SyntaxError {
-        SyntaxError {
-            kind,
-            span,
-        }
+        SyntaxError { kind, span }
     }
 
     pub fn unexpected(found: TokenKind, expected: &[TokenKind], span: Span) -> SyntaxError {
@@ -47,7 +44,7 @@ impl fmt::Display for SyntaxErrorKind {
             SyntaxErrorKind::ExpectedExpr => "expected an expression",
             SyntaxErrorKind::ExpectedPatt => "expected a pattern",
             SyntaxErrorKind::UnexpectedCharacter => "unexpected character",
-            SyntaxErrorKind::UnterminatedString  => "unterminated string",
+            SyntaxErrorKind::UnterminatedString => "unterminated string",
             SyntaxErrorKind::UnexpectedToken(found, expected) => {
                 let expected = expected
                     .iter()
@@ -57,9 +54,9 @@ impl fmt::Display for SyntaxErrorKind {
                     })
                     .collect::<Vec<_>>()
                     .join(" or ");
-                formatted = format!("expected {expected}, but found `{found}`");
+                formatted = format!("expected {expected}, found `{found}`");
                 &formatted
-            },
+            }
         };
         write!(f, "{description}")
     }

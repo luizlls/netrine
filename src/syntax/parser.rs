@@ -1,8 +1,11 @@
 use crate::span::Span;
 
-use super::error::{SyntaxError, Result, SyntaxErrorKind};
+use super::error::{Result, SyntaxError, SyntaxErrorKind};
 use super::node::*;
-use super::token::{Token, TokenKind::{self, *}};
+use super::token::{
+    Token,
+    TokenKind::{self, *},
+};
 
 #[derive(Debug, Clone)]
 pub struct Parser<'p> {
@@ -81,7 +84,7 @@ impl<'p> Parser<'p> {
                 } else {
                     Ok(None)
                 }
-            },
+            }
         }
     }
 
@@ -108,14 +111,8 @@ impl<'p> Parser<'p> {
 
 pub fn parse(src: &str, tokens: &[Token]) -> Result<Vec<Node>> {
     let mut parser = Parser::new(src, tokens);
-    let mut nodes = vec![];
 
-    while parser.index < tokens.len() {
-        maybe(&mut parser, NL);
-        nodes.push(top_level(&mut parser)?);
-        endline(&mut parser)?;
-    }
-
+    let nodes = until(&mut parser, EOF, top_level)?;
     Ok(nodes)
 }
 
@@ -176,32 +173,32 @@ fn atom(p: &mut Parser) -> Result<Node> {
         LParen => parens(p, expr),
         LBrace => braces(p),
         LBracket => brackets(p, expr),
-        _ => {
-            match p.token.kind {
-                UnexpectedCharacter => Err(p.error(SyntaxErrorKind::UnexpectedCharacter)),
-                UnterminatedString  => Err(p.error(SyntaxErrorKind::UnterminatedString)),
-                _ => Err(p.error(SyntaxErrorKind::ExpectedExpr)),
-            }
-        }
+        _ => match p.token.kind {
+            UnexpectedCharacter => Err(p.error(SyntaxErrorKind::UnexpectedCharacter)),
+            UnterminatedString => Err(p.error(SyntaxErrorKind::UnterminatedString)),
+            _ => Err(p.error(SyntaxErrorKind::ExpectedExpr)),
+        },
     }
 }
 
 fn patt(p: &mut Parser) -> Result<Node> {
     match p.token.kind {
+        Ident if !p.peek().is(LParen) => ident(p),
         Integer => integer(p),
         Number => number(p),
         String => string(p),
-        _ => structural_patt(p)
+        _ => structural_patt(p),
     }
 }
 
 fn structural_patt(p: &mut Parser) -> Result<Node> {
     match p.token.kind {
+        Ident if !p.peek().is(LParen) => ident(p),
         Ident => instance(p, patt),
         LParen => parens(p, patt),
         // LBrace => record(p),
         LBracket => brackets(p, patt),
-        _ => Err(p.error(SyntaxErrorKind::ExpectedPatt))
+        _ => Err(p.error(SyntaxErrorKind::ExpectedPatt)),
     }
 }
 
@@ -243,7 +240,7 @@ fn string(p: &mut Parser) -> Result<Node> {
 
 fn parens<F>(p: &mut Parser, parse: F) -> Result<Node>
 where
-    F: FnMut(&mut Parser) -> Result<Node>
+    F: FnMut(&mut Parser) -> Result<Node>,
 {
     let start = p.span();
 
@@ -264,7 +261,7 @@ where
 
 fn brackets<F>(p: &mut Parser, parse: F) -> Result<Node>
 where
-    F: FnMut(&mut Parser) -> Result<Node>
+    F: FnMut(&mut Parser) -> Result<Node>,
 {
     let start = p.span();
 
@@ -285,7 +282,7 @@ fn block(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
     token(p, LBrace)?;
-    let nodes = many(p, top_level)?;
+    let nodes = until(p, RBrace, top_level)?;
     token(p, RBrace)?;
 
     let end = p.last();
@@ -301,27 +298,23 @@ fn argument(p: &mut Parser) -> Result<Argument> {
 
 fn instance<F>(p: &mut Parser, parse: F) -> Result<Node>
 where
-    F: FnMut(&mut Parser) -> Result<Node>
+    F: FnMut(&mut Parser) -> Result<Node>,
 {
+    let start = p.span();
+
     let name = ident(p)?;
-    if p.at(LParen) {
-        let start = p.span();
-        token(p, LParen)?;
+    token(p, LParen)?;
+    let items = comma(p, parse)?
+        .into_iter()
+        .map(|patt @ Node { span, .. }| {
+            Argument::new(patt, None, span)
+        })
+        .collect();
+    token(p, RParen)?;
 
-        let items = comma(p, parse)?
-            .into_iter()
-            .map(|patt @ Node { span, .. }| {
-                Argument::new(patt, None, span)
-            })
-            .collect();
+    let end = p.last();
 
-        token(p, RParen)?;
-        let end = p.last();
-
-        Ok(Node::apply(name, items, start.to(end)))
-    } else {
-        Ok(name)
-    }
+    Ok(Node::apply(name, items, start.to(end)))
 }
 
 fn basic(p: &mut Parser) -> Result<Node> {
@@ -341,7 +334,7 @@ fn basic(p: &mut Parser) -> Result<Node> {
                 token(p, Dot)?;
                 let field = atom(p)?;
                 let end = p.last();
-                Node::get(node,field, start.to(end))
+                Node::get(node, field, start.to(end))
             }
             _ => break,
         }
@@ -353,7 +346,8 @@ fn basic(p: &mut Parser) -> Result<Node> {
 fn unary(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
-    if let Some(operator) = operator(p, true) && operator.is_unary() {
+    if let Some(operator) = operator(p, true) && operator.is_unary()
+    {
         p.bump(); // operator
         let expr = basic(p)?;
         let end = p.last();
@@ -370,8 +364,7 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
         p.bump(); // operator
 
         let precedence = match operator.associativity() {
-            Associativity::None
-          | Associativity::Left  => operator.precedence() + 1,
+            Associativity::None | Associativity::Left => operator.precedence() + 1,
             Associativity::Right => operator.precedence(),
         };
 
@@ -468,14 +461,14 @@ fn unexpected(p: &mut Parser, expected: &[TokenKind]) -> SyntaxError {
 
 fn optional<F, T>(p: &mut Parser, mut parse: F) -> Option<T>
 where
-    F: FnMut(&mut Parser) -> Result<T>
+    F: FnMut(&mut Parser) -> Result<T>,
 {
     parse(p).ok()
 }
 
 fn comma<F, T>(p: &mut Parser, mut parse: F) -> Result<Vec<T>>
 where
-    F: FnMut(&mut Parser) -> Result<T>
+    F: FnMut(&mut Parser) -> Result<T>,
 {
     let mut res = vec![];
 
@@ -492,15 +485,15 @@ where
     Ok(res)
 }
 
-fn many<F, T>(p: &mut Parser, mut parse: F) -> Result<Vec<T>>
+fn until<F, T>(p: &mut Parser, kind: TokenKind, mut parse: F) -> Result<Vec<T>>
 where
-    F: FnMut(&mut Parser) -> Result<T>
+    F: FnMut(&mut Parser) -> Result<T>,
 {
     let mut res = vec![];
 
     newline(p);
-    while let Some(value) = p.attempt(&mut parse)? {
-        res.push(value);
+    while !p.at(kind) {
+        res.push(parse(p)?);
         endline(p)?;
     }
 
