@@ -11,53 +11,38 @@ pub struct Node {
     pub span: Span,
 }
 
+impl Node {
+    pub fn new(kind: NodeKind, span: Span) -> Node {
+        Node {
+            kind: Box::new(kind),
+            span,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeKind {
     Function(Function),
 
-    Define(Define),
+    Def(Def),
 
-    Assign(Assign),
+    Get(Get),
 
-    Access(Access),
-
-    Mutable(Mutable),
+    Set(Set),
 
     Apply(Apply),
-    
-    Accept(Accept),
 
     Unary(Unary),
 
     Binary(Binary),
 
-    Group(Group),
-
     Block(Block),
 
-    Lambda(Lambda),
-
-    Cases(Cases),
-
-    If(If),
-
-    For(For),
-
-    Yield(Yield),
-
-    Break,
-
-    Return(Return),
-
-    Import(Import),
-
-    Record(Record),
+    Group(Group),
 
     List(List),
 
     Tuple(Tuple),
-
-    Field(Field),
 
     Name(Name),
 
@@ -65,14 +50,9 @@ pub enum NodeKind {
 
     Number(Literal),
 
-    Empty,
-}
+    Integer(Literal),
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Define {
-    pub lvalue: Node,
-    pub rvalue: Node,
-    pub constraints: Option<Vec<Node>>,
+    Import(Import),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,7 +60,15 @@ pub struct Function {
     pub name: Name,
     pub parameters: Vec<Parameter>,
     pub value: Node,
-    pub constraints: Option<Vec<Node>>,
+}
+
+impl Node {
+    pub fn function(name: Name, parameters: Vec<Parameter>, value: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Function(Function { name, parameters, value }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,69 +78,29 @@ pub struct Parameter {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Lambda {
-    pub parameters: Vec<Node>,
-    pub value: Node,
-    pub constraints: Option<Vec<Node>>,
+impl Parameter {
+    pub fn new(patt: Node, value: Option<Node>, span: Span) -> Parameter {
+        Parameter {
+            patt,
+            value,
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cases {
-    pub cases: Vec<Case>,
-    pub otherwise: Option<Vec<Node>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Case {
-    pub patterns: Vec<Node>,
-    pub value: Vec<Node>,
-    pub guards: Option<Vec<Node>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mutable {
-    pub value: Node,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Assign {
-    pub operator: Operator,
+pub struct Def {
     pub lvalue: Node,
     pub rvalue: Node,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Access {
-    pub node: Node,
-    pub field: Node,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Apply {
-    pub callee: Node,
-    pub arguments: Vec<Node>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Accept {
-    pub callee: Node,
-    pub lambda: Node,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Group {
-    pub node: Node,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Yield {
-    pub value: Node,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Return {
-    pub value: Node,
+impl Node {
+    pub fn def(lvalue: Node, rvalue: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Def(Def { lvalue, rvalue }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,35 +108,121 @@ pub struct Block {
     pub nodes: Vec<Node>,
 }
 
+impl Node {
+    pub fn block(nodes: Vec<Node>, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Block(Block { nodes }).into(),
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Get {
+    pub node: Node,
+    pub field: Node,
+}
+
+impl Node {
+    pub fn get(node: Node, field: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Get(Get { node, field }).into(),
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Argument {
+    pub value: Node,
+    pub name: Option<Name>,
+    pub span: Span,
+}
+
+impl Argument {
+    pub fn new(value: Node, name: Option<Name>, span: Span) -> Argument {
+        Argument {
+            value,
+            name,
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Apply {
+    pub callee: Node,
+    pub arguments: Vec<Argument>,
+}
+
+impl Node {
+    pub fn apply(callee: Node, arguments: Vec<Argument>, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Apply(Apply { callee, arguments }).into(),
+            span,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unary {
-    pub expr: Node,
     pub operator: Operator,
+    pub expr: Node,
+}
+
+impl Node {
+    pub fn unary(operator: Operator, expr: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Unary(Unary { operator, expr }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binary {
+    pub operator: Operator,
     pub lexpr: Node,
     pub rexpr: Node,
+}
+
+impl Node {
+    pub fn binary(operator: Operator, lexpr: Node, rexpr: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Binary(Binary { operator, lexpr, rexpr }).into(),
+            span,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Set {
     pub operator: Operator,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct If {
-    pub value: Node,
-    pub then: Node,
-    pub otherwise: Option<Node>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct For {
-    pub bindings: Vec<(Node, Node)>,
+    pub node: Node,
     pub value: Node,
 }
 
+impl Node {
+    pub fn set(operator: Operator, node: Node, value: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Set(Set { operator, node, value }).into(),
+            span,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct List {
-    pub items: Vec<Node>,
+pub struct Group {
+    pub inner: Node,
+}
+
+impl Node {
+    pub fn group(inner: Node, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Group(Group { inner }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,32 +230,42 @@ pub struct Tuple {
     pub items: Vec<Node>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Record {
-    pub fields: Vec<RecordField>,
+impl Node {
+    pub fn tuple(items: Vec<Node>, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Tuple(Tuple { items }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecordField {
-    pub kind: RecordFieldKind,
-    pub span: Span,
+pub struct List {
+    pub items: Vec<Node>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecordFieldKind {
-    Field(Name, Option<Node>),
-    Spread(Node),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Field {
-    pub field: Node,
+impl Node {
+    pub fn list(items: Vec<Node>, span: Span) -> Node {
+        Node {
+            kind: NodeKind::List(List { items }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Literal {
     pub value: String,
     pub span: Span,
+}
+
+impl Node {
+    pub fn literal(kind: fn(Literal) -> NodeKind, value: String, span: Span) -> Node {
+        Node {
+            kind: kind(Literal { value, span }).into(),
+            span,
+        }
+    }
 }
 
 pub type Name = Literal;
@@ -232,22 +276,25 @@ pub struct Import {
     pub names: Vec<Name>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Operator {
-    pub kind: OperatorKind,
-    pub mode: OperatorMode,
-    pub span: Span,
+impl Node {
+    pub fn import(module: Name, names: Vec<Name>, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Import(Import { module, names }).into(),
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OperatorMode {
-    Regular,
-    Assign,
+pub struct Operator {
+    pub kind: OperatorKind,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OperatorKind {
     Is,    // is
+    In,    // in
     And,   // and
     Or,    // or
     Not,   // not
@@ -266,6 +313,14 @@ pub enum OperatorKind {
     Gt,    // >
     Ge,    // >=
     Range, // ..
+
+    // Assignment
+    Sets,  // :=
+    Adds,  // +
+    Subs,  // -
+    Muls,  // *
+    Divs,  // /
+    Mods,  // %
 }
 
 pub type Precedence = i8;
@@ -278,6 +333,13 @@ pub enum Associativity {
 }
 
 impl Operator {
+    pub fn new(kind: OperatorKind, span: Span) -> Operator {
+        Operator {
+            kind,
+            span,
+        }
+    }
+
     pub fn is_unary(self) -> bool {
         matches!(self.kind, OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not)
     }
@@ -295,10 +357,17 @@ impl Operator {
           | OperatorKind::Ge
           | OperatorKind::Ne
           | OperatorKind::Eq => 5,
-            OperatorKind::Is => 4,
+            OperatorKind::Is
+          | OperatorKind::In => 4,
             OperatorKind::And => 3,
             OperatorKind::Or => 2,
             OperatorKind::Range => 1,
+            OperatorKind::Sets
+          | OperatorKind::Adds
+          | OperatorKind::Subs
+          | OperatorKind::Muls
+          | OperatorKind::Divs
+          | OperatorKind::Mods => 0,
         }
     }
 

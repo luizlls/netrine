@@ -2,7 +2,6 @@
 
 // mod arena;
 mod error;
-mod source;
 mod span;
 mod syntax;
 
@@ -10,7 +9,6 @@ use std::fs;
 use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 
-use crate::source::Source;
 use crate::syntax::parse;
 
 fn main() {
@@ -24,8 +22,9 @@ fn main() {
 
 fn file(file: String) {
     let path = PathBuf::from(file);
+    let name = path.display().to_string();
     let content = fs::read_to_string(&path).expect("Couldn't open the file");
-    exec(&Source::new(&content, path));
+    exec(&content, &name);
 }
 
 fn repl() {
@@ -35,7 +34,7 @@ fn repl() {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            exec(&Source::new(input.trim_end(), PathBuf::from("repl")));
+            exec(&input.trim_end(), "repl");
             input.clear();
         } else {
             input.push_str(&line);
@@ -56,13 +55,12 @@ fn read_line() -> Result<String, ()> {
     }
 }
 
-fn exec(source: &Source) {
-
+fn exec(source: &str, path: &str) {
     match parse(source) {
-        Ok(nodes) => println!("{nodes:#?}"),
+        Ok(nodes) => println!("{}", nodes.len()),
         Err(error) => {
             let mut buffer = String::new();
-            let _ = error.report(source, &mut buffer);
+            let _ = error.report(source, path, &mut buffer);
             eprintln!("{buffer}");
         }
     }

@@ -1,21 +1,15 @@
 #![macro_use]
 
 use crate::error::Result;
-use crate::source::Source;
-
-use lexer::Lexer;
-use node::Node;
-use parser::Parser;
 
 pub mod node;
+mod error;
 mod lexer;
 mod parser;
 mod token;
 
-pub fn parse(source: &Source) -> Result<Vec<Node>> {
-    let mut lexer = Lexer::new(&source.content);
-    let tokens = lexer::tokenize(&mut lexer);
-    let mut parser = Parser::new(&source.content, &tokens);
-    let nodes = parser::parse(&mut parser);
+pub fn parse(source: &str) -> Result<Vec<node::Node>> {
+    let tokens = lexer::tokens(&source);
+    let nodes = parser::parse(&source, &tokens).map_err(|err| err.into());
     nodes
 }

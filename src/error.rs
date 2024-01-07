@@ -1,10 +1,9 @@
 use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 
-use crate::source::Source;
 use crate::span::Span;
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T, E=Error> = ::std::result::Result<T, E>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Error {
@@ -34,17 +33,15 @@ impl Display for Error {
 }
 
 impl Error {
-    pub fn report(&self, source: &Source, buf: &mut String) -> fmt::Result {
+    pub fn report(&self, source: &str, file_path: &str, buf: &mut String) -> fmt::Result {
         if self.span.is_none() {
             return writeln!(buf, "error: {}\n", self.error);
         }
 
-        let path = source.path.as_path().display().to_string();
-
         let Span { lo: start, hi: end } = self.span.unwrap();
         let line = Self::find_line(source, start as usize);
 
-        let (left, right) = source.content.split_at(start as usize);
+        let (left, right) = source.split_at(start as usize);
 
         let mut left = left.rsplit('\n');
         let left_main = left.next().unwrap();
@@ -60,7 +57,7 @@ impl Error {
 
         writeln!(buf, "\nerror: {}\n", self.error)?;
 
-        writeln!(buf, "{number_padding}--> {path} at line {line}")?;
+        writeln!(buf, "{number_padding}--> {file_path} at line {line}")?;
         writeln!(buf, "{number_padding} |")?;
 
         if let Some(prev_line) = left.next() {
@@ -81,13 +78,13 @@ impl Error {
         writeln!(buf, "{number_padding} |")?;
 
         writeln!(buf, "\n")?;
-        writeln!(buf, "error: could not compile {path}")
+        writeln!(buf, "error: could not compile {file_path}")
     }
 
-    fn find_line(source: &Source, position: usize) -> usize {
+    fn find_line(source: &str, position: usize) -> usize {
         let mut line = 1;
 
-        for (idx, ch) in source.content.chars().enumerate() {
+        for (idx, ch) in source.chars().enumerate() {
             if idx == position {
                 return line;
             } else if ch == '\n' {

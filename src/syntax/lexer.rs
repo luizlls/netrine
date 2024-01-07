@@ -1,6 +1,6 @@
 use crate::span::Span;
 
-use super::token::{Token, TokenKind};
+use super::token::{Token, TokenKind::{self, *}};
 
 #[derive(Debug, Clone)]
 pub struct Lexer<'src> {
@@ -65,21 +65,34 @@ impl<'src> Lexer<'src> {
             self.bump();
         }
     }
+
+    fn trivia(&mut self) {
+        loop {
+            if self.curr.is_ascii_whitespace() && self.curr != b'\n' {
+                self.bump_while(|chr| chr != b'\n' && chr.is_ascii_whitespace());
+            } else if self.curr == b'/' && self.peek == b'/' {
+                self.bump_while(|chr| chr != b'\n' && chr != b'\0');
+            } else {
+                break;
+            }
+        }
+    }
 }
 
-pub fn tokenize(l: &mut Lexer) -> Vec<Token> {
+pub fn tokens(source: &str) -> Vec<Token> {
+    let mut lexer = Lexer::new(&source);
     let mut tokens = vec![];
-    while let kind = kind(l) && kind != TokenKind::EOF {
+    while let kind = kind(&mut lexer) && kind != EOF {
         tokens.push(Token {
             kind,
-            span: l.span(),
+            span: lexer.span(),
         });
     }
     tokens
 }
 
 fn kind(l: &mut Lexer) -> TokenKind {
-    trivia(l);
+    l.trivia();
     l.align();
 
     let kind = match l.curr {
@@ -95,22 +108,19 @@ fn kind(l: &mut Lexer) -> TokenKind {
         b'\n' => {
             return newline(l);
         }
-        b'/' if l.peek == b'/' => {
-            return comment(l);
-        }
         _ if is_symbol(l.curr) => {
             return operator(l);
         }
-        b'(' => TokenKind::OpenParen,
-        b')' => TokenKind::CloseParen,
-        b'{' => TokenKind::OpenBrace,
-        b'}' => TokenKind::CloseBrace,
-        b'[' => TokenKind::OpenBracket,
-        b']' => TokenKind::CloseBracket,
-        b';' => TokenKind::Semi,
-        b',' => TokenKind::Comma,
-        0 => TokenKind::EOF,
-        _ => TokenKind::UnexpectedCharacter,
+        b'(' => LParen,
+        b')' => RParen,
+        b'{' => LBrace,
+        b'}' => RBrace,
+        b'[' => LBracket,
+        b']' => RBracket,
+        b';' => Semi,
+        b',' => Comma,
+        0 => EOF,
+        _ => UnexpectedCharacter,
     };
     l.bump();
     kind
@@ -121,22 +131,22 @@ fn ident(l: &mut Lexer) -> TokenKind {
     l.bump_while(|chr| chr == b'\'');
 
     match l.slice() {
-        "and" => TokenKind::And,
-        "or" => TokenKind::Or,
-        "not" => TokenKind::Not,
-        "is" => TokenKind::Is,
-        "mut" => TokenKind::Mut,
-        "if" => TokenKind::If,
-        "else" => TokenKind::Else,
-        "for" => TokenKind::For,
-        "in" => TokenKind::In,
-        "case" => TokenKind::Case,
-        "import" => TokenKind::Import,
-        "yield" => TokenKind::Yield,
-        "break" => TokenKind::Break,
-        "return" => TokenKind::Return,
-        "where" => TokenKind::Where,
-        _ => TokenKind::Ident,
+        "and" => And,
+        "or" => Or,
+        "not" => Not,
+        "is" => Is,
+        "mut" => Mut,
+        "if" => If,
+        "else" => Else,
+        "for" => For,
+        "in" => In,
+        "case" => Case,
+        "import" => Import,
+        "yield" => Yield,
+        "break" => Break,
+        "return" => Return,
+        "where" => Where,
+        _ => Ident,
     }
 }
 
@@ -151,39 +161,39 @@ fn operator(l: &mut Lexer) -> TokenKind {
     let kind = match l.curr {
         b'.' if l.peek == b'.' => {
             l.bump();
-            TokenKind::Dots
+            Dots
         }
-        b'.' => TokenKind::Dot,
+        b'.' => Dot,
         b'=' if l.peek == b'=' => {
             l.bump();
-            TokenKind::EqEq
+            EqEq
         }
         b'=' if l.peek == b'>' => {
             l.bump();
-            TokenKind::Arrow
+            Arrow
         }
-        b'=' => TokenKind::Equals,
-        b':' => TokenKind::Colon,
+        b'=' => Equals,
+        b':' => Colon,
         b'<' if l.peek == b'=' => {
             l.bump();
-            TokenKind::LtEq
+            LtEq
         }
-        b'<' => TokenKind::Lt,
+        b'<' => Lt,
         b'>' if l.peek == b'=' => {
             l.bump();
-            TokenKind::GtEq
+            GtEq
         }
-        b'>' => TokenKind::Gt,
+        b'>' => Gt,
         b'!' if l.peek == b'=' => {
             l.bump();
-            TokenKind::NoEq
+            NoEq
         }
-        b'+' => TokenKind::Plus,
-        b'-' => TokenKind::Minus,
-        b'*' => TokenKind::Star,
-        b'/' => TokenKind::Slash,
-        b'^' => TokenKind::Caret,
-        b'%' => TokenKind::Mod,
+        b'+' => Plus,
+        b'-' => Minus,
+        b'*' => Star,
+        b'/' => Slash,
+        b'^' => Caret,
+        b'%' => Mod,
         _ => unreachable!(),
     };
 
@@ -207,17 +217,19 @@ fn number(l: &mut Lexer) -> TokenKind {
             l.bump();
             l.bump_while(|chr| chr.is_ascii_hexdigit());
         }
-        _ => {}
+        _ => {
+            return Integer
+        }
     }
 
-    TokenKind::Number
+    Number
 }
 
 fn string(l: &mut Lexer) -> TokenKind {
     loop {
         match l.bump() {
             b'\n' | 0 => {
-                return TokenKind::UnterminatedString;
+                return UnterminatedString;
             }
             b'"' => {
                 l.bump();
@@ -228,28 +240,22 @@ fn string(l: &mut Lexer) -> TokenKind {
                 b'u' => todo!("validate escaped unicode"),
                 b'x' => todo!("validate escaped binary"),
                 _ => {
-                    return TokenKind::UnexpectedCharacter;
+                    return UnexpectedCharacter;
                 }
             },
             _ => {}
         }
     }
 
-    TokenKind::String
+    String
 }
 
 fn newline(l: &mut Lexer) -> TokenKind {
-    trivia(l);
-    kind(l) // TokenKind::EOL
-}
-
-fn comment(l: &mut Lexer) -> TokenKind {
-    l.bump_while(|chr| chr != b'\n' && chr != 0);
-    kind(l)
-}
-
-fn trivia(l: &mut Lexer) {
-    l.bump_while(|chr| chr.is_ascii_whitespace());
+    while l.curr == b'\n' {
+        l.bump();
+        l.trivia();
+    }
+    NL
 }
 
 #[cfg(test)]
@@ -270,10 +276,10 @@ mod tests {
     fn identifier() {
         let mut lexer = Lexer::new("ident True CONST _");
 
-        assert_token!(lexer, TokenKind::Ident, "ident");
-        assert_token!(lexer, TokenKind::Ident, "True");
-        assert_token!(lexer, TokenKind::Ident, "CONST");
-        assert_token!(lexer, TokenKind::Ident, "_");
+        assert_token!(lexer, Ident, "ident");
+        assert_token!(lexer, Ident, "True");
+        assert_token!(lexer, Ident, "CONST");
+        assert_token!(lexer, Ident, "_");
     }
 
     #[test]
@@ -281,116 +287,117 @@ mod tests {
         let mut lexer =
             Lexer::new("and or not is mut if else for in case yield break return import where");
 
-        assert_token!(lexer, TokenKind::And);
-        assert_token!(lexer, TokenKind::Or);
-        assert_token!(lexer, TokenKind::Not);
-        assert_token!(lexer, TokenKind::Is);
-        assert_token!(lexer, TokenKind::Mut);
-        assert_token!(lexer, TokenKind::If);
-        assert_token!(lexer, TokenKind::Else);
-        assert_token!(lexer, TokenKind::For);
-        assert_token!(lexer, TokenKind::In);
-        assert_token!(lexer, TokenKind::Case);
-        assert_token!(lexer, TokenKind::Yield);
-        assert_token!(lexer, TokenKind::Break);
-        assert_token!(lexer, TokenKind::Return);
-        assert_token!(lexer, TokenKind::Import);
-        assert_token!(lexer, TokenKind::Where);
+        assert_token!(lexer, And);
+        assert_token!(lexer, Or);
+        assert_token!(lexer, Not);
+        assert_token!(lexer, Is);
+        assert_token!(lexer, Mut);
+        assert_token!(lexer, If);
+        assert_token!(lexer, Else);
+        assert_token!(lexer, For);
+        assert_token!(lexer, In);
+        assert_token!(lexer, Case);
+        assert_token!(lexer, Yield);
+        assert_token!(lexer, Break);
+        assert_token!(lexer, Return);
+        assert_token!(lexer, Import);
+        assert_token!(lexer, Where);
     }
 
     #[test]
     fn punctuation() {
         let mut lexer = Lexer::new(". , ; ( ) [ ] { }");
-        assert_token!(lexer, TokenKind::Dot);
-        assert_token!(lexer, TokenKind::Comma);
-        assert_token!(lexer, TokenKind::Semi);
-        assert_token!(lexer, TokenKind::OpenParen);
-        assert_token!(lexer, TokenKind::CloseParen);
-        assert_token!(lexer, TokenKind::OpenBracket);
-        assert_token!(lexer, TokenKind::CloseBracket);
-        assert_token!(lexer, TokenKind::OpenBrace);
-        assert_token!(lexer, TokenKind::CloseBrace);
+        assert_token!(lexer, Dot);
+        assert_token!(lexer, Comma);
+        assert_token!(lexer, Semi);
+        assert_token!(lexer, LParen);
+        assert_token!(lexer, RParen);
+        assert_token!(lexer, LBracket);
+        assert_token!(lexer, RBracket);
+        assert_token!(lexer, LBrace);
+        assert_token!(lexer, RBrace);
     }
 
     #[test]
     fn operators() {
         let mut lexer = Lexer::new(". : => = == != + - * / % ^ > >= < <= ..");
-        assert_token!(lexer, TokenKind::Dot, ".");
-        assert_token!(lexer, TokenKind::Colon, ":");
-        assert_token!(lexer, TokenKind::Arrow, "=>");
-        assert_token!(lexer, TokenKind::Equals, "=");
-        assert_token!(lexer, TokenKind::EqEq, "==");
-        assert_token!(lexer, TokenKind::NoEq, "!=");
-        assert_token!(lexer, TokenKind::Plus, "+");
-        assert_token!(lexer, TokenKind::Minus, "-");
-        assert_token!(lexer, TokenKind::Star, "*");
-        assert_token!(lexer, TokenKind::Slash, "/");
-        assert_token!(lexer, TokenKind::Mod, "%");
-        assert_token!(lexer, TokenKind::Caret, "^");
-        assert_token!(lexer, TokenKind::Gt, ">");
-        assert_token!(lexer, TokenKind::GtEq, ">=");
-        assert_token!(lexer, TokenKind::Lt, "<");
-        assert_token!(lexer, TokenKind::LtEq, "<=");
-        assert_token!(lexer, TokenKind::Dots, "..");
+        assert_token!(lexer, Dot, ".");
+        assert_token!(lexer, Colon, ":");
+        assert_token!(lexer, Arrow, "=>");
+        assert_token!(lexer, Equals, "=");
+        assert_token!(lexer, EqEq, "==");
+        assert_token!(lexer, NoEq, "!=");
+        assert_token!(lexer, Plus, "+");
+        assert_token!(lexer, Minus, "-");
+        assert_token!(lexer, Star, "*");
+        assert_token!(lexer, Slash, "/");
+        assert_token!(lexer, Mod, "%");
+        assert_token!(lexer, Caret, "^");
+        assert_token!(lexer, Gt, ">");
+        assert_token!(lexer, GtEq, ">=");
+        assert_token!(lexer, Lt, "<");
+        assert_token!(lexer, LtEq, "<=");
+        assert_token!(lexer, Dots, "..");
     }
 
     #[test]
     fn number() {
         let mut lexer = Lexer::new("42 3.14 0xABCDEF 0b0101");
 
-        assert_token!(lexer, TokenKind::Number, "42");
-        assert_token!(lexer, TokenKind::Number, "3.14");
-        assert_token!(lexer, TokenKind::Number, "0xABCDEF");
-        assert_token!(lexer, TokenKind::Number, "0b0101");
+        assert_token!(lexer, Integer, "42");
+        assert_token!(lexer, Number, "3.14");
+        assert_token!(lexer, Number, "0xABCDEF");
+        assert_token!(lexer, Number, "0b0101");
     }
 
     #[test]
     fn simple_string() {
         let mut lexer = Lexer::new(r#""Hello, World""#);
 
-        assert_token!(lexer, TokenKind::String, "\"Hello, World\"");
+        assert_token!(lexer, String, "\"Hello, World\"");
     }
 
     #[test]
     fn nested_string() {
         let mut lexer = Lexer::new(r#""code = \"n = 42\"""#);
 
-        assert_token!(lexer, TokenKind::String, "\"code = \\\"n = 42\\\"\"");
+        assert_token!(lexer, String, "\"code = \\\"n = 42\\\"\"");
     }
 
     #[test]
     fn empty_lines() {
         let mut lexer = Lexer::new("\n\n\n");
 
-        assert_token!(lexer, TokenKind::EOF);
+        assert_token!(lexer, NL);
+        assert_token!(lexer, EOF);
     }
 
     #[test]
     fn unterminated_string() {
         let mut lexer = Lexer::new(r#""Hello"#);
 
-        assert_token!(lexer, TokenKind::UnterminatedString);
+        assert_token!(lexer, UnterminatedString);
     }
 
     #[test]
     fn unbalanced_quotes() {
         let mut lexer = Lexer::new(r#""Hello"""#);
 
-        assert_token!(lexer, TokenKind::String, "\"Hello\"");
-        assert_token!(lexer, TokenKind::UnterminatedString);
+        assert_token!(lexer, String, "\"Hello\"");
+        assert_token!(lexer, UnterminatedString);
     }
 
     #[test]
     fn invalid_escaped_string() {
         let mut lexer = Lexer::new(r#""escape \a""#);
 
-        assert_token!(lexer, TokenKind::UnexpectedCharacter);
+        assert_token!(lexer, UnexpectedCharacter);
     }
 
     #[test]
     fn unexpected_character() {
         let mut lexer = Lexer::new("😀 = 10");
 
-        assert_token!(lexer, TokenKind::UnexpectedCharacter);
+        assert_token!(lexer, UnexpectedCharacter);
     }
 }
