@@ -40,7 +40,7 @@ pub enum NodeKind {
 
     Group(Group),
 
-    List(List),
+    Array(Array),
 
     Tuple(Tuple),
 
@@ -247,14 +247,14 @@ impl Node {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct List {
+pub struct Array {
     pub items: Vec<Node>,
 }
 
 impl Node {
-    pub fn list(items: Vec<Node>, span: Span) -> Node {
+    pub fn array(items: Vec<Node>, span: Span) -> Node {
         Node {
-            kind: NodeKind::List(List { items }).into(),
+            kind: NodeKind::Array(Array { items }).into(),
             span,
         }
     }
@@ -272,6 +272,11 @@ impl Node {
             kind: kind(Literal { value, span }).into(),
             span,
         }
+    }
+
+    pub fn name(literal: Literal) -> Node {
+        let span = literal.span;
+        Node::new(NodeKind::Name(literal), span)
     }
 }
 

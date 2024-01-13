@@ -39,7 +39,7 @@ impl Error {
         }
 
         let Span { lo: start, hi: end } = self.span.unwrap();
-        let line = Self::find_line(source, start as usize);
+        let (line, column) = Self::find_line(source, start as usize);
 
         let (left, right) = source.split_at(start as usize);
 
@@ -57,7 +57,7 @@ impl Error {
 
         writeln!(buf, "\nerror: {}\n", self.error)?;
 
-        writeln!(buf, "{number_padding}--> {file_path} at line {line}")?;
+        writeln!(buf, "{number_padding}--> {file_path} at {line}:{column}")?;
         writeln!(buf, "{number_padding} |")?;
 
         if let Some(prev_line) = left.next() {
@@ -81,17 +81,21 @@ impl Error {
         writeln!(buf, "error: could not compile {file_path}")
     }
 
-    fn find_line(source: &str, position: usize) -> usize {
+    fn find_line(source: &str, position: usize) -> (usize, usize) {
         let mut line = 1;
+        let mut col = 1;
 
         for (idx, ch) in source.chars().enumerate() {
             if idx == position {
-                return line;
+                break;
             } else if ch == '\n' {
                 line += 1;
+                col = 1;
+            } else {
+                col += 1;
             }
         }
 
-        line
+        (line, col)
     }
 }

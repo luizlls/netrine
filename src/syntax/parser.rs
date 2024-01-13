@@ -25,17 +25,13 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn reset(&mut self, index: usize) {
-        self.index = index;
+    fn bump(&mut self) {
+        self.index += 1;
         self.token = self.nth(self.index);
-        if self.token.is(NL) && (self.prev().non_terminal() || self.peek().non_terminal()) {
+        if self.token.is(NewLine) && (self.prev().non_terminal() || self.peek().non_terminal()) {
             self.index += 1;
             self.token = self.tokens[self.index];
         }
-    }
-
-    fn bump(&mut self) {
-        self.reset(self.index + 1)
     }
 
     fn nth(&self, idx: usize) -> Token {
@@ -70,40 +66,6 @@ impl<'p> Parser<'p> {
         &self.source[span.range()]
     }
 
-    fn attempt<F, T>(&mut self, mut parse: F) -> Result<Option<T>>
-    where
-        F: FnMut(&mut Parser) -> Result<T>,
-    {
-        let index = self.index;
-        match parse(self) {
-            Ok(value) => Ok(Some(value)),
-            Err(error) => {
-                if self.index != index {
-                    self.reset(index);
-                    Err(error)
-                } else {
-                    Ok(None)
-                }
-            }
-        }
-    }
-
-    fn one_of<T, E>(&mut self, parsers: &[fn(&mut Parser) -> Result<T>], none: E) -> Result<T>
-    where
-        E: Fn(&Parser) -> SyntaxError,
-    {
-        let index = self.index;
-        for parse in parsers {
-            let value = parse(self);
-            if value.is_ok() {
-                return value;
-            }
-            self.reset(index);
-        }
-
-        Err(none(self))
-    }
-
     fn error(&self, kind: SyntaxErrorKind) -> SyntaxError {
         SyntaxError::new(kind, self.span())
     }
@@ -112,18 +74,37 @@ impl<'p> Parser<'p> {
 pub fn parse(src: &str, tokens: &[Token]) -> Result<Vec<Node>> {
     let mut parser = Parser::new(src, tokens);
 
-    let nodes = until(&mut parser, EOF, top_level)?;
+    let nodes = many(&mut parser, EOF, top_level)?;
     Ok(nodes)
 }
 
+fn definition(p: &Parser) -> bool {
+    let mut depth = 0;
+    let mut index = p.index + 1;
+
+    loop {
+        match p.nth(index).kind {
+            Equals
+          | Colon   if depth == 0 => return true,
+            NewLine if depth == 0 => return false,
+            LParen | LBrace | LBracket => depth += 1,
+            RParen | RBrace | RBracket => depth -= 1,
+            _ => {}
+        }
+        index += 1;
+    }
+}
+
 fn top_level(p: &mut Parser) -> Result<Node> {
-    p.one_of(&[
-        // import,
-        function,
-        def,
-        // typedef,
-        expr,
-    ], |p| p.error(SyntaxErrorKind::ExpectedItem))
+    match p.token.kind {
+        Ident if definition(p) => match p.peek().kind {
+            LParen => function(p),
+            Equals => define(p),
+            Colon  => typedef(p),
+            _ => unreachable!()
+        },
+        _ => rvalue(p)
+    }
 }
 
 fn function(p: &mut Parser) -> Result<Node> {
@@ -131,7 +112,7 @@ fn function(p: &mut Parser) -> Result<Node> {
 
     let name = name(p)?;
     token(p, LParen)?;
-    let parameters = comma(p, parameter)?;
+    let parameters = comma(p, RParen, parameter)?;
     token(p, RParen)?;
     token(p, Equals)?;
     newline(p);
@@ -148,7 +129,7 @@ fn parameter(p: &mut Parser) -> Result<Parameter> {
     Ok(Parameter::new(patt, None, span))
 }
 
-fn def(p: &mut Parser) -> Result<Node> {
+fn define(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
     let lvalue = lvalue(p)?;
@@ -158,6 +139,10 @@ fn def(p: &mut Parser) -> Result<Node> {
     let end = p.last();
 
     Ok(Node::def(lvalue, rvalue, start.to(end)))
+}
+
+fn typedef(p: &mut Parser) -> Result<Node> {
+    todo!()
 }
 
 fn expr(p: &mut Parser) -> Result<Node> {
@@ -196,8 +181,8 @@ fn structural_patt(p: &mut Parser) -> Result<Node> {
         Ident if !p.peek().is(LParen) => ident(p),
         Ident => instance(p, patt),
         LParen => parens(p, patt),
-        // LBrace => record(p),
         LBracket => brackets(p, patt),
+        // LBrace => record(p),
         _ => Err(p.error(SyntaxErrorKind::ExpectedPatt)),
     }
 }
@@ -245,7 +230,7 @@ where
     let start = p.span();
 
     token(p, LParen)?;
-    let items = comma(p, parse)?;
+    let items = comma(p, RParen, parse)?;
     token(p, RParen)?;
 
     let end = p.last();
@@ -266,12 +251,12 @@ where
     let start = p.span();
 
     token(p, LBracket)?;
-    let items = comma(p, parse)?;
+    let items = comma(p, RBracket, parse)?;
     token(p, RBracket)?;
 
     let end = p.last();
 
-    Ok(Node::list(items, start.to(end)))
+    Ok(Node::array(items, start.to(end)))
 }
 
 fn braces(p: &mut Parser) -> Result<Node> {
@@ -282,7 +267,7 @@ fn block(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
     token(p, LBrace)?;
-    let nodes = until(p, RBrace, top_level)?;
+    let nodes = many(p, RBrace, top_level)?;
     token(p, RBrace)?;
 
     let end = p.last();
@@ -304,7 +289,7 @@ where
 
     let name = ident(p)?;
     token(p, LParen)?;
-    let items = comma(p, parse)?
+    let items = comma(p, RParen, parse)?
         .into_iter()
         .map(|patt @ Node { span, .. }| {
             Argument::new(patt, None, span)
@@ -325,7 +310,7 @@ fn basic(p: &mut Parser) -> Result<Node> {
         node = match p.token.kind {
             LParen => {
                 token(p, LParen)?;
-                let arguments = comma(p, argument)?;
+                let arguments = comma(p, RParen, argument)?;
                 token(p, RParen)?;
                 let end = p.last();
                 Node::apply(node, arguments, start.to(end))
@@ -346,8 +331,7 @@ fn basic(p: &mut Parser) -> Result<Node> {
 fn unary(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
-    if let Some(operator) = operator(p, true) && operator.is_unary()
-    {
+    if let Some(operator) = operator(p, true) && operator.is_unary() {
         p.bump(); // operator
         let expr = basic(p)?;
         let end = p.last();
@@ -364,7 +348,8 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
         p.bump(); // operator
 
         let precedence = match operator.associativity() {
-            Associativity::None | Associativity::Left => operator.precedence() + 1,
+            Associativity::None
+          | Associativity::Left => operator.precedence() + 1,
             Associativity::Right => operator.precedence(),
         };
 
@@ -421,17 +406,17 @@ where
 }
 
 fn newline(p: &mut Parser) {
-    if p.at(NL) {
+    if p.at(NewLine) {
         p.bump();
     }
 }
 
 fn endline(p: &mut Parser) -> Result<()> {
-    if p.at(NL) || p.at(Semi) || p.at(EOF) {
+    if p.at(NewLine) || p.at(Semi) || p.at(EOF) {
         p.bump();
         Ok(())
     } else {
-        Err(unexpected(p, &[NL, Semi]))
+        Err(unexpected(p, &[NewLine, Semi]))
     }
 }
 
@@ -466,15 +451,15 @@ where
     parse(p).ok()
 }
 
-fn comma<F, T>(p: &mut Parser, mut parse: F) -> Result<Vec<T>>
+fn comma<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> Result<Vec<T>>
 where
     F: FnMut(&mut Parser) -> Result<T>,
 {
     let mut res = vec![];
 
     newline(p);
-    while let Some(value) = p.attempt(&mut parse)? {
-        res.push(value);
+    while !p.at(until) {
+        res.push(parse(p)?);
         newline(p);
         if !maybe(p, Comma) {
             break;
@@ -485,14 +470,14 @@ where
     Ok(res)
 }
 
-fn until<F, T>(p: &mut Parser, kind: TokenKind, mut parse: F) -> Result<Vec<T>>
+fn many<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> Result<Vec<T>>
 where
     F: FnMut(&mut Parser) -> Result<T>,
 {
     let mut res = vec![];
 
     newline(p);
-    while !p.at(kind) {
+    while !p.at(until) {
         res.push(parse(p)?);
         endline(p)?;
     }

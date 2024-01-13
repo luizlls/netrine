@@ -256,7 +256,7 @@ fn newline(l: &mut Lexer) -> TokenKind {
         l.bump();
         l.trivia();
     }
-    NL
+    NewLine
 }
 
 #[cfg(test)]
@@ -369,7 +369,7 @@ mod tests {
     fn empty_lines() {
         let mut lexer = Lexer::new("\n\n\n");
 
-        assert_token!(lexer, NL);
+        assert_token!(lexer, NewLine);
         assert_token!(lexer, EOF);
     }
 

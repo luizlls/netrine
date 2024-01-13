@@ -12,7 +12,7 @@ pub struct Token {
 pub enum TokenKind {
     #[default]
     EOF,
-    NL,
+    NewLine,
 
     LParen,
     RParen,
@@ -72,7 +72,7 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
             TokenKind::EOF => "end of input",
-            TokenKind::NL => "new line",
+            TokenKind::NewLine => "new line",
             TokenKind::LParen => "(",
             TokenKind::RParen => ")",
             TokenKind::LBrace => "{",
