@@ -3,7 +3,6 @@
 use crate::error::Result;
 
 pub mod node;
-mod error;
 mod lexer;
 mod parser;
 mod token;

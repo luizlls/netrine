@@ -35,14 +35,9 @@ pub enum TokenKind {
     Mut,
     If,
     Else,
-    For,
-    In,
     Case,
     Where,
     Import,
-    Yield,
-    Break,
-    Return,
 
     Plus,  // +
     Minus, // -
@@ -65,7 +60,6 @@ pub enum TokenKind {
 
     UnexpectedCharacter,
     UnterminatedString,
-    Noop,
 }
 
 impl fmt::Display for TokenKind {
@@ -92,14 +86,9 @@ impl fmt::Display for TokenKind {
             TokenKind::Mut => "mut",
             TokenKind::If => "if",
             TokenKind::Else => "else",
-            TokenKind::For => "for",
-            TokenKind::In => "in",
             TokenKind::Case => "case",
             TokenKind::Where => "where",
             TokenKind::Import => "import",
-            TokenKind::Yield => "yield",
-            TokenKind::Break => "break",
-            TokenKind::Return => "return",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
             TokenKind::Star => "*",
@@ -119,7 +108,6 @@ impl fmt::Display for TokenKind {
             TokenKind::String => "string",
             TokenKind::UnexpectedCharacter => "unexpected character",
             TokenKind::UnterminatedString => "unterminated string",
-            TokenKind::Noop => "placeholder",
         };
         write!(f, "{description}")
     }

@@ -82,18 +82,6 @@ impl<'src> Lexer<'src> {
     }
 }
 
-pub fn tokens(source: &str) -> Vec<Token> {
-    let mut lexer = Lexer::new(&source);
-    let mut tokens = vec![];
-    while let kind = kind(&mut lexer) && kind != EOF {
-        tokens.push(Token {
-            kind,
-            span: lexer.span(),
-        });
-    }
-    tokens
-}
-
 fn kind(l: &mut Lexer) -> TokenKind {
     l.trivia();
     l.align();
@@ -141,13 +129,8 @@ fn ident(l: &mut Lexer) -> TokenKind {
         "mut" => Mut,
         "if" => If,
         "else" => Else,
-        "for" => For,
-        "in" => In,
         "case" => Case,
         "import" => Import,
-        "yield" => Yield,
-        "break" => Break,
-        "return" => Return,
         "where" => Where,
         _ => Ident,
     }
@@ -259,6 +242,20 @@ fn newline(l: &mut Lexer) -> TokenKind {
     NewLine
 }
 
+pub fn tokens(src: &str) -> Vec<Token> {
+    let mut lexer = Lexer::new(src);
+    let mut tokens = vec![];
+
+    while let kind = kind(&mut lexer) && kind != EOF {
+        tokens.push(Token {
+            kind,
+            span: lexer.span(),
+        });
+    }
+
+    tokens
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,7 +283,7 @@ mod tests {
     #[test]
     fn keywords() {
         let mut lexer =
-            Lexer::new("and or not is mut if else for in case yield break return import where");
+            Lexer::new("and or not is mut if else case import where");
 
         assert_token!(lexer, And);
         assert_token!(lexer, Or);
@@ -295,12 +292,7 @@ mod tests {
         assert_token!(lexer, Mut);
         assert_token!(lexer, If);
         assert_token!(lexer, Else);
-        assert_token!(lexer, For);
-        assert_token!(lexer, In);
         assert_token!(lexer, Case);
-        assert_token!(lexer, Yield);
-        assert_token!(lexer, Break);
-        assert_token!(lexer, Return);
         assert_token!(lexer, Import);
         assert_token!(lexer, Where);
     }

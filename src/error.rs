@@ -5,16 +5,33 @@ use crate::span::Span;
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErrorKind {
+    UnexpectedCharacter,
+    UnterminatedString,
+    ExpectedExpression,
+    ExpectedFunction,
+    StructuralPattern,
+    InvalidPattern,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     error: String,
     span: Option<Span>,
 }
 
 impl Error {
-    pub fn new(text: String, span: Span) -> Error {
+    pub fn new(error: ErrorKind, span: Span) -> Error {
         Error {
-            error: text,
+            error: format!("{:?}", error),
+            span: Some(span),
+        }
+    }
+
+    pub fn raw(error: String, span: Span) -> Error {
+        Error {
+            error,
             span: Some(span),
         }
     }
