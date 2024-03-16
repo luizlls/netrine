@@ -10,9 +10,6 @@ pub enum ErrorKind {
     UnexpectedCharacter,
     UnterminatedString,
     ExpectedExpression,
-    ExpectedFunction,
-    StructuralPattern,
-    InvalidPattern,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,9 +26,23 @@ impl Error {
         }
     }
 
+    pub fn basic(error: ErrorKind) -> Error {
+        Error {
+            error: format!("{:?}", error),
+            span: None
+        }
+    }
+
     pub fn raw(error: String, span: Span) -> Error {
         Error {
             error,
+            span: Some(span),
+        }
+    }
+
+    pub fn with_span(error: Error, span: Span) -> Error {
+        Error {
+            error: error.error,
             span: Some(span),
         }
     }

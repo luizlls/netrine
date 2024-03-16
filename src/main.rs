@@ -1,6 +1,6 @@
 #![feature(let_chains)]
+#![feature(box_patterns)]
 
-// mod arena;
 mod error;
 mod span;
 mod syntax;

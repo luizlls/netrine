@@ -54,7 +54,7 @@ impl<'p> Parser<'p> {
         self.token.span
     }
 
-    fn last(&self) -> Span {
+    fn end(&self) -> Span {
         self.prev().span
     }
 
@@ -74,56 +74,11 @@ pub fn parse(source: &str, tokens: &[Token]) -> Result<Vec<Node>> {
 }
 
 fn top_level(p: &mut Parser) -> Result<Node> {
-    let value = lvalue(p)?;
-    match p.token.kind {
-        Equals => define(p, value),
-        RBrace => closure(p, value),
-        _ => Ok(value)
-    }
-}
-
-fn define(p: &mut Parser, value: Node) -> Result<Node> {
-    if is_function(&value) {
-        return function(p, value);
-    }
-
-    let start = value.span;
-
-    let patt = Patt::try_from(value)?.structural()?;
+    let lvalue = lvalue(p)?;
     token(p, Equals)?;
-    let value = rvalue(p)?;
+    let rvalue = rvalue(p)?;
 
-    let end = value.span;
-
-    Ok(Node::def(patt, value, start.to(end)))
-}
-
-pub fn is_function(value: &Node) -> bool {
-    if let NodeKind::Apply(Apply { callee, .. }) = &*value.kind && let NodeKind::Name(_) = *callee.kind {
-        true
-    } else {
-        false
-    }
-}
-
-fn function(p: &mut Parser, value: Node) -> Result<Node> {
-    if let NodeKind::Apply(apply) = *value.kind && let NodeKind::Name(name) = *apply.callee.kind {
-        let start = name.span;
-
-        let parameters = apply.arguments.into_iter().map(Parameter::try_from).collect::<Result<Vec<_>, _>>()?;
-        token(p, Equals)?;
-        let value = rvalue(p)?;
-
-        let end = value.span;
-
-        Ok(Node::function(name, parameters, value, start.to(end)))
-    } else {
-        unreachable!()
-    }
-}
-
-fn closure(_p: &mut Parser, _value: Node) -> Result<Node> {
-    todo!()
+    Ok(Node::def(lvalue, rvalue))
 }
 
 fn expr(p: &mut Parser) -> Result<Node> {
@@ -139,58 +94,60 @@ fn rvalue(p: &mut Parser) -> Result<Node> {
 }
 
 fn atom(p: &mut Parser) -> Result<Node> {
-    match p.token.kind {
+    let Token { span, kind } = p.token;
+    match kind {
         Ident => ident(p),
-        Integer => integer(p),
-        Number => number(p),
         String => string(p),
+        Number => number(p),
+        Integer => integer(p),
         LParen => parens(p),
         LBrace => braces(p),
         LBracket => brackets(p),
         _ => {
-            let error = match p.token.kind {
+            Err(Error::new(match kind {
                 UnexpectedCharacter => ErrorKind::UnexpectedCharacter,
-                UnterminatedString => ErrorKind::UnterminatedString,
+                UnterminatedString  => ErrorKind::UnterminatedString,
                 _ => ErrorKind::ExpectedExpression,
-            };
-            Err(Error::new(error, p.token.span))
+            },
+            span))
         }
     }
 }
 
-fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
+fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> Node) -> Result<Node> {
     let span = token(p, kind)?;
     let value = p.slice(span).to_string();
+
     Ok(Node::literal(ctor, value, span))
 }
 
 fn ident(p: &mut Parser) -> Result<Node> {
-    literal(p, Ident, NodeKind::Name)
+    literal(p, Ident, Node::Name)
 }
 
 fn number(p: &mut Parser) -> Result<Node> {
-    literal(p, Number, NodeKind::Number)
+    literal(p, Number, Node::Number)
 }
 
 fn integer(p: &mut Parser) -> Result<Node> {
-    literal(p, Integer, NodeKind::Integer)
+    literal(p, Integer, Node::Integer)
 }
 
 fn string(p: &mut Parser) -> Result<Node> {
-    literal(p, String, NodeKind::String)
+    literal(p, String, Node::String)
 }
 
 fn parens(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
     token(p, LParen)?;
-    let mut items = comma(p, RParen, expr)?;
+    let items = comma(p, RParen, expr)?;
     token(p, RParen)?;
 
-    let span = start.to(p.last());
+    let span = start.to(p.end());
 
     if items.len() == 1 {
-        Ok(items.pop().unwrap())
+        Ok(Node::group(items, span))
     } else {
         Ok(Node::tuple(items, span))
     }
@@ -203,7 +160,7 @@ fn brackets(p: &mut Parser) -> Result<Node> {
     let items = comma(p, RBracket, expr)?;
     token(p, RBracket)?;
 
-    let end = p.last();
+    let end = p.end();
 
     Ok(Node::array(items, start.to(end)))
 }
@@ -219,15 +176,9 @@ fn block(p: &mut Parser) -> Result<Node> {
     let nodes = many(p, RBrace, top_level)?;
     token(p, RBrace)?;
 
-    let end = p.last();
+    let end = p.end();
 
     Ok(Node::block(nodes, start.to(end)))
-}
-
-fn argument(p: &mut Parser) -> Result<Argument> {
-    let value = expr(p)?;
-    let span = value.span;
-    Ok(Argument::new(value, None, span))
 }
 
 fn basic(p: &mut Parser) -> Result<Node> {
@@ -238,16 +189,18 @@ fn basic(p: &mut Parser) -> Result<Node> {
         node = match p.token.kind {
             LParen => {
                 token(p, LParen)?;
-                let arguments = comma(p, RParen, argument)?;
+                let arguments = comma(p, RParen, expr)?;
                 token(p, RParen)?;
-                let end = p.last();
+
+                let end = p.end();
+
                 Node::apply(node, arguments, start.to(end))
             }
             Dot => {
                 token(p, Dot)?;
                 let field = atom(p)?;
-                let end = p.last();
-                Node::get(node, field, start.to(end))
+
+                Node::get(node, field)
             }
             _ => break,
         }
@@ -257,13 +210,11 @@ fn basic(p: &mut Parser) -> Result<Node> {
 }
 
 fn unary(p: &mut Parser) -> Result<Node> {
-    let start = p.span();
-
     if let Some(operator) = operator(p, true) && operator.is_unary() {
         p.bump(); // operator
-        let expr = basic(p)?;
-        let end = p.last();
-        Ok(Node::unary(operator, expr, start.to(end)))
+        let expr = unary(p)?;
+
+        Ok(Node::unary(operator, expr))
     } else {
         basic(p)
     }
@@ -283,9 +234,8 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
 
         let rexpr = binary(p, precedence)?;
         let lexpr = expr;
-        let span = lexpr.span.to(rexpr.span);
 
-        expr = Node::binary(operator, lexpr, rexpr, span)
+        expr = Node::binary(operator, lexpr, rexpr)
     }
 
     Ok(expr)
