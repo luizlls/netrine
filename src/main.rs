@@ -3,7 +3,9 @@
 
 mod error;
 mod span;
+mod state;
 mod syntax;
+mod types;
 
 use std::fs;
 use std::io::{stdin, stdout, Write};

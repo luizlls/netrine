@@ -1,5 +1,5 @@
+use crate::error::{error, Error, Result};
 use crate::span::Span;
-use crate::error::{Error, ErrorKind, Result};
 
 use super::node::*;
 use super::token::{
@@ -10,17 +10,18 @@ use super::token::{
 #[derive(Debug, Clone)]
 pub struct Parser<'p> {
     source: &'p str,
-    tokens: &'p [Token],
+    tokens: Vec<Token>,
     token: Token,
     index: usize,
 }
 
 impl<'p> Parser<'p> {
-    pub fn new(source: &'p str, tokens: &'p [Token]) -> Parser<'p> {
+    pub fn new(source: &'p str, tokens: Vec<Token>) -> Parser<'p> {
+        let first = tokens.first().copied().unwrap_or_default();
         Parser {
             source,
             tokens,
-            token: tokens.first().copied().unwrap_or_default(),
+            token: first,
             index: 0,
         }
     }
@@ -67,10 +68,9 @@ impl<'p> Parser<'p> {
     }
 }
 
-pub fn parse(source: &str, tokens: &[Token]) -> Result<Vec<Node>> {
+pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Node>> {
     let mut parser = Parser::new(source, tokens);
-    let nodes = many(&mut parser, EOF, top_level)?;
-    Ok(nodes)
+    many(&mut parser, EOF, top_level)
 }
 
 fn top_level(p: &mut Parser) -> Result<Node> {
@@ -78,7 +78,46 @@ fn top_level(p: &mut Parser) -> Result<Node> {
     token(p, Equals)?;
     let rvalue = rvalue(p)?;
 
+    if lvalue.function_like() {
+        function(lvalue, rvalue)
+    } else {
+        definition(lvalue, rvalue)
+    }
+}
+
+fn definition(lvalue: Node, rvalue: Node) -> Result<Node> {
     Ok(Node::def(lvalue, rvalue))
+}
+
+fn function(apply: Node, value: Node) -> Result<Node> {
+    let Node {
+        kind: box NodeKind::Apply(
+            Apply {
+                callee: Node {
+                    kind: box NodeKind::Name(name),
+                    ..
+                },
+                arguments,
+            }
+        ),
+        ..
+    } = apply
+    else {
+        unreachable!()
+    };
+
+    let parameters = arguments
+        .into_iter()
+        .map(|node| {
+            if node.pattern_like() {
+                Ok(node)
+            } else {
+                error!("expected a valid pattern", node.span)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Node::function(name, parameters, value))
 }
 
 fn expr(p: &mut Parser) -> Result<Node> {
@@ -104,17 +143,19 @@ fn atom(p: &mut Parser) -> Result<Node> {
         LBrace => braces(p),
         LBracket => brackets(p),
         _ => {
-            Err(Error::new(match kind {
-                UnexpectedCharacter => ErrorKind::UnexpectedCharacter,
-                UnterminatedString  => ErrorKind::UnterminatedString,
-                _ => ErrorKind::ExpectedExpression,
-            },
-            span))
+            error!(
+                match kind {
+                    UnexpectedCharacter => "unexpected character",
+                    UnterminatedString => "unterminated string",
+                    _ => "expected a valid expression",
+                },
+                span
+            )
         }
     }
 }
 
-fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> Node) -> Result<Node> {
+fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
     let span = token(p, kind)?;
     let value = p.slice(span).to_string();
 
@@ -122,19 +163,19 @@ fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> Node) -> Result
 }
 
 fn ident(p: &mut Parser) -> Result<Node> {
-    literal(p, Ident, Node::Name)
+    literal(p, Ident, NodeKind::Name)
 }
 
 fn number(p: &mut Parser) -> Result<Node> {
-    literal(p, Number, Node::Number)
+    literal(p, Number, NodeKind::Number)
 }
 
 fn integer(p: &mut Parser) -> Result<Node> {
-    literal(p, Integer, Node::Integer)
+    literal(p, Integer, NodeKind::Integer)
 }
 
 fn string(p: &mut Parser) -> Result<Node> {
-    literal(p, String, Node::String)
+    literal(p, String, NodeKind::String)
 }
 
 fn parens(p: &mut Parser) -> Result<Node> {
@@ -281,7 +322,7 @@ fn endline(p: &mut Parser) -> Result<()> {
         p.bump();
         Ok(())
     } else {
-        Err(unexpected(p, &[NewLine, Semi]))
+        error!(unexpected(&[NewLine, Semi]), p.span())
     }
 }
 
@@ -291,7 +332,7 @@ fn token(p: &mut Parser, kind: TokenKind) -> Result<Span> {
         p.bump();
         Ok(span)
     } else {
-        Err(unexpected(p, &[kind]))
+        error!(unexpected(&[kind]), span)
     }
 }
 
@@ -302,18 +343,6 @@ fn maybe(p: &mut Parser, kind: TokenKind) -> bool {
     } else {
         false
     }
-}
-
-fn unexpected(p: &Parser, expected: &[TokenKind]) -> Error {
-    let message = expected
-        .iter()
-        .map(|it| {
-            format!("`{it}`")
-        })
-        .collect::<Vec<_>>()
-        .join(" or ");
-
-    Error::raw(message, p.span())
 }
 
 fn comma<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> Result<Vec<T>>
@@ -348,4 +377,9 @@ where
     }
 
     Ok(res)
+}
+
+fn unexpected(expected: &[TokenKind]) -> std::string::String {
+    let expected = expected.iter().map(|it| format!("`{it}`")).collect::<Vec<_>>().join(", ");
+    format!("expected {expected}")
 }

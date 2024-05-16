@@ -5,12 +5,16 @@ use crate::span::Span;
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ErrorKind {
-    UnexpectedCharacter,
-    UnterminatedString,
-    ExpectedExpression,
+macro_rules! error {
+    ($message:expr) => {
+        return Err(Error::basic($message.to_string()))
+    };
+    ($message:expr, $span:expr) => {
+        return Err(Error::new($message.to_string(), $span))
+    };
 }
+
+pub(crate) use error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
@@ -19,31 +23,17 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(error: ErrorKind, span: Span) -> Error {
-        Error {
-            error: format!("{:?}", error),
-            span: Some(span),
-        }
-    }
-
-    pub fn basic(error: ErrorKind) -> Error {
-        Error {
-            error: format!("{:?}", error),
-            span: None
-        }
-    }
-
-    pub fn raw(error: String, span: Span) -> Error {
+    pub fn new(error: String, span: Span) -> Error {
         Error {
             error,
             span: Some(span),
         }
     }
 
-    pub fn with_span(error: Error, span: Span) -> Error {
+    pub fn basic(error: String) -> Error {
         Error {
-            error: error.error,
-            span: Some(span),
+            error,
+            span: None,
         }
     }
 }

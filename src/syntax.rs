@@ -1,12 +1,14 @@
 use crate::error::Result;
 
-pub mod node;
 mod lexer;
+mod node;
 mod parser;
 mod token;
 
-pub fn parse(source: &str) -> Result<Vec<node::Node>> {
+pub use node::*;
+
+pub fn parse(source: &str) -> Result<Vec<Node>> {
     let tokens = lexer::tokens(&source);
-    let nodes = parser::parse(&source, &tokens);
-    nodes
+    let module = parser::parse(&source, tokens);
+    module
 }

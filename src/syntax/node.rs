@@ -1,88 +1,91 @@
 use crate::span::Span;
 
 #[derive(Debug, Clone)]
-pub struct Module {
-    pub nodes: Vec<Node>,
+pub struct Node {
+    pub kind: Box<NodeKind>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub enum Node {
-    Def(Box<Def>),
-
-    Get(Box<Get>),
-
-    Lambda(Box<Lambda>),
-    
-    Apply(Box<Apply>),
-
-    Unary(Box<Unary>),
-
-    Binary(Box<Binary>),
-
-    Block(Box<Block>),
-
-    Group(Box<Group>),
-
-    Array(Box<Array>),
-
-    Tuple(Box<Tuple>),
-    
+pub enum NodeKind {
+    Fn(Function),
+    Def(Define),
+    Get(Get),
+    Lambda(Lambda),
+    Apply(Apply),
+    Unary(Unary),
+    Binary(Binary),
+    Block(Block),
+    Group(Group),
+    Array(Array),
+    Tuple(Tuple),
     Name(Name),
-    
     String(Literal),
-    
     Number(Literal),
-    
     Integer(Literal),
-
     Import(Import),
 }
 
 impl Node {
-    pub fn span(&self) -> Span {
-        match self {
-            Node::Def(node) => node.span,
-            Node::Get(node) => node.span,
-            Node::Lambda(node) => node.span,
-            Node::Apply(node) => node.span,
-            Node::Unary(node) => node.span,
-            Node::Binary(node) => node.span,
-            Node::Block(node) => node.span,
-            Node::Group(node) => node.span,
-            Node::Array(node) => node.span,
-            Node::Tuple(node) => node.span,
-            Node::Name(node) => node.span,
-            Node::String(node) => node.span,
-            Node::Number(node) => node.span,
-            Node::Integer(node) => node.span,
-            Node::Import(node) => node.span,
+    pub fn new(kind: NodeKind, span: Span) -> Node {
+        Node {
+            kind: Box::new(kind),
+            span,
         }
+    }
+
+    pub fn function_like(&self) -> bool {
+        matches!(
+            *self.kind,
+            NodeKind::Apply(Apply { callee: Node { kind: box NodeKind::Name(_), .. }, .. })
+        )
+    }
+
+    pub fn pattern_like(&self) -> bool {
+        matches!(
+            *self.kind,
+            NodeKind::Name(_)
+          | NodeKind::Array(_) | NodeKind::Tuple(_)
+          | NodeKind::String(_) | NodeKind::Number(_)
+          | NodeKind::Integer(_))
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Def {
+pub struct Function {
+    pub name: Name,
+    pub parameters: Vec<Node>,
+    pub value: Node,
+}
+
+impl Node {
+    pub fn function(name: Name, parameters: Vec<Node>, value: Node) -> Node {
+        let span = name.span.to(value.span);
+        Node::new(NodeKind::Fn(Function { name, parameters, value, }), span)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Define {
     pub lvalue: Node,
     pub rvalue: Node,
-    pub span: Span,
 }
 
 impl Node {
     pub fn def(lvalue: Node, rvalue: Node) -> Node {
-        let span = lvalue.span().to(rvalue.span());
-        Node::Def(Def { lvalue, rvalue, span }.into())
+        let span = lvalue.span.to(rvalue.span);
+        Node::new(NodeKind::Def(Define { lvalue, rvalue }), span)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
     pub nodes: Vec<Node>,
-    pub span: Span,
 }
 
 impl Node {
     pub fn block(nodes: Vec<Node>, span: Span) -> Node {
-        Node::Block(Block { nodes, span }.into())
+        Node::new(NodeKind::Block(Block { nodes }), span)
     }
 }
 
@@ -90,13 +93,12 @@ impl Node {
 pub struct Get {
     pub node: Node,
     pub field: Node,
-    pub span: Span,
 }
 
 impl Node {
     pub fn get(node: Node, field: Node) -> Node {
-        let span = node.span().to(field.span());
-        Node::Get(Get { node, field, span }.into())
+        let span = node.span.to(field.span);
+        Node::new(NodeKind::Get(Get { node, field }), span)
     }
 }
 
@@ -104,12 +106,11 @@ impl Node {
 pub struct Apply {
     pub callee: Node,
     pub arguments: Vec<Node>,
-    pub span: Span,
 }
 
 impl Node {
     pub fn apply(callee: Node, arguments: Vec<Node>, span: Span) -> Node {
-        Node::Apply(Apply { callee, arguments, span }.into())
+        Node::new(NodeKind::Apply(Apply { callee, arguments }), span)
     }
 }
 
@@ -117,12 +118,11 @@ impl Node {
 pub struct Lambda {
     pub parameters: Vec<Node>,
     pub body: Block,
-    pub span: Span,
 }
 
 impl Node {
     pub fn lambda(parameters: Vec<Node>, body: Block, span: Span) -> Node {
-        Node::Lambda(Lambda { parameters, body, span }.into())
+        Node::new(NodeKind::Lambda(Lambda { parameters, body }), span)
     }
 }
 
@@ -130,13 +130,12 @@ impl Node {
 pub struct Unary {
     pub operator: Operator,
     pub expr: Node,
-    pub span: Span,
 }
 
 impl Node {
     pub fn unary(operator: Operator, expr: Node) -> Node {
-        let span = operator.span.to(expr.span());
-        Node::Unary(Unary { operator, expr, span }.into())
+        let span = operator.span.to(expr.span);
+        Node::new(NodeKind::Unary(Unary { operator, expr }), span)
     }
 }
 
@@ -145,50 +144,46 @@ pub struct Binary {
     pub operator: Operator,
     pub lexpr: Node,
     pub rexpr: Node,
-    pub span: Span,
 }
 
 impl Node {
     pub fn binary(operator: Operator, lexpr: Node, rexpr: Node) -> Node {
-        let span = lexpr.span().to(rexpr.span());
-        Node::Binary(Binary { operator, lexpr, rexpr, span }.into())
+        let span = lexpr.span.to(rexpr.span);
+        Node::new(NodeKind::Binary(Binary { operator, lexpr, rexpr }), span)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Group {
     pub inner: Node,
-    pub span: Span,
 }
 
 impl Node {
     pub fn group(mut items: Vec<Node>, span: Span) -> Node {
         let inner = items.pop().unwrap();
-        Node::Group(Group { inner, span }.into())
+        Node::new(NodeKind::Group(Group { inner }), span)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Tuple {
     pub items: Vec<Node>,
-    pub span: Span,
 }
 
 impl Node {
     pub fn tuple(items: Vec<Node>, span: Span) -> Node {
-        Node::Tuple(Tuple { items, span }.into())
+        Node::new(NodeKind::Tuple(Tuple { items }), span)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Array {
     pub items: Vec<Node>,
-    pub span: Span,
 }
 
 impl Node {
     pub fn array(items: Vec<Node>, span: Span) -> Node {
-        Node::Array(Array { items, span }.into())
+        Node::new(NodeKind::Array(Array { items }), span)
     }
 }
 
@@ -199,8 +194,8 @@ pub struct Literal {
 }
 
 impl Node {
-    pub fn literal(kind: fn(Literal) -> Node, value: String, span: Span) -> Node {
-        kind(Literal { value, span })
+    pub fn literal(kind: fn(Literal) -> NodeKind, value: String, span: Span) -> Node {
+        Node::new(kind(Literal { value, span }), span)
     }
 }
 
@@ -209,13 +204,13 @@ pub type Name = Literal;
 #[derive(Debug, Clone)]
 pub struct Import {
     pub module: Name,
+    pub alias: Option<Name>,
     pub names: Vec<Name>,
-    pub span: Span,
 }
 
 impl Node {
     pub fn import(module: Name, names: Vec<Name>, span: Span) -> Node {
-        Node::Import(Import { module, names, span })
+        Node::new(NodeKind::Import(Import { module, names, alias: None }), span)
     }
 }
 
