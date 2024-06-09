@@ -1,11 +1,11 @@
 use crate::error::{error, Error, Result};
 use crate::span::Span;
 
-use super::node::*;
 use super::token::{
     Token,
     TokenKind::{self, *},
 };
+use super::node::*;
 
 #[derive(Debug, Clone)]
 pub struct Parser<'p> {
@@ -17,13 +17,17 @@ pub struct Parser<'p> {
 
 impl<'p> Parser<'p> {
     pub fn new(source: &'p str, tokens: Vec<Token>) -> Parser<'p> {
-        let first = tokens.first().copied().unwrap_or_default();
         Parser {
             source,
             tokens,
-            token: first,
+            token: Token::default(),
             index: 0,
-        }
+        }.init()
+    }
+
+    fn init(mut self) -> Parser<'p> {
+        self.token = self.tokens.first().copied().unwrap_or_default();
+        self
     }
 
     fn bump(&mut self) {
@@ -51,6 +55,10 @@ impl<'p> Parser<'p> {
         self.nth(self.index + 1)
     }
 
+    fn kind(&self) -> TokenKind {
+        self.token.kind
+    }
+
     fn span(&self) -> Span {
         self.token.span
     }
@@ -74,68 +82,55 @@ pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Node>> {
 }
 
 fn top_level(p: &mut Parser) -> Result<Node> {
-    let lvalue = lvalue(p)?;
-    token(p, Equals)?;
-    let rvalue = rvalue(p)?;
+    let value = expr(p)?;
 
-    if lvalue.function_like() {
-        function(lvalue, rvalue)
-    } else {
-        definition(lvalue, rvalue)
+    match p.kind() {
+        Equals => define(p, value),
+        Colon => typedef(p, value),
+        _ => Ok(value)
     }
 }
 
-fn definition(lvalue: Node, rvalue: Node) -> Result<Node> {
-    Ok(Node::def(lvalue, rvalue))
+fn define(p: &mut Parser, lvalue: Node) -> Result<Node> {
+    token(p, Equals)?;
+    let rvalue = expr(p)?;
+
+    if let Node::Apply(
+        box Apply {
+            callable: Node::Identifier(name),
+            arguments: parameters,
+            ..
+        }
+    ) = lvalue {
+        for parameter in &parameters {
+            if !parameter.pattern_like() {
+                error!("not a valid pattern", parameter.span());
+            }
+        }
+
+        Ok(Node::function(name, parameters, rvalue))
+    }
+    else {
+        if !lvalue.pattern_like() {
+            error!("not a valid pattern", lvalue.span());
+        }
+
+        Ok(Node::define(lvalue, rvalue))
+    }
 }
 
-fn function(apply: Node, value: Node) -> Result<Node> {
-    let Node {
-        kind: box NodeKind::Apply(
-            Apply {
-                callee: Node {
-                    kind: box NodeKind::Name(name),
-                    ..
-                },
-                arguments,
-            }
-        ),
-        ..
-    } = apply
-    else {
-        unreachable!()
-    };
-
-    let parameters = arguments
-        .into_iter()
-        .map(|node| {
-            if node.pattern_like() {
-                Ok(node)
-            } else {
-                error!("expected a valid pattern", node.span)
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(Node::function(name, parameters, value))
+fn typedef(_p: &mut Parser, _lvalue: Node) -> Result<Node> {
+    todo!()
 }
 
 fn expr(p: &mut Parser) -> Result<Node> {
     binary(p, 0 as Precedence)
 }
 
-fn lvalue(p: &mut Parser) -> Result<Node> {
-    expr(p)
-}
-
-fn rvalue(p: &mut Parser) -> Result<Node> {
-    expr(p)
-}
-
 fn atom(p: &mut Parser) -> Result<Node> {
-    let Token { span, kind } = p.token;
-    match kind {
-        Ident => ident(p),
+    match p.kind() {
+        Identifier => identifier(p),
+        Underscore => underscore(p),
         String => string(p),
         Number => number(p),
         Integer => integer(p),
@@ -144,38 +139,42 @@ fn atom(p: &mut Parser) -> Result<Node> {
         LBracket => brackets(p),
         _ => {
             error!(
-                match kind {
+                match p.kind() {
                     UnexpectedCharacter => "unexpected character",
                     UnterminatedString => "unterminated string",
                     _ => "expected a valid expression",
                 },
-                span
-            )
+                p.span()
+            );
         }
     }
 }
 
-fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
+fn literal(p: &mut Parser, kind: TokenKind) -> Result<Literal> {
     let span = token(p, kind)?;
     let value = p.slice(span).to_string();
 
-    Ok(Node::literal(ctor, value, span))
+    Ok(Literal { value, span })
 }
 
-fn ident(p: &mut Parser) -> Result<Node> {
-    literal(p, Ident, NodeKind::Name)
+fn identifier(p: &mut Parser) -> Result<Node> {
+    Ok(Node::Identifier(literal(p, Identifier)?))
+}
+
+fn underscore(p: &mut Parser) -> Result<Node> {
+    Ok(Node::Underscore(literal(p, Underscore)?))
 }
 
 fn number(p: &mut Parser) -> Result<Node> {
-    literal(p, Number, NodeKind::Number)
+    Ok(Node::Number(literal(p, Number)?))
 }
 
 fn integer(p: &mut Parser) -> Result<Node> {
-    literal(p, Integer, NodeKind::Integer)
+    Ok(Node::Integer(literal(p, Integer)?))
 }
 
 fn string(p: &mut Parser) -> Result<Node> {
-    literal(p, String, NodeKind::String)
+    Ok(Node::String(literal(p, String)?))
 }
 
 fn parens(p: &mut Parser) -> Result<Node> {
@@ -201,9 +200,9 @@ fn brackets(p: &mut Parser) -> Result<Node> {
     let items = comma(p, RBracket, expr)?;
     token(p, RBracket)?;
 
-    let end = p.end();
+    let span = start.to(p.end());
 
-    Ok(Node::array(items, start.to(end)))
+    Ok(Node::array(items, span))
 }
 
 fn braces(p: &mut Parser) -> Result<Node> {
@@ -217,9 +216,9 @@ fn block(p: &mut Parser) -> Result<Node> {
     let nodes = many(p, RBrace, top_level)?;
     token(p, RBrace)?;
 
-    let end = p.end();
+    let span = start.to(p.end());
 
-    Ok(Node::block(nodes, start.to(end)))
+    Ok(Node::block(nodes, span))
 }
 
 fn basic(p: &mut Parser) -> Result<Node> {
@@ -227,21 +226,23 @@ fn basic(p: &mut Parser) -> Result<Node> {
 
     let mut node = atom(p)?;
     loop {
-        node = match p.token.kind {
+        node = match p.kind() {
             LParen => {
+                let callable = node;
                 token(p, LParen)?;
                 let arguments = comma(p, RParen, expr)?;
                 token(p, RParen)?;
 
-                let end = p.end();
+                let span = start.to(p.end());
 
-                Node::apply(node, arguments, start.to(end))
+                Node::apply(callable, arguments, span)
             }
             Dot => {
+                let owner = node;
                 token(p, Dot)?;
                 let field = atom(p)?;
 
-                Node::get(node, field)
+                Node::get(owner, field)
             }
             _ => break,
         }
@@ -276,7 +277,7 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
         let rexpr = binary(p, precedence)?;
         let lexpr = expr;
 
-        expr = Node::binary(operator, lexpr, rexpr)
+        expr = Node::binary(operator, lexpr, rexpr);
     }
 
     Ok(expr)
@@ -285,45 +286,49 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
 fn operator(p: &mut Parser, unary: bool) -> Option<Operator> {
     let span = p.span();
 
-    let kind = match p.token.kind {
-        Plus  if unary => OperatorKind::Pos,
-        Minus if unary => OperatorKind::Neg,
-        Not   if unary => OperatorKind::Not,
-        Plus  => OperatorKind::Add,
-        Minus => OperatorKind::Sub,
-        Star  => OperatorKind::Mul,
-        Slash => OperatorKind::Div,
-        Caret => OperatorKind::Exp,
-        Mod   => OperatorKind::Mod,
-        And   => OperatorKind::And,
-        Or    => OperatorKind::Or,
-        Is    => OperatorKind::Is,
-        EqEq  => OperatorKind::Eq,
-        NoEq  => OperatorKind::Ne,
-        Lt    => OperatorKind::Lt,
-        LtEq  => OperatorKind::Le,
-        Gt    => OperatorKind::Gt,
-        GtEq  => OperatorKind::Ge,
-        Dots  => OperatorKind::Range,
-        _ => return None,
+    let kind = if unary {
+        match p.kind() {
+            Plus  => OperatorKind::Pos,
+            Minus => OperatorKind::Neg,
+            Not   => OperatorKind::Not,
+            _ => return None
+        }
+    } else {
+        match p.kind() {
+           Plus  => OperatorKind::Add,
+           Minus => OperatorKind::Sub,
+           Star  => OperatorKind::Mul,
+           Slash => OperatorKind::Div,
+           Caret => OperatorKind::Exp,
+           Mod   => OperatorKind::Mod,
+           And   => OperatorKind::And,
+           Or    => OperatorKind::Or,
+           Is    => OperatorKind::Is,
+           EqEq  => OperatorKind::Eq,
+           NoEq  => OperatorKind::Ne,
+           Lt    => OperatorKind::Lt,
+           LtEq  => OperatorKind::Le,
+           Gt    => OperatorKind::Gt,
+           GtEq  => OperatorKind::Ge,
+           Dots  => OperatorKind::Range,
+           _ => return None,
+       }
     };
 
     Some(Operator::new(kind, span))
 }
 
 fn newline(p: &mut Parser) {
-    if p.at(NewLine) {
-        p.bump();
-    }
+    maybe(p, NewLine);
 }
 
 fn endline(p: &mut Parser) -> Result<()> {
-    if p.at(NewLine) || p.at(Semi) || p.at(EOF) {
+    if p.at(NewLine) || p.at(EOF) {
         p.bump();
-        Ok(())
     } else {
-        error!(unexpected(&[NewLine, Semi]), p.span())
+        error!(unexpected(&[NewLine]), p.span());
     }
+    Ok(())
 }
 
 fn token(p: &mut Parser, kind: TokenKind) -> Result<Span> {
@@ -332,7 +337,7 @@ fn token(p: &mut Parser, kind: TokenKind) -> Result<Span> {
         p.bump();
         Ok(span)
     } else {
-        error!(unexpected(&[kind]), span)
+        error!(unexpected(&[kind]), span);
     }
 }
 
@@ -382,4 +387,81 @@ where
 fn unexpected(expected: &[TokenKind]) -> std::string::String {
     let expected = expected.iter().map(|it| format!("`{it}`")).collect::<Vec<_>>().join(", ");
     format!("expected {expected}")
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::syntax;
+
+    use super::*;
+
+    fn parse_node(source: &str) -> Node {
+        syntax::parse(source).unwrap().pop().unwrap()
+    }
+
+    #[test]
+    fn basic_function() {
+        assert_eq!(
+            parse_node("f(x) = x + 1"),
+            Node::Fn(
+                Fn {
+                    name: Literal {
+                        value: "f".to_string(),
+                        span: Span {
+                            lo: 0,
+                            hi: 1,
+                        },
+                    },
+                    parameters: vec![
+                        Node::Identifier(
+                            Literal {
+                                value: "x".to_string(),
+                                span: Span {
+                                    lo: 2,
+                                    hi: 3,
+                                },
+                            },
+                        ),
+                    ],
+                    value: Node::Binary(
+                        Binary {
+                            operator: Operator {
+                                kind: OperatorKind::Add,
+                                span: Span {
+                                    lo: 9,
+                                    hi: 10,
+                                },
+                            },
+                            lexpr: Node::Identifier(
+                                Literal {
+                                    value: "x".to_string(),
+                                    span: Span {
+                                        lo: 7,
+                                        hi: 8,
+                                    },
+                                },
+                            ),
+                            rexpr: Node::Integer(
+                                Literal {
+                                    value: "1".to_string(),
+                                    span: Span {
+                                        lo: 11,
+                                        hi: 12,
+                                    },
+                                },
+                            ),
+                            span: Span {
+                                lo: 7,
+                                hi: 12,
+                            },
+                        }.into(),
+                    ),
+                    span: Span {
+                        lo: 0,
+                        hi: 12,
+                    },
+                }.into(),
+            ),
+        )
+    }
 }

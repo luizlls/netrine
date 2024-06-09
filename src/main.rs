@@ -1,17 +1,8 @@
-#![feature(let_chains)]
-#![feature(box_patterns)]
-
-mod error;
-mod span;
-mod state;
-mod syntax;
-mod types;
-
 use std::fs;
 use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 
-use crate::syntax::parse;
+use netrine::syntax;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -36,7 +27,7 @@ fn repl() {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            exec(&input.trim_end(), "repl");
+            exec(input.trim_end(), "repl");
             input.clear();
         } else {
             input.push_str(&line);
@@ -58,7 +49,7 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn exec(source: &str, path: &str) {
-    match parse(source) {
+    match syntax::parse(source) {
         Ok(nodes) => println!("{:#?}", nodes),
         Err(error) => {
             let mut buffer = String::new();

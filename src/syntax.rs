@@ -8,7 +8,7 @@ mod token;
 pub use node::*;
 
 pub fn parse(source: &str) -> Result<Vec<Node>> {
-    let tokens = lexer::tokens(&source);
-    let module = parser::parse(&source, tokens);
+    let tokens = lexer::tokens(source);
+    let module = parser::parse(source, tokens);
     module
 }

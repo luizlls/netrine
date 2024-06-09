@@ -53,7 +53,8 @@ pub enum TokenKind {
     GtEq,  // >=
     Dots,  // ..
 
-    Ident,
+    Identifier,
+    Underscore,
     Number,
     Integer,
     String,
@@ -102,7 +103,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Gt => ">",
             TokenKind::GtEq => ">=",
             TokenKind::Dots => "..",
-            TokenKind::Ident => "identifier",
+            TokenKind::Identifier => "identifier",
+            TokenKind::Underscore => "_",
             TokenKind::Number => "number",
             TokenKind::Integer => "integer",
             TokenKind::String => "string",

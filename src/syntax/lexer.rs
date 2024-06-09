@@ -121,7 +121,9 @@ fn ident(l: &mut Lexer) -> TokenKind {
     l.bump_while(|chr| chr.is_ascii_alphanumeric() || chr == b'_');
     l.bump_while(|chr| chr == b'\'');
 
-    match l.slice() {
+    let value = l.slice();
+
+    match value {
         "and" => And,
         "or" => Or,
         "not" => Not,
@@ -132,7 +134,13 @@ fn ident(l: &mut Lexer) -> TokenKind {
         "case" => Case,
         "import" => Import,
         "where" => Where,
-        _ => Ident,
+        _ => {
+            if value.as_bytes().iter().all(|&chr| chr == b'_') {
+                Underscore
+            } else {
+                Identifier
+            }
+        },
     }
 }
 
@@ -272,12 +280,13 @@ mod tests {
 
     #[test]
     fn identifier() {
-        let mut lexer = Lexer::new("ident True CONST _");
+        let mut lexer = Lexer::new("ident True CONST _ ___");
 
-        assert_token!(lexer, Ident, "ident");
-        assert_token!(lexer, Ident, "True");
-        assert_token!(lexer, Ident, "CONST");
-        assert_token!(lexer, Ident, "_");
+        assert_token!(lexer, Identifier, "ident");
+        assert_token!(lexer, Identifier, "True");
+        assert_token!(lexer, Identifier, "CONST");
+        assert_token!(lexer, Underscore, "_");
+        assert_token!(lexer, Underscore, "___");
     }
 
     #[test]

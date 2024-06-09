@@ -6,9 +6,6 @@ use crate::span::Span;
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
 macro_rules! error {
-    ($message:expr) => {
-        return Err(Error::basic($message.to_string()))
-    };
     ($message:expr, $span:expr) => {
         return Err(Error::new($message.to_string(), $span))
     };
@@ -27,13 +24,6 @@ impl Error {
         Error {
             error,
             span: Some(span),
-        }
-    }
-
-    pub fn basic(error: String) -> Error {
-        Error {
-            error,
-            span: None,
         }
     }
 }
