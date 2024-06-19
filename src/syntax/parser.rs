@@ -395,14 +395,17 @@ mod tests {
 
     use super::*;
 
-    fn parse_node(source: &str) -> Node {
-        syntax::parse(source).unwrap().pop().unwrap()
+    macro_rules! assert_node {
+        ($source:expr, $node:expr) => {{
+            let node = syntax::parse($source).unwrap();
+            assert_eq!(node, vec![$node])
+        }};
     }
 
     #[test]
     fn basic_function() {
-        assert_eq!(
-            parse_node("f(x) = x + 1"),
+        assert_node!(
+            "f(x) = x + 1",
             Node::Fn(
                 Fn {
                     name: Literal {
@@ -461,7 +464,7 @@ mod tests {
                         hi: 12,
                     },
                 }.into(),
-            ),
+            )
         )
     }
 }

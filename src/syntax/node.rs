@@ -43,7 +43,10 @@ impl Node {
     pub fn function_like(&self) -> bool {
         matches!(
             self,
-            Node::Apply(box Apply { callable: Node::Identifier(_), .. })
+            Node::Apply(box Apply {
+                callable: Node::Identifier(_),
+                ..
+            })
         )
     }
 
@@ -54,7 +57,13 @@ impl Node {
           | Node::Underscore(_)
           | Node::Array(_) | Node::Tuple(_)
           | Node::Group(_) | Node::String(_)
-          | Node::Number(_) | Node::Integer(_))
+          | Node::Number(_) | Node::Integer(_)
+          | Node::Unary(box Unary {
+                operator: Operator {
+                    kind: OperatorKind::Neg | OperatorKind::Pos, ..
+                },
+                ..
+            }))
     }
 }
 
