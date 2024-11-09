@@ -1,8 +1,32 @@
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct ConstantId(u32);
 
+impl From<usize> for ConstantId {
+    fn from(value: usize) -> ConstantId {
+        ConstantId(value as u32)
+    }
+}
+
+impl From<ConstantId> for usize {
+    fn from(value: ConstantId) -> usize {
+        value.0 as usize
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(u32);
+
+impl From<usize> for FunctionId {
+    fn from(value: usize) -> FunctionId {
+        FunctionId(value as u32)
+    }
+}
+
+impl From<FunctionId> for usize {
+    fn from(value: FunctionId) -> usize {
+        value.0 as usize
+    }
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VariableId(u32);
@@ -46,7 +70,13 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone)]
-pub enum Instruction {
+pub struct Instruction {
+    var: VariableId,
+    kind: InstructionKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum InstructionKind {
     Member(Member),
     Index(Index),
     Apply(Apply),
@@ -62,28 +92,24 @@ pub enum Instruction {
 
 #[derive(Debug, Clone)]
 pub struct Member {
-    pub dest: VariableId,
     pub source: VariableId,
     pub field: Operand,
 }
 
 #[derive(Debug, Clone)]
 pub struct Index {
-    pub dest: VariableId,
     pub source: VariableId,
     pub index: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Apply {
-    pub dest: VariableId,
     pub callee: Operand,
     pub arguments: Vec<Operand>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Binary {
-    pub dest: VariableId,
     pub operator: Operator,
     pub lexpr: Operand,
     pub rexpr: Operand,
@@ -91,26 +117,22 @@ pub struct Binary {
 
 #[derive(Debug, Clone)]
 pub struct Unary {
-    pub dest: VariableId,
     pub operator: Operator,
     pub expr: Operand,
 }
 
 #[derive(Debug, Clone)]
 pub struct Array {
-    pub dest: VariableId,
     pub items: Vec<Operand>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Tuple {
-    pub dest: VariableId,
     pub items: Vec<Operand>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Literal {
-    pub dest: VariableId,
     pub value: Operand,
 }
 

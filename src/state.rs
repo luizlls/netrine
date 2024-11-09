@@ -1,18 +1,23 @@
+use std::collections::HashMap;
+
+use crate::ir::*;
 use crate::types::{self, Type, TypeId};
 
+pub struct Database {
+    functions: HashMap<String, FunctionId>,
+    constants: HashMap<String, ConstantId>,
+}
+
 pub struct State {
-    types: Vec<Type>,
+    functions: Vec<Function>,
+    constants: Vec<Constant>,
 }
 
 impl State {
     pub fn new() -> State {
         State {
-            types: Vec::new(),
-        }.init()
-    }
-
-    fn init(mut self) -> State {
-        self.types.extend(Type::builtin());
-        self
+            functions: vec![],
+            constants: vec![],
+        }
     }
 }
