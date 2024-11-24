@@ -14,6 +14,10 @@ impl Span {
             hi: end.hi,
         }
     }
+
+    pub fn from(start: Span, end: Span) -> Span {
+        start.to(end)
+    }
 }
 
 impl Display for Span {

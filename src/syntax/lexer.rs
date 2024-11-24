@@ -16,7 +16,7 @@ pub struct Lexer<'src> {
 }
 
 impl<'src> Lexer<'src> {
-    pub fn new(src: &'src str) -> Lexer {
+    pub fn new(src: &'src str) -> Lexer<'src> {
         let mut lexer = Lexer {
             src,
             raw: src.as_bytes(),

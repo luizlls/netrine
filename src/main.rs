@@ -50,7 +50,11 @@ fn read_line() -> Result<String, ()> {
 
 fn exec(source: &str, path: &str) {
     match syntax::parse(source) {
-        Ok(nodes) => println!("{:#?}", nodes),
+        Ok(nodes) => {
+            for node in nodes {
+                println!("{}", node.dump());
+            }
+        },
         Err(error) => {
             let mut buffer = String::new();
             let _ = error.report(source, path, &mut buffer);

@@ -1,10 +1,7 @@
 use crate::error::{error, Error, Result};
 use crate::span::Span;
 
-use super::token::{
-    Token,
-    TokenKind::{self, *},
-};
+use super::token::{Token, TokenKind::{self, *}};
 use super::node::*;
 
 #[derive(Debug, Clone)]
@@ -63,8 +60,8 @@ impl<'p> Parser<'p> {
         self.token.span
     }
 
-    fn end(&self) -> Span {
-        self.prev().span
+    fn done(&self, start: Span) -> Span {
+        Span::from(start, self.prev().span)
     }
 
     fn at(&self, kind: TokenKind) -> bool {
@@ -78,54 +75,7 @@ impl<'p> Parser<'p> {
 
 pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Node>> {
     let mut parser = Parser::new(source, tokens);
-    many(&mut parser, EOF, top_level)
-}
-
-fn top_level(p: &mut Parser) -> Result<Node> {
-    let value = expr(p)?;
-
-    match p.kind() {
-        Equals => define(p, value),
-        Colon => typedef(p, value),
-        _ => Ok(value)
-    }
-}
-
-fn define(p: &mut Parser, lvalue: Node) -> Result<Node> {
-    token(p, Equals)?;
-    let rvalue = expr(p)?;
-
-    if let NodeKind::Apply(
-        box Apply {
-            callable: Node {
-                kind: NodeKind::Identifier(ident),
-                span,
-            },
-            arguments: parameters,
-            ..
-        }
-    ) = lvalue.kind {
-        let name = Name::new(ident.value, span);
-
-        for parameter in &parameters {
-            if !parameter.pattern_like() {
-                error!("not a valid pattern", parameter.span);
-            }
-        }
-
-        Ok(Node::function(name, parameters, rvalue))
-    }
-    else {
-        if !lvalue.pattern_like() {
-            error!("not a valid pattern", lvalue.span);
-        }
-
-        Ok(Node::define(lvalue, rvalue))
-    }
-}
-
-fn typedef(_p: &mut Parser, _lvalue: Node) -> Result<Node> {
-    todo!()
+    many(&mut parser, EOF, expr)
 }
 
 fn expr(p: &mut Parser) -> Result<Node> {
@@ -134,20 +84,15 @@ fn expr(p: &mut Parser) -> Result<Node> {
 
 fn atom(p: &mut Parser) -> Result<Node> {
     match p.kind() {
-        Identifier => identifier(p),
-        Underscore => underscore(p),
-        String => string(p),
         Number => number(p),
         Integer => integer(p),
         LParen => parens(p),
-        LBrace => braces(p),
-        LBracket => brackets(p),
         _ => {
             error!(
                 match p.kind() {
                     UnexpectedCharacter => "unexpected character",
                     UnterminatedString => "unterminated string",
-                    _ => "expected a valid expression",
+                    _ => "unexpected expression",
                 },
                 p.span()
             );
@@ -162,14 +107,6 @@ fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Re
     Ok(Node::literal(value, span, ctor))
 }
 
-fn identifier(p: &mut Parser) -> Result<Node> {
-    literal(p, Identifier, NodeKind::Identifier)
-}
-
-fn underscore(p: &mut Parser) -> Result<Node> {
-    literal(p, Underscore, NodeKind::Underscore)
-}
-
 fn number(p: &mut Parser) -> Result<Node> {
     literal(p, Number, NodeKind::Number)
 }
@@ -178,83 +115,16 @@ fn integer(p: &mut Parser) -> Result<Node> {
     literal(p, Integer, NodeKind::Integer)
 }
 
-fn string(p: &mut Parser) -> Result<Node> {
-    literal(p, String, NodeKind::String)
-}
-
 fn parens(p: &mut Parser) -> Result<Node> {
     let start = p.span();
 
     token(p, LParen)?;
-    let items = comma(p, RParen, expr)?;
+    let item = expr(p)?;
     token(p, RParen)?;
 
-    let span = start.to(p.end());
+    let span = p.done(start);
 
-    if items.len() == 1 {
-        Ok(Node::group(items, span))
-    } else {
-        Ok(Node::tuple(items, span))
-    }
-}
-
-fn brackets(p: &mut Parser) -> Result<Node> {
-    let start = p.span();
-
-    token(p, LBracket)?;
-    let items = comma(p, RBracket, expr)?;
-    token(p, RBracket)?;
-
-    let span = start.to(p.end());
-
-    Ok(Node::array(items, span))
-}
-
-fn braces(p: &mut Parser) -> Result<Node> {
-    block(p)
-}
-
-fn block(p: &mut Parser) -> Result<Node> {
-    let start = p.span();
-
-    token(p, LBrace)?;
-    let nodes = many(p, RBrace, top_level)?;
-    token(p, RBrace)?;
-
-    let span = start.to(p.end());
-
-    Ok(Node::block(nodes, span))
-}
-
-fn basic(p: &mut Parser) -> Result<Node> {
-    let start = p.span();
-
-    let mut node = atom(p)?;
-    loop {
-        node = match p.kind() {
-            LParen => {
-                let callable = node;
-
-                token(p, LParen)?;
-                let arguments = comma(p, RParen, expr)?;
-                token(p, RParen)?;
-
-                let span = start.to(p.end());
-
-                Node::apply(callable, arguments, span)
-            }
-            Dot => {
-                let owner = node;
-                token(p, Dot)?;
-                let field = atom(p)?;
-
-                Node::get(owner, field)
-            }
-            _ => break,
-        }
-    }
-
-    Ok(node)
+    Ok(Node::group(item, span))
 }
 
 fn unary(p: &mut Parser) -> Result<Node> {
@@ -264,7 +134,7 @@ fn unary(p: &mut Parser) -> Result<Node> {
 
         Ok(Node::unary(operator, expr))
     } else {
-        basic(p)
+        atom(p)
     }
 }
 
@@ -406,373 +276,5 @@ mod tests {
             let node = syntax::parse($source).unwrap();
             assert_eq!(node, vec![$node])
         }};
-    }
-
-    #[test]
-    fn basic_function() {
-        assert_node!(
-            "f(x) = x + 1",
-            Node {
-                kind: NodeKind::Function(
-                    Function {
-                        name: Name {
-                            value: "f".to_string(),
-                            span: Span {
-                                lo: 0,
-                                hi: 1,
-                            },
-                        },
-                        parameters: vec![
-                            Node {
-                                kind: NodeKind::Identifier(
-                                    Literal {
-                                        value: "x".to_string(),
-                                    },
-                                ),
-                                span: Span {
-                                    lo: 2,
-                                    hi: 3,
-                                },
-                            }
-                        ],
-                        value: Node {
-                            kind: NodeKind::Binary(
-                                Binary {
-                                    operator: Operator {
-                                        kind: OperatorKind::Add,
-                                        span: Span {
-                                            lo: 9,
-                                            hi: 10,
-                                        },
-                                    },
-                                    lexpr: Node {
-                                        kind: NodeKind::Identifier(
-                                            Literal {
-                                                value: "x".to_string(),
-                                            },
-                                        ),
-                                        span: Span {
-                                            lo: 7,
-                                            hi: 8,
-                                        },
-                                    },
-                                    rexpr: Node {
-                                        kind: NodeKind::Integer(
-                                            Literal {
-                                                value: "1".to_string(),
-                                            },
-                                        ),
-                                        span: Span {
-                                            lo: 11,
-                                            hi: 12,
-                                        },
-                                    },
-                                }.into(),
-                            ),
-                            span: Span {
-                                lo: 7,
-                                hi: 12,
-                            }
-                        }
-                    }.into()
-                ),
-                span: Span {
-                    lo: 0,
-                    hi: 12,
-                }
-            }
-        )
-    }
-
-    #[test]
-    fn multiline_function() {
-        assert_node!(
-            "f(x) = {
-                y = x * x
-                z = x ^ x
-                y + z
-            }",
-            Node {
-                kind: NodeKind::Function(
-                    Function {
-                        name: Name {
-                            value: "f".to_string(),
-                            span: Span {
-                                lo: 0,
-                                hi: 1,
-                            },
-                        },
-                        parameters: vec![
-                            Node {
-                                kind: NodeKind::Identifier(
-                                    Literal {
-                                        value: "x".to_string(),
-                                    },
-                                ),
-                                span: Span {
-                                    lo: 2,
-                                    hi: 3,
-                                },
-                            }
-                        ],
-                        value: Node {
-                            kind: NodeKind::Block(
-                                Block {
-                                    nodes: vec![
-                                        Node {
-                                            kind: NodeKind::Def(
-                                                Def {
-                                                    lvalue: Node {
-                                                        kind: NodeKind::Identifier(
-                                                            Literal {
-                                                                value: "y".to_string(),
-                                                            },
-                                                        ),
-                                                        span: Span {
-                                                            lo: 17,
-                                                            hi: 18,
-                                                        },
-                                                    },
-                                                    rvalue: Node {
-                                                        kind: NodeKind::Binary(
-                                                            Binary {
-                                                                operator: Operator {
-                                                                    kind: OperatorKind::Mul,
-                                                                    span: Span {
-                                                                        lo: 21,
-                                                                        hi: 22,
-                                                                    },
-                                                                },
-                                                                lexpr: Node {
-                                                                    kind: NodeKind::Identifier(
-                                                                        Literal {
-                                                                            value: "x".to_string(),
-                                                                        },
-                                                                    ),
-                                                                    span: Span {
-                                                                        lo: 19,
-                                                                        hi: 20,
-                                                                    },
-                                                                },
-                                                                rexpr: Node {
-                                                                    kind: NodeKind::Identifier(
-                                                                        Literal {
-                                                                            value: "x".to_string(),
-                                                                        },
-                                                                    ),
-                                                                    span: Span {
-                                                                        lo: 23,
-                                                                        hi: 24,
-                                                                    },
-                                                                },
-                                                            }.into(),
-                                                        ),
-                                                        span: Span {
-                                                            lo: 19,
-                                                            hi: 24,
-                                                        },
-                                                    },
-                                                }.into(),
-                                            ),
-                                            span: Span {
-                                                lo: 17,
-                                                hi: 24,
-                                            },
-                                        },
-                                        Node {
-                                            kind: NodeKind::Def(
-                                                Def {
-                                                    lvalue: Node {
-                                                        kind: NodeKind::Identifier(
-                                                            Literal {
-                                                                value: "z".to_string(),
-                                                            },
-                                                        ),
-                                                        span: Span {
-                                                            lo: 29,
-                                                            hi: 30,
-                                                        },
-                                                    },
-                                                    rvalue: Node {
-                                                        kind: NodeKind::Binary(
-                                                            Binary {
-                                                                operator: Operator {
-                                                                    kind: OperatorKind::Exp,
-                                                                    span: Span {
-                                                                        lo: 33,
-                                                                        hi: 34,
-                                                                    },
-                                                                },
-                                                                lexpr: Node {
-                                                                    kind: NodeKind::Identifier(
-                                                                        Literal {
-                                                                            value: "x".to_string(),
-                                                                        },
-                                                                    ),
-                                                                    span: Span {
-                                                                        lo: 31,
-                                                                        hi: 32,
-                                                                    },
-                                                                },
-                                                                rexpr: Node {
-                                                                    kind: NodeKind::Identifier(
-                                                                        Literal {
-                                                                            value: "x".to_string(),
-                                                                        },
-                                                                    ),
-                                                                    span: Span {
-                                                                        lo: 35,
-                                                                        hi: 36,
-                                                                    },
-                                                                },
-                                                            }.into(),
-                                                        ),
-                                                        span: Span {
-                                                            lo: 31,
-                                                            hi: 36,
-                                                        },
-                                                    },
-                                                }.into(),
-                                            ),
-                                            span: Span {
-                                                lo: 29,
-                                                hi: 36,
-                                            },
-                                        },
-                                        Node {
-                                            kind: NodeKind::Binary(
-                                                Binary {
-                                                    operator: Operator {
-                                                        kind: OperatorKind::Add,
-                                                        span: Span {
-                                                            lo: 41,
-                                                            hi: 42,
-                                                        },
-                                                    },
-                                                    lexpr: Node {
-                                                        kind: NodeKind::Identifier(
-                                                            Literal {
-                                                                value: "y".to_string(),
-                                                            },
-                                                        ),
-                                                        span: Span {
-                                                            lo: 39,
-                                                            hi: 40,
-                                                        },
-                                                    },
-                                                    rexpr: Node {
-                                                        kind: NodeKind::Identifier(
-                                                            Literal {
-                                                                value: "z".to_string(),
-                                                            },
-                                                        ),
-                                                        span: Span {
-                                                            lo: 43,
-                                                            hi: 44,
-                                                        },
-                                                    },
-                                                }.into(),
-                                            ),
-                                            span: Span {
-                                                lo: 39,
-                                                hi: 44,
-                                            },
-                                        },
-                                    ],
-                                }.into(),
-                            ),
-                            span: Span {
-                                lo: 7,
-                                hi: 24,
-                            },
-                        },
-                    }.into(),
-                ),
-                span: Span {
-                    lo: 0,
-                    hi: 24,
-                },
-            }
-        )
-    }
-
-    #[test]
-    fn basic_definition() {
-        assert_node!(
-            "x = 1",
-            Node {
-                kind: NodeKind::Def(
-                    Def {
-                        lvalue: Node {
-                            kind: NodeKind::Identifier(
-                                Literal {
-                                    value: "x".to_string(),
-                                },
-                            ),
-                            span: Span {
-                                lo: 0,
-                                hi: 1,
-                            },
-                        },
-                        rvalue: Node {
-                            kind: NodeKind::Integer(
-                                Literal {
-                                    value: "1".to_string(),
-                                },
-                            ),
-                            span: Span {
-                                lo: 4,
-                                hi: 5,
-                            },
-                        },
-                    }.into()
-                ),
-                span: Span {
-                    lo: 0,
-                    hi: 5,
-                },
-            }
-        )
-    }
-
-    #[test]
-    fn basic_apply() {
-        assert_node!(
-            "f(x)",
-            Node {
-                kind: NodeKind::Apply(
-                    Apply {
-                        callable: Node {
-                            kind: NodeKind::Identifier(
-                                Literal {
-                                    value: "f".to_string(),
-                                },
-                            ),
-                            span: Span {
-                                lo: 0,
-                                hi: 1,
-                            },
-                        },
-                        arguments: vec![
-                            Node {
-                                kind: NodeKind::Identifier(
-                                    Literal {
-                                        value: "x".to_string(),
-                                    },
-                                ),
-                                span: Span {
-                                    lo: 2,
-                                    hi: 3,
-                                },
-                            },
-                        ],
-                    }.into()
-                ),
-                span: Span {
-                    lo: 0,
-                    hi: 4,
-                },
-            }
-        )
     }
 }

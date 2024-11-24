@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter, Write};
+
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,129 +10,11 @@ pub struct Node {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeKind {
-    Identifier(Literal),
-    Underscore(Literal),
-    Function(Box<Function>),
-    Def(Box<Def>),
-    Get(Box<Get>),
-    Apply(Box<Apply>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
     Group(Box<Group>),
-    Block(Block),
-    Array(Array),
-    Tuple(Tuple),
-    String(Literal),
     Number(Literal),
     Integer(Literal),
-}
-
-impl Node {
-    pub fn function_like(&self) -> bool {
-        matches!(
-            self.kind,
-            NodeKind::Apply(box Apply {
-                callable: Node {
-                    kind: NodeKind::Identifier(_), ..
-                },
-                ..
-            })
-        )
-    }
-
-    pub fn pattern_like(&self) -> bool {
-        matches!(
-            self.kind,
-            NodeKind::Identifier(_)
-          | NodeKind::Underscore(_)
-          | NodeKind::Array(_) | NodeKind::Tuple(_)
-          | NodeKind::Group(_) | NodeKind::String(_)
-          | NodeKind::Number(_) | NodeKind::Integer(_)
-          | NodeKind::Unary(box Unary {
-                operator: Operator {
-                    kind: OperatorKind::Neg | OperatorKind::Pos, ..
-                },
-                ..
-            }))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]    
-pub struct Name {
-    pub value: String,
-    pub span: Span,
-}
-
-impl Name {
-    pub fn new(value: String, span: Span) -> Name {
-        Name {
-            value, span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Function {
-    pub name: Name,
-    pub parameters: Vec<Node>,
-    pub value: Node,
-}
-
-impl Node {
-    pub fn function(name: Name, parameters: Vec<Node>, value: Node) -> Node {
-        let span = name.span.to(value.span);
-        Node {
-            kind: NodeKind::Function(Function { name, parameters, value }.into()),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Def {
-    pub lvalue: Node,
-    pub rvalue: Node,
-}
-
-impl Node {
-    pub fn define(lvalue: Node, rvalue: Node) -> Node {
-        let span = lvalue.span.to(rvalue.span);
-        Node {
-            kind: NodeKind::Def(Def { lvalue, rvalue }.into()),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Get {
-    pub node: Node,
-    pub field: Node,
-}
-
-impl Node {
-    pub fn get(node: Node, field: Node) -> Node {
-        let span = node.span.to(field.span);
-        Node {
-            kind: NodeKind::Get(Get { node, field }.into()),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Apply {
-    pub callable: Node,
-    pub arguments: Vec<Node>,
-}
-
-impl Node {
-    pub fn apply(callable: Node, arguments: Vec<Node>, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Apply(Apply { callable, arguments }.into()),
-            span,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,52 +56,9 @@ pub struct Group {
 }
 
 impl Node {
-    pub fn group(mut items: Vec<Node>, span: Span) -> Node {
-        let inner = items.pop().unwrap();
+    pub fn group(inner: Node, span: Span) -> Node {
         Node {
             kind: NodeKind::Group(Group { inner }.into()),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Block {
-    pub nodes: Vec<Node>,
-}
-
-impl Node {
-    pub fn block(nodes: Vec<Node>, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Block(Block { nodes }),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Tuple {
-    pub items: Vec<Node>,
-}
-
-impl Node {
-    pub fn tuple(items: Vec<Node>, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Tuple(Tuple { items }),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Array {
-    pub items: Vec<Node>,
-}
-
-impl Node {
-    pub fn array(items: Vec<Node>, span: Span) -> Node {
-        Node {
-            kind: NodeKind::Array(Array { items }),
             span,
         }
     }
@@ -314,6 +155,54 @@ impl Operator {
           | OperatorKind::Not => Associativity::None,
             OperatorKind::Exp => Associativity::Right,
             _ => Associativity::Left,
+        }
+    }
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let description = match self.kind {
+            OperatorKind::Is => "is",
+            OperatorKind::In => "in",
+            OperatorKind::And => "and",
+            OperatorKind::Or => "or",
+            OperatorKind::Not => "not",
+            OperatorKind::Pos => "+",
+            OperatorKind::Neg => "-",
+            OperatorKind::Add => "+",
+            OperatorKind::Sub => "-",
+            OperatorKind::Mul => "*",
+            OperatorKind::Div => "/",
+            OperatorKind::Mod => "%",
+            OperatorKind::Exp => "^",
+            OperatorKind::Eq => "==",
+            OperatorKind::Ne => "!=",
+            OperatorKind::Lt => "<",
+            OperatorKind::Le => "<=",
+            OperatorKind::Gt => ">",
+            OperatorKind::Ge => ">=",
+            OperatorKind::Range => "..",
+        };
+
+        write!(f, "{description}")
+    }
+}
+
+impl Node {
+
+    pub fn dump(&self) -> String {
+        match &self.kind {
+            NodeKind::Unary(unary) => {
+                format!("({} {})", unary.operator, unary.expr.dump())
+            }
+            NodeKind::Binary(binary) => {
+                format!("({} {} {})", binary.operator, binary.lexpr.dump(), binary.rexpr.dump())
+            }
+            NodeKind::Group(group) => {
+                group.inner.dump()
+            }
+            NodeKind::Number(literal)
+          | NodeKind::Integer(literal) => literal.value.clone(),
         }
     }
 }

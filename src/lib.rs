@@ -6,5 +6,4 @@ pub mod syntax;
 mod error;
 mod ir;
 mod span;
-mod state;
 mod types;
