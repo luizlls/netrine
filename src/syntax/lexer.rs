@@ -118,7 +118,7 @@ fn kind(l: &mut Lexer) -> TokenKind {
 }
 
 fn ident(l: &mut Lexer) -> TokenKind {
-    l.bump_while(|chr| chr.is_ascii_alphanumeric() || chr == b'_');
+    l.bump_while(|chr| matches!(chr, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'));
     l.bump_while(|chr| chr == b'\'');
 
     let value = l.slice();

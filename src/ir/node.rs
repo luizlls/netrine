@@ -1,8 +1,20 @@
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct VariableId(u32);
+pub struct VariableId(pub u32);
+
+impl VariableId {
+    pub fn next(self) -> VariableId {
+        VariableId(self.0 + 1)
+    }
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct BlockId(u32);
+pub struct BlockId(pub u32);
+
+impl BlockId {
+    pub fn next(self) -> BlockId {
+        BlockId(self.0 + 1)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -15,10 +27,25 @@ pub struct Block {
     pub instructions: Vec<Instruction>,
 }
 
+impl Block {
+    pub fn new(id: BlockId) -> Block {
+        Block {
+            id,
+            instructions: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Instruction {
     var: VariableId,
     kind: InstructionKind,
+}
+
+impl Instruction {
+    pub fn new(var: VariableId, kind: InstructionKind) -> Self {
+        Self { var, kind }
+    }
 }
 
 #[derive(Debug, Clone)]

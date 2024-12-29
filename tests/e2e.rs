@@ -59,7 +59,7 @@ fn test_one(base: &str, path: PathBuf) {
         };
 
         if result != output {
-            println!("Test failed: {base}::{file_name}");
+            println!("Test failed: {base}::{file_name}::{test_name}");
             println!("left:\n{}", output);
             println!("right:\n{}", result);
             panic!();

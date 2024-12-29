@@ -1,4 +1,4 @@
-use std::fmt::{self, Display, Formatter, Write};
+use std::fmt::{self, Display, Formatter};
 
 use crate::span::Span;
 
@@ -167,21 +167,21 @@ impl Display for Operator {
             OperatorKind::And => "and",
             OperatorKind::Or => "or",
             OperatorKind::Not => "not",
-            OperatorKind::Pos => "+",
-            OperatorKind::Neg => "-",
-            OperatorKind::Add => "+",
-            OperatorKind::Sub => "-",
-            OperatorKind::Mul => "*",
-            OperatorKind::Div => "/",
-            OperatorKind::Mod => "%",
-            OperatorKind::Exp => "^",
-            OperatorKind::Eq => "==",
-            OperatorKind::Ne => "!=",
-            OperatorKind::Lt => "<",
-            OperatorKind::Le => "<=",
-            OperatorKind::Gt => ">",
-            OperatorKind::Ge => ">=",
-            OperatorKind::Range => "..",
+            OperatorKind::Pos => "pos",
+            OperatorKind::Neg => "neg",
+            OperatorKind::Add => "add",
+            OperatorKind::Sub => "sub",
+            OperatorKind::Mul => "mul",
+            OperatorKind::Div => "div",
+            OperatorKind::Mod => "mod",
+            OperatorKind::Exp => "exp",
+            OperatorKind::Eq => "eq",
+            OperatorKind::Ne => "ne",
+            OperatorKind::Lt => "lt",
+            OperatorKind::Le => "le",
+            OperatorKind::Gt => "gt",
+            OperatorKind::Ge => "ge",
+            OperatorKind::Range => "range",
         };
 
         write!(f, "{description}")
