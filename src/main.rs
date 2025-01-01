@@ -1,6 +1,6 @@
+use std::path::PathBuf;
 use std::fs;
 use std::io::{stdin, stdout, Write};
-use std::path::PathBuf;
 
 use netrine::syntax;
 
@@ -52,9 +52,9 @@ fn exec(source: &str, path: &str) {
     match syntax::parse(source) {
         Ok(nodes) => {
             for node in nodes {
-                println!("{}", node.dump());
+                println!("{node}");
             }
-        },
+        }
         Err(error) => {
             let mut buffer = String::new();
             let _ = error.report(source, path, &mut buffer);

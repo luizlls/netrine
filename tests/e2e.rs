@@ -45,7 +45,11 @@ fn test_one(base: &str, path: PathBuf) {
             }
         }
 
-        cases.push((test_name.to_string(), input.trim().to_string(), output.trim().to_string()));
+        cases.push((
+            test_name.to_string(),
+            input.trim().to_string(),
+            output.trim().to_string(),
+        ));
     }
 
     for (test_name, input, output) in cases {
@@ -53,7 +57,7 @@ fn test_one(base: &str, path: PathBuf) {
 
         let result = match syntax::parse(&input) {
             Ok(nodes) => {
-                nodes.into_iter().map(|node| node.dump()).collect::<Vec<_>>().join("\n")
+                nodes.into_iter().map(|node| format!("{node}")).collect::<Vec<_>>().join("\n")
             }
             Err(err) => err.to_string(),
         };

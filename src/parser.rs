@@ -1,8 +1,8 @@
 use crate::error::{error, Error, Result};
+use crate::ast::{self, Literal, Operator, OperatorKind, Precedence, Associativity};
 use crate::span::Span;
-
-use super::token::{Token, TokenKind::{self, *}};
-use super::node::*;
+use crate::syntax::{Node, NodeKind, SyntaxData};
+use crate::token::{Token, TokenKind::{self, *}};
 
 #[derive(Debug, Clone)]
 pub struct Parser<'p> {
@@ -19,7 +19,8 @@ impl<'p> Parser<'p> {
             tokens,
             token: Token::default(),
             index: 0,
-        }.init()
+        }
+        .init()
     }
 
     fn init(mut self) -> Parser<'p> {
@@ -61,7 +62,7 @@ impl<'p> Parser<'p> {
     }
 
     fn done(&self, start: Span) -> Span {
-        Span::from(start, self.prev().span)
+        Span::of(start, self.prev().span)
     }
 
     fn at(&self, kind: TokenKind) -> bool {
@@ -104,7 +105,7 @@ fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Re
     let span = token(p, kind)?;
     let value = p.slice(span).to_string();
 
-    Ok(Node::literal(value, span, ctor))
+    Ok(ast::Node::literal(value, ctor, SyntaxData::new(span)))
 }
 
 fn number(p: &mut Parser) -> Result<Node> {
@@ -122,9 +123,9 @@ fn parens(p: &mut Parser) -> Result<Node> {
     let item = expr(p)?;
     token(p, RParen)?;
 
-    let span = p.done(start);
+    let data = SyntaxData::new(p.done(start));
 
-    Ok(Node::group(item, span))
+    Ok(ast::Node::group(item, data))
 }
 
 fn unary(p: &mut Parser) -> Result<Node> {
@@ -132,7 +133,14 @@ fn unary(p: &mut Parser) -> Result<Node> {
         p.bump(); // operator
         let expr = unary(p)?;
 
-        Ok(Node::unary(operator, expr))
+        let data = SyntaxData::new(
+            Span::of(
+                operator.span,
+                expr.data.span,
+            )
+        );
+
+        Ok(ast::Node::unary(operator, expr, data))
     } else {
         atom(p)
     }
@@ -141,7 +149,8 @@ fn unary(p: &mut Parser) -> Result<Node> {
 fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
     let mut expr = unary(p)?;
 
-    while let Some(operator) = operator(p, false) && operator.precedence() >= precedence {
+    while let Some(operator) = operator(p, false) && operator.precedence() >= precedence
+    {
         p.bump(); // operator
 
         let precedence = match operator.associativity() {
@@ -153,7 +162,14 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
         let rexpr = binary(p, precedence)?;
         let lexpr = expr;
 
-        expr = Node::binary(operator, lexpr, rexpr);
+        let data = SyntaxData::new(
+            Span::of(
+                lexpr.data.span,
+                rexpr.data.span,
+            )
+        );
+
+        expr = ast::Node::binary(operator, lexpr, rexpr, data);
     }
 
     Ok(expr)
@@ -263,18 +279,4 @@ where
 fn unexpected(expected: &[TokenKind]) -> std::string::String {
     let expected = expected.iter().map(|it| format!("`{it}`")).collect::<Vec<_>>().join(", ");
     format!("expected {expected}")
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::syntax;
-
-    use super::*;
-
-    macro_rules! assert_node {
-        ($source:expr, $node:expr) => {{
-            let node = syntax::parse($source).unwrap();
-            assert_eq!(node, vec![$node])
-        }};
-    }
 }

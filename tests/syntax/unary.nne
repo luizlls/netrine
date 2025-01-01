@@ -10,6 +10,12 @@ not 1
 (neg 10)
 
 
+// test: negative complex
+1 - -10
+--
+(sub 1 (neg 10))
+
+
 // test: positive
 +1
 --

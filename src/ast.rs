@@ -3,64 +3,101 @@ use std::fmt::{self, Display, Formatter};
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node {
-    pub kind: NodeKind,
-    pub span: Span,
+pub struct Node<T> {
+    pub kind: NodeKind<T>,
+    pub data: T,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NodeKind {
-    Unary(Box<Unary>),
-    Binary(Box<Binary>),
-    Group(Box<Group>),
+pub enum NodeKind<T> {
+    Unary(Unary<T>),
+    Binary(Binary<T>),
+    Group(Group<T>),
     Number(Literal),
     Integer(Literal),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Unary {
-    pub operator: Operator,
-    pub expr: Node,
-}
-
-impl Node {
-    pub fn unary(operator: Operator, expr: Node) -> Node {
-        let span = operator.span.to(expr.span);
-        Node {
-            kind: NodeKind::Unary(Unary { operator, expr }.into()),
-            span,
+impl<T> Display for Node<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match &self.kind {
+            NodeKind::Unary(unary) => write!(f, "{}", unary),
+            NodeKind::Binary(binary) => write!(f, "{}", binary),
+            NodeKind::Group(group) => write!(f, "({})", group),
+            NodeKind::Number(literal)
+          | NodeKind::Integer(literal) => write!(f, "{}", literal),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Binary {
-    pub operator: Operator,
-    pub lexpr: Node,
-    pub rexpr: Node,
+pub struct Unary<T> {
+    pub op: Operator,
+    pub expr: Box<Node<T>>,
 }
 
-impl Node {
-    pub fn binary(operator: Operator, lexpr: Node, rexpr: Node) -> Node {
-        let span = lexpr.span.to(rexpr.span);
+impl<T> Node<T> {
+    pub fn unary(op: Operator, expr: Node<T>, data: T) -> Node<T> {
         Node {
-            kind: NodeKind::Binary(Binary { operator, lexpr, rexpr }.into()),
-            span,
+            kind: NodeKind::Unary(Unary {
+                op,
+                expr: Box::new(expr),
+            }),
+            data,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Group {
-    pub inner: Node,
+impl<T> Display for Unary<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "({} {})", self.op, self.expr)
+    }
 }
 
-impl Node {
-    pub fn group(inner: Node, span: Span) -> Node {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binary<T> {
+    pub op: Operator,
+    pub lexpr: Box<Node<T>>,
+    pub rexpr: Box<Node<T>>,
+}
+
+impl<T> Node<T> {
+    pub fn binary(op: Operator, lexpr: Node<T>, rexpr: Node<T>, data: T) -> Node<T> {
         Node {
-            kind: NodeKind::Group(Group { inner }.into()),
-            span,
+            kind: NodeKind::Binary(Binary {
+                op,
+                lexpr: Box::new(lexpr),
+                rexpr: Box::new(rexpr),
+            }),
+            data,
         }
+    }
+}
+
+impl<T> Display for Binary<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "({} {} {})", self.op, self.lexpr, self.rexpr)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Group<T> {
+    pub inner: Box<Node<T>>,
+}
+
+impl<T> Node<T> {
+    pub fn group(inner: Node<T>, data: T) -> Node<T> {
+        Node {
+            kind: NodeKind::Group(Group {
+                inner: Box::new(inner),
+            }),
+            data,
+        }
+    }
+}
+
+impl<T> Display for Group<T> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.inner)
     }
 }
 
@@ -69,12 +106,18 @@ pub struct Literal {
     pub value: String,
 }
 
-impl Node {
-    pub fn literal(value: String, span: Span, ctor: fn(Literal) -> NodeKind) -> Node {
+impl<T> Node<T> {
+    pub fn literal(value: String, ctor: fn(Literal) -> NodeKind<T>, data: T) -> Node<T> {
         Node {
             kind: ctor(Literal { value }),
-            span,
+            data,
         }
+    }
+}
+
+impl Display for Literal {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 
@@ -132,8 +175,10 @@ impl Operator {
           | OperatorKind::Neg
           | OperatorKind::Not => -1,
             OperatorKind::Exp => 9,
-            OperatorKind::Mul | OperatorKind::Div => 8,
-            OperatorKind::Add | OperatorKind::Sub => 7,
+            OperatorKind::Mul
+          | OperatorKind::Div => 8,
+            OperatorKind::Add
+          | OperatorKind::Sub => 7,
             OperatorKind::Mod => 6,
             OperatorKind::Lt
           | OperatorKind::Le
@@ -141,7 +186,8 @@ impl Operator {
           | OperatorKind::Ge
           | OperatorKind::Ne
           | OperatorKind::Eq => 5,
-            OperatorKind::Is | OperatorKind::In => 4,
+            OperatorKind::Is
+          | OperatorKind::In => 4,
             OperatorKind::And => 3,
             OperatorKind::Or => 2,
             OperatorKind::Range => 1,
@@ -185,24 +231,5 @@ impl Display for Operator {
         };
 
         write!(f, "{description}")
-    }
-}
-
-impl Node {
-
-    pub fn dump(&self) -> String {
-        match &self.kind {
-            NodeKind::Unary(unary) => {
-                format!("({} {})", unary.operator, unary.expr.dump())
-            }
-            NodeKind::Binary(binary) => {
-                format!("({} {} {})", binary.operator, binary.lexpr.dump(), binary.rexpr.dump())
-            }
-            NodeKind::Group(group) => {
-                group.inner.dump()
-            }
-            NodeKind::Number(literal)
-          | NodeKind::Integer(literal) => literal.value.clone(),
-        }
     }
 }

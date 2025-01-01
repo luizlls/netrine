@@ -140,7 +140,7 @@ fn ident(l: &mut Lexer) -> TokenKind {
             } else {
                 Identifier
             }
-        },
+        }
     }
 }
 
@@ -291,8 +291,7 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let mut lexer =
-            Lexer::new("and or not is mut if else case import where");
+        let mut lexer = Lexer::new("and or not is mut if else case import where");
 
         assert_token!(lexer, And);
         assert_token!(lexer, Or);

@@ -8,15 +8,11 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn to(self, end: Span) -> Span {
+    pub fn of(start: Span, end: Span) -> Span {
         Span {
-            lo: self.lo,
+            lo: start.lo,
             hi: end.hi,
         }
-    }
-
-    pub fn from(start: Span, end: Span) -> Span {
-        start.to(end)
     }
 }
 
