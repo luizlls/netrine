@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::fs;
 use std::io::{stdin, stdout, Write};
 
-use netrine::syntax;
+use netrine::{Source, SourceId};
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -14,10 +14,10 @@ fn main() {
 }
 
 fn file(file: String) {
-    let path = PathBuf::from(file);
-    let name = path.display().to_string();
-    let content = fs::read_to_string(&path).expect("Couldn't open the file");
-    exec(&content, &name);
+    let file_path = PathBuf::from(file);
+    let content = fs::read_to_string(&file_path).expect("Couldn't open the file");
+    let file_path = file_path.display().to_string();
+    exec(file_path, content);
 }
 
 fn repl() {
@@ -27,7 +27,7 @@ fn repl() {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            exec(input.trim_end(), "repl");
+            exec("repl".to_string(), input.trim_end().to_string());
             input.clear();
         } else {
             input.push_str(&line);
@@ -48,17 +48,17 @@ fn read_line() -> Result<String, ()> {
     }
 }
 
-fn exec(source: &str, path: &str) {
-    match syntax::parse(source) {
-        Ok(nodes) => {
-            for node in nodes {
-                println!("{node}");
-            }
-        }
-        Err(error) => {
-            let mut buffer = String::new();
-            let _ = error.report(source, path, &mut buffer);
-            eprintln!("{buffer}");
-        }
+fn exec(file_path: String, source: String) {
+    let source = Source::new(SourceId(0), file_path, source);
+    let module = netrine::parse(&source);
+
+    if !module.diagnostics.is_empty() {
+        let mut buffer = String::new();
+        let _ = module.diagnostics.report(&[source], &mut buffer);
+        eprintln!("{buffer}");
+    }
+
+    for node in module.nodes {
+        println!("{node}");
     }
 }

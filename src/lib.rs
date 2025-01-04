@@ -1,16 +1,18 @@
 #![feature(let_chains)]
 #![feature(box_patterns)]
 
-mod ast;
 mod error;
 mod infer;
 mod ir;
 mod lexer;
 mod lower;
+mod node;
 mod parser;
-mod span;
+mod source;
 mod state;
 mod token;
 mod types;
 
-pub mod syntax;
+pub use source::*;
+pub use node::*;
+pub use parser::parse;

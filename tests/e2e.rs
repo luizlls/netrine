@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use netrine::syntax;
+use netrine::{Source, SourceId};
 
 fn test_one(base: &str, path: PathBuf) {
     let file_name = path
@@ -55,11 +55,15 @@ fn test_one(base: &str, path: PathBuf) {
     for (test_name, input, output) in cases {
         println!("test {base}::{file_name}::{test_name}");
 
-        let result = match syntax::parse(&input) {
-            Ok(nodes) => {
-                nodes.into_iter().map(|node| format!("{node}")).collect::<Vec<_>>().join("\n")
-            }
-            Err(err) => err.to_string(),
+        let source = Source::new(SourceId(0), "<test>".to_string(), input);
+        let module = netrine::parse(&source);
+    
+        let result = if !module.diagnostics.is_empty() {
+            let mut buffer = String::new();
+            let _ = module.diagnostics.report(&[source], &mut buffer);
+            buffer
+        } else {
+            module.nodes.into_iter().map(|node| format!("{node}")).collect::<Vec<_>>().join("\n")
         };
 
         if result != output {

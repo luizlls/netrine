@@ -1,4 +1,4 @@
-use crate::span::Span;
+use crate::source::Span;
 
 use super::token::{
     Token,
@@ -6,20 +6,20 @@ use super::token::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Lexer<'src> {
-    src: &'src str,
-    raw: &'src [u8],
+pub struct Lexer<'l> {
+    source: &'l str,
+    bytes: &'l [u8],
     curr: u8,
     peek: u8,
     index: usize,
     start: usize,
 }
 
-impl<'src> Lexer<'src> {
-    pub fn new(src: &'src str) -> Lexer<'src> {
+impl<'l> Lexer<'l> {
+    pub fn new(source: &'l str) -> Lexer<'l> {
         let mut lexer = Lexer {
-            src,
-            raw: src.as_bytes(),
+            source,
+            bytes: source.as_bytes(),
             curr: 0,
             peek: 0,
             index: 0,
@@ -42,22 +42,19 @@ impl<'src> Lexer<'src> {
     }
 
     fn nth(&self, idx: usize) -> u8 {
-        if self.raw.len() > idx {
-            self.raw[idx]
+        if self.bytes.len() > idx {
+            self.bytes[idx]
         } else {
             b'\0'
         }
     }
 
     fn slice(&self) -> &str {
-        &self.src[self.start..self.index]
+        &self.source[self.start..self.index]
     }
 
     fn span(&self) -> Span {
-        Span {
-            lo: self.start as u32,
-            hi: self.index as u32,
-        }
+        Span::new(self.start as u32, self.index as u32)
     }
 
     fn bump_while<P>(&mut self, pred: P)

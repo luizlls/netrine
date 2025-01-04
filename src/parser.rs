@@ -1,24 +1,28 @@
-use crate::error::{error, Error, Result};
-use crate::ast::{self, Literal, Operator, OperatorKind, Precedence, Associativity};
-use crate::span::Span;
-use crate::syntax::{Node, NodeKind, SyntaxData};
-use crate::token::{Token, TokenKind::{self, *}};
+use crate::error::Diagnostics;
+use crate::lexer;
+use crate::node::{self, Module, Node, NodeKind, Literal, Operator, OperatorKind, Precedence, Associativity};
+use crate::source::{Source, Span};
+use crate::token::{Token, TokenKind, TokenKind::*};
 
-#[derive(Debug, Clone)]
+type ParserResult<T> = Result<T, ()>;
+
+#[derive(Debug)]
 pub struct Parser<'p> {
-    source: &'p str,
+    source: &'p Source,
     tokens: Vec<Token>,
     token: Token,
     index: usize,
+    diagnostics: Diagnostics,
 }
 
 impl<'p> Parser<'p> {
-    pub fn new(source: &'p str, tokens: Vec<Token>) -> Parser<'p> {
+    pub fn new(source: &'p Source, tokens: Vec<Token>) -> Parser<'p> {
         Parser {
             source,
             tokens,
             token: Token::default(),
             index: 0,
+            diagnostics: Diagnostics::new(source.source_id),
         }
         .init()
     }
@@ -70,83 +74,98 @@ impl<'p> Parser<'p> {
     }
 
     fn slice(&self, span: Span) -> &str {
-        &self.source[span.range()]
+        &self.source.slice(span)
+    }
+
+    fn fail<T>(&mut self, error: std::string::String) -> ParserResult<T> {
+        self.diagnostics.error(error, self.span());
+        self.recover();
+        Err(())
+    }
+
+    fn recover(&mut self) {
+        while !self.at(EOF) { self.bump(); }
     }
 }
 
-pub fn parse(source: &str, tokens: Vec<Token>) -> Result<Vec<Node>> {
+pub fn parse(source: &Source) -> Module {
+    let tokens = lexer::tokens(&source.content);
+
     let mut parser = Parser::new(source, tokens);
-    many(&mut parser, EOF, expr)
+    let mut nodes = vec![];
+
+    newline(&mut parser);
+
+    while !parser.at(EOF) {
+        if let Ok(node) = expr(&mut parser) {
+            nodes.push(node);
+        }
+        let _ = endline(&mut parser);
+    }
+
+    Module::new(source.source_id, nodes, parser.diagnostics)
 }
 
-fn expr(p: &mut Parser) -> Result<Node> {
+fn expr(p: &mut Parser) -> ParserResult<Node> {
     binary(p, 0 as Precedence)
 }
 
-fn atom(p: &mut Parser) -> Result<Node> {
+fn atom(p: &mut Parser) -> ParserResult<Node> {
     match p.kind() {
         Number => number(p),
         Integer => integer(p),
         LParen => parens(p),
         _ => {
-            error!(
+            p.fail(
                 match p.kind() {
                     UnexpectedCharacter => "unexpected character",
                     UnterminatedString => "unterminated string",
                     _ => "unexpected expression",
-                },
-                p.span()
-            );
+                }.to_string()
+            )
         }
     }
 }
 
-fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
+fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> ParserResult<Node> {
     let span = token(p, kind)?;
     let value = p.slice(span).to_string();
 
-    Ok(ast::Node::literal(value, ctor, SyntaxData::new(span)))
+    Ok(node::Node::literal(value, ctor, span))
 }
 
-fn number(p: &mut Parser) -> Result<Node> {
+fn number(p: &mut Parser) -> ParserResult<Node> {
     literal(p, Number, NodeKind::Number)
 }
 
-fn integer(p: &mut Parser) -> Result<Node> {
+fn integer(p: &mut Parser) -> ParserResult<Node> {
     literal(p, Integer, NodeKind::Integer)
 }
 
-fn parens(p: &mut Parser) -> Result<Node> {
+fn parens(p: &mut Parser) -> ParserResult<Node> {
     let start = p.span();
 
     token(p, LParen)?;
     let item = expr(p)?;
     token(p, RParen)?;
 
-    let data = SyntaxData::new(p.done(start));
+    let span = p.done(start);
 
-    Ok(ast::Node::group(item, data))
+    Ok(node::Node::group(item, span))
 }
 
-fn unary(p: &mut Parser) -> Result<Node> {
+fn unary(p: &mut Parser) -> ParserResult<Node> {
     if let Some(operator) = operator(p, true) && operator.is_unary() {
         p.bump(); // operator
         let expr = unary(p)?;
 
-        let data = SyntaxData::new(
-            Span::of(
-                operator.span,
-                expr.data.span,
-            )
-        );
-
-        Ok(ast::Node::unary(operator, expr, data))
+        Ok(node::Node::unary(operator, expr))
     } else {
         atom(p)
     }
 }
 
-fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
+fn binary(p: &mut Parser, precedence: Precedence) -> ParserResult<Node> {
     let mut expr = unary(p)?;
 
     while let Some(operator) = operator(p, false) && operator.precedence() >= precedence
@@ -162,14 +181,7 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
         let rexpr = binary(p, precedence)?;
         let lexpr = expr;
 
-        let data = SyntaxData::new(
-            Span::of(
-                lexpr.data.span,
-                rexpr.data.span,
-            )
-        );
-
-        expr = ast::Node::binary(operator, lexpr, rexpr, data);
+        expr = node::Node::binary(operator, lexpr, rexpr);
     }
 
     Ok(expr)
@@ -214,22 +226,22 @@ fn newline(p: &mut Parser) {
     maybe(p, NewLine);
 }
 
-fn endline(p: &mut Parser) -> Result<()> {
+fn endline(p: &mut Parser) -> ParserResult<()> {
     if p.at(NewLine) || p.at(EOF) {
         p.bump();
+        Ok(())
     } else {
-        error!(unexpected(&[NewLine]), p.span());
+        p.fail(unexpected(&[NewLine]))
     }
-    Ok(())
 }
 
-fn token(p: &mut Parser, kind: TokenKind) -> Result<Span> {
+fn token(p: &mut Parser, kind: TokenKind) -> ParserResult<Span> {
     let span = p.span();
     if p.at(kind) {
         p.bump();
         Ok(span)
     } else {
-        error!(unexpected(&[kind]), span);
+        p.fail(unexpected(&[kind]))
     }
 }
 
@@ -242,9 +254,9 @@ fn maybe(p: &mut Parser, kind: TokenKind) -> bool {
     }
 }
 
-fn comma<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> Result<Vec<T>>
+fn comma<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> ParserResult<Vec<T>>
 where
-    F: FnMut(&mut Parser) -> Result<T>,
+    F: FnMut(&mut Parser) -> ParserResult<T>,
 {
     let mut res = vec![];
 
@@ -261,9 +273,9 @@ where
     Ok(res)
 }
 
-fn many<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> Result<Vec<T>>
+fn many<F, T>(p: &mut Parser, until: TokenKind, mut parse: F) -> ParserResult<Vec<T>>
 where
-    F: FnMut(&mut Parser) -> Result<T>,
+    F: FnMut(&mut Parser) -> ParserResult<T>,
 {
     let mut res = vec![];
 

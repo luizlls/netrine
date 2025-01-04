@@ -1,23 +1,53 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::span::Span;
+use crate::error::Diagnostics;
+use crate::source::{SourceId, Span};
+use crate::types::{TypeId, TYPE_UNKNOWN};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node<T> {
-    pub kind: NodeKind<T>,
-    pub data: T,
+#[derive(Debug, Clone)]
+pub struct Module {
+    pub source_id: SourceId,
+    pub nodes: Vec<Node>,
+    pub diagnostics: Diagnostics,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NodeKind<T> {
-    Unary(Unary<T>),
-    Binary(Binary<T>),
-    Group(Group<T>),
+impl Module {
+    pub fn new(source_id: SourceId, nodes: Vec<Node>, diagnostics: Diagnostics) -> Module {
+        Module {
+            source_id,
+            nodes,
+            diagnostics,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Node {
+    pub kind: NodeKind,
+    pub span: Span,
+    pub type_id: TypeId,
+}
+
+#[derive(Debug, Clone)]
+pub enum NodeKind {
+    Unary(Unary),
+    Binary(Binary),
+    Group(Group),
     Number(Literal),
     Integer(Literal),
 }
 
-impl<T> Display for Node<T> {
+impl Node {
+    pub fn new(kind: NodeKind, span: Span) -> Node {
+        Node {
+            kind,
+            span,
+            type_id: TYPE_UNKNOWN,
+        }
+    }
+}
+
+impl Display for Node {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match &self.kind {
             NodeKind::Unary(unary) => write!(f, "{}", unary),
@@ -29,88 +59,93 @@ impl<T> Display for Node<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Unary<T> {
-    pub op: Operator,
-    pub expr: Box<Node<T>>,
+#[derive(Debug, Clone)]
+pub struct Unary {
+    pub operator: Operator,
+    pub expr: Box<Node>,
 }
 
-impl<T> Node<T> {
-    pub fn unary(op: Operator, expr: Node<T>, data: T) -> Node<T> {
-        Node {
-            kind: NodeKind::Unary(Unary {
-                op,
+impl Node {
+    pub fn unary(operator: Operator, expr: Node) -> Node {
+        let span = Span::of(operator.span, expr.span);
+
+        Node::new(
+            NodeKind::Unary(Unary {
+                operator,
                 expr: Box::new(expr),
             }),
-            data,
-        }
+            span,
+        )
     }
 }
 
-impl<T> Display for Unary<T> {
+impl Display for Unary {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "({} {})", self.op, self.expr)
+        write!(f, "({} {})", self.operator, self.expr)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Binary<T> {
-    pub op: Operator,
-    pub lexpr: Box<Node<T>>,
-    pub rexpr: Box<Node<T>>,
+#[derive(Debug, Clone)]
+pub struct Binary {
+    pub operator: Operator,
+    pub lexpr: Box<Node>,
+    pub rexpr: Box<Node>,
 }
 
-impl<T> Node<T> {
-    pub fn binary(op: Operator, lexpr: Node<T>, rexpr: Node<T>, data: T) -> Node<T> {
-        Node {
-            kind: NodeKind::Binary(Binary {
-                op,
+impl Node {
+    pub fn binary(operator: Operator, lexpr: Node, rexpr: Node) -> Node {
+        let span = Span::of(lexpr.span, rexpr.span);
+
+        Node::new(
+            NodeKind::Binary(Binary {
+                operator,
                 lexpr: Box::new(lexpr),
                 rexpr: Box::new(rexpr),
             }),
-            data,
-        }
+            span,
+        )
     }
 }
 
-impl<T> Display for Binary<T> {
+impl Display for Binary {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "({} {} {})", self.op, self.lexpr, self.rexpr)
+        write!(f, "({} {} {})", self.operator, self.lexpr, self.rexpr)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Group<T> {
-    pub inner: Box<Node<T>>,
+#[derive(Debug, Clone)]
+pub struct Group {
+    pub inner: Box<Node>,
 }
 
-impl<T> Node<T> {
-    pub fn group(inner: Node<T>, data: T) -> Node<T> {
-        Node {
-            kind: NodeKind::Group(Group {
+impl Node {
+    pub fn group(inner: Node, span: Span) -> Node {
+        Node::new(
+            NodeKind::Group(Group {
                 inner: Box::new(inner),
             }),
-            data,
-        }
+            span,
+        )
     }
 }
 
-impl<T> Display for Group<T> {
+impl Display for Group {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.inner)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Literal {
     pub value: String,
 }
 
-impl<T> Node<T> {
-    pub fn literal(value: String, ctor: fn(Literal) -> NodeKind<T>, data: T) -> Node<T> {
+impl Node {
+    pub fn literal(value: String, ctor: fn(Literal) -> NodeKind, span: Span) -> Node {
         Node {
             kind: ctor(Literal { value }),
-            data,
+            span,
+            type_id: TYPE_UNKNOWN,
         }
     }
 }
@@ -121,13 +156,13 @@ impl Display for Literal {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Operator {
     pub kind: OperatorKind,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub enum OperatorKind {
     Is,    // is
     In,    // in

@@ -1,6 +1,5 @@
-use crate::error::{error, Error, Result};
 use crate::ir::*;
-use crate::syntax;
+use crate::node::{Module, Node};
 
 struct Lower {
     blocks: Vec<Block>,
@@ -20,14 +19,14 @@ impl Lower {
     }
 }
 
-pub fn lower(syntax: &[syntax::Node]) {
+pub fn lower(module: &Module) {
     let mut lower = Lower::new();
 
-    for node in syntax {
+    for node in &module.nodes {
         lower_node(&mut lower, node);
     }
 }
 
-fn lower_node(l: &mut Lower, syntax: &syntax::Node) {
+fn lower_node(l: &mut Lower, node: &Node) {
     todo!()
 }
