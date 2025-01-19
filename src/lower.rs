@@ -1,4 +1,4 @@
-use crate::ir::*;
+use crate::mir::*;
 use crate::ast::Node;
 
 struct Lower {

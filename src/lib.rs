@@ -1,13 +1,15 @@
 #![feature(let_chains)]
 #![feature(box_patterns)]
 
+mod ast;
 mod error;
+mod hir;
 mod infer;
-mod ir;
 mod lexer;
 mod lower;
-mod ast;
+mod mir;
 mod parser;
+mod resolve;
 mod source;
 mod state;
 mod token;
