@@ -25,8 +25,8 @@ impl<'l> Lexer<'l> {
             index: 0,
             start: 0,
         };
-        lexer.curr = lexer.nth(0);
-        lexer.peek = lexer.nth(1);
+        lexer.curr = lexer.at(0);
+        lexer.peek = lexer.at(1);
         lexer
     }
 
@@ -37,12 +37,12 @@ impl<'l> Lexer<'l> {
     fn bump(&mut self) -> u8 {
         self.index += 1;
         self.curr = self.peek;
-        self.peek = self.nth(self.index + 1);
+        self.peek = self.at(self.index + 1);
         self.curr
     }
 
-    fn nth(&self, idx: usize) -> u8 {
-        if self.bytes.len() > idx {
+    fn at(&self, idx: usize) -> u8 {
+        if idx < self.bytes.len() {
             self.bytes[idx]
         } else {
             b'\0'
@@ -75,6 +75,22 @@ impl<'l> Lexer<'l> {
             } else {
                 break;
             }
+        }
+    }
+}
+
+impl Iterator for Lexer<'_> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let kind = kind(self);
+        if kind != EOF {
+            Some(Token {
+                kind,
+                span: self.span(),
+            })
+        } else {
+            None
         }
     }
 }
@@ -245,20 +261,6 @@ fn newline(l: &mut Lexer) -> TokenKind {
         l.trivia();
     }
     NewLine
-}
-
-pub fn tokens(src: &str) -> Vec<Token> {
-    let mut lexer = Lexer::new(src);
-    let mut tokens = vec![];
-
-    while let kind = kind(&mut lexer) && kind != EOF {
-        tokens.push(Token {
-            kind,
-            span: lexer.span(),
-        });
-    }
-
-    tokens
 }
 
 #[cfg(test)]

@@ -1,31 +1,11 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::error::Diagnostics;
-use crate::source::{SourceId, Span};
-use crate::types::{TypeId, TYPE_UNKNOWN};
-
-#[derive(Debug, Clone)]
-pub struct Module {
-    pub source_id: SourceId,
-    pub nodes: Vec<Node>,
-    pub diagnostics: Diagnostics,
-}
-
-impl Module {
-    pub fn new(source_id: SourceId, nodes: Vec<Node>, diagnostics: Diagnostics) -> Module {
-        Module {
-            source_id,
-            nodes,
-            diagnostics,
-        }
-    }
-}
+use crate::source::Span;
 
 #[derive(Debug, Clone)]
 pub struct Node {
     pub kind: NodeKind,
     pub span: Span,
-    pub type_id: TypeId,
 }
 
 #[derive(Debug, Clone)]
@@ -35,16 +15,6 @@ pub enum NodeKind {
     Group(Group),
     Number(Literal),
     Integer(Literal),
-}
-
-impl Node {
-    pub fn new(kind: NodeKind, span: Span) -> Node {
-        Node {
-            kind,
-            span,
-            type_id: TYPE_UNKNOWN,
-        }
-    }
 }
 
 impl Display for Node {
@@ -65,20 +35,6 @@ pub struct Unary {
     pub expr: Box<Node>,
 }
 
-impl Node {
-    pub fn unary(operator: Operator, expr: Node) -> Node {
-        let span = Span::of(operator.span, expr.span);
-
-        Node::new(
-            NodeKind::Unary(Unary {
-                operator,
-                expr: Box::new(expr),
-            }),
-            span,
-        )
-    }
-}
-
 impl Display for Unary {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "({} {})", self.operator, self.expr)
@@ -92,21 +48,6 @@ pub struct Binary {
     pub rexpr: Box<Node>,
 }
 
-impl Node {
-    pub fn binary(operator: Operator, lexpr: Node, rexpr: Node) -> Node {
-        let span = Span::of(lexpr.span, rexpr.span);
-
-        Node::new(
-            NodeKind::Binary(Binary {
-                operator,
-                lexpr: Box::new(lexpr),
-                rexpr: Box::new(rexpr),
-            }),
-            span,
-        )
-    }
-}
-
 impl Display for Binary {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "({} {} {})", self.operator, self.lexpr, self.rexpr)
@@ -118,17 +59,6 @@ pub struct Group {
     pub inner: Box<Node>,
 }
 
-impl Node {
-    pub fn group(inner: Node, span: Span) -> Node {
-        Node::new(
-            NodeKind::Group(Group {
-                inner: Box::new(inner),
-            }),
-            span,
-        )
-    }
-}
-
 impl Display for Group {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.inner)
@@ -138,16 +68,6 @@ impl Display for Group {
 #[derive(Debug, Clone)]
 pub struct Literal {
     pub value: String,
-}
-
-impl Node {
-    pub fn literal(value: String, ctor: fn(Literal) -> NodeKind, span: Span) -> Node {
-        Node {
-            kind: ctor(Literal { value }),
-            span,
-            type_id: TYPE_UNKNOWN,
-        }
-    }
 }
 
 impl Display for Literal {

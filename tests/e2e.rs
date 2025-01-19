@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use netrine::{Source, SourceId};
+use netrine::{Source, Parser};
 
 fn test_one(base: &str, path: PathBuf) {
     let file_name = path
@@ -13,15 +13,14 @@ fn test_one(base: &str, path: PathBuf) {
     let source = fs::read_to_string(&path).expect("Could not read file");
 
     let mut cases = Vec::new();
-    let mut lines = source.lines().peekable();
 
+    let mut lines = source.lines().peekable();
     while let Some(line) = lines.next() {
         if !line.starts_with("//") && !line.contains("test:") {
             continue;
         }
 
         let mut input = String::new();
-        let mut output = String::new();
         let test_name = line.split_once("test:").expect("Invalid test comment").1.trim();
 
         while let Some(line) = lines.next() {
@@ -34,37 +33,42 @@ fn test_one(base: &str, path: PathBuf) {
             }
         }
 
+        let mut output = Vec::new();
+
         while let Some(line) = lines.peek() {
             if line.starts_with("//") && line.contains("test:") {
                 break;
             }
             let line = lines.next().unwrap();
             if !line.is_empty() {
-                output.push_str(line);
-                output.push('\n');
+                output.push(line);
             }
         }
 
         cases.push((
             test_name.to_string(),
             input.trim().to_string(),
-            output.trim().to_string(),
+            output,
         ));
     }
 
     for (test_name, input, output) in cases {
         println!("test {base}::{file_name}::{test_name}");
 
-        let source = Source::new(SourceId(0), "<test>".to_string(), input);
-        let module = netrine::parse(&source);
-    
-        let result = if !module.diagnostics.is_empty() {
-            let mut buffer = String::new();
-            let _ = module.diagnostics.report(&[source], &mut buffer);
-            buffer
-        } else {
-            module.nodes.into_iter().map(|node| format!("{node}")).collect::<Vec<_>>().join("\n")
-        };
+        let source = Source::new("<test>".to_string(), input);
+        let parser = Parser::new(&source);
+        
+        let mut result = Vec::new();
+
+        for node in parser {
+            match node {
+                Ok(node) => result.push(format!("{node}")),
+                Err(error) => result.push(format!("{error}")),
+            }
+        }
+
+        let output = output.join("\n");
+        let result = result.join("\n");
 
         if result != output {
             println!("Test failed: {base}::{file_name}::{test_name}");

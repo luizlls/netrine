@@ -6,7 +6,7 @@ mod infer;
 mod ir;
 mod lexer;
 mod lower;
-mod node;
+mod ast;
 mod parser;
 mod source;
 mod state;
@@ -14,5 +14,5 @@ mod token;
 mod types;
 
 pub use source::*;
-pub use node::*;
-pub use parser::parse;
+pub use ast::*;
+pub use parser::Parser;

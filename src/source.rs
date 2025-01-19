@@ -4,15 +4,13 @@ use std::usize;
 
 #[derive(Debug, Clone)]
 pub struct Source {
-    pub source_id: SourceId,
     pub file_path: String,
     pub content: String,
 }
 
 impl Source {
-    pub fn new(source_id: SourceId, file_path: String, content: String) -> Source {
+    pub fn new(file_path: String, content: String) -> Source {
         Source {
-            source_id,
             file_path,
             content,
         }
@@ -22,20 +20,6 @@ impl Source {
         &self.content[span.range()]
     }
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SourceId(pub usize);
-
-impl SourceId {
-    pub fn index(self) -> usize {
-        self.0
-    }
-
-    pub fn default() -> SourceId {
-        SourceId(usize::MAX)
-    }
-}
-
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Default, Hash)]
 pub struct Span {

@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use crate::source::{SourceId, Span};
+use crate::source::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypeId(pub usize);
@@ -20,15 +20,13 @@ pub const TYPE_INTEGER: TypeId = TypeId(3);
 pub struct Type {
     pub kind: TypeKind,
     pub span: Span,
-    pub source_id: SourceId,
 }
 
 impl Type {
-    pub fn new(kind: TypeKind, span: Span, source_id: SourceId) -> Type {
+    pub fn new(kind: TypeKind, span: Span) -> Type {
         Type {
             kind,
             span,
-            source_id,
         }
     }
 }
@@ -42,9 +40,9 @@ pub enum TypeKind {
 impl Type {
     pub fn builtin() -> [Type; 3] {
         [
-            Type::new(TypeKind::Unknown, Span::default(), SourceId::default()),
-            Type::new(TypeKind::Named("Integer".to_string()), Span::default(), SourceId::default()),
-            Type::new(TypeKind::Named("Number".to_string()), Span::default(), SourceId::default()),
+            Type::new(TypeKind::Unknown, Span::default()),
+            Type::new(TypeKind::Named("Integer".to_string()), Span::default()),
+            Type::new(TypeKind::Named("Number".to_string()), Span::default()),
         ]
     }
 }
