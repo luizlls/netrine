@@ -67,8 +67,8 @@ fn test_one(base: &str, path: PathBuf) {
             }
         }
 
-        let output = output.join("\n");
-        let result = result.join("\n");
+        let output = output.join("\n").trim().to_string();
+        let result = result.join("\n").trim().to_string();
 
         if result != output {
             println!("Test failed: {base}::{file_name}::{test_name}");

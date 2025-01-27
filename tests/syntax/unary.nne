@@ -1,22 +1,28 @@
 // test: not
 not 1
 --
-(not 1)
+UNARY (NOT) 0..5
+  INTEGER (1) 4..5
 
 
 // test: negative
 -10
 --
-(neg 10)
+UNARY (NEG) 0..3
+  INTEGER (10) 1..3
 
 
 // test: negative complex
 1 - -10
 --
-(sub 1 (neg 10))
+BINARY (SUB) 0..7
+  INTEGER (1) 0..1
+  UNARY (NEG) 4..7
+    INTEGER (10) 5..7
 
 
 // test: positive
 +1
 --
-(pos 1)
+UNARY (POS) 0..2
+  INTEGER (1) 1..2

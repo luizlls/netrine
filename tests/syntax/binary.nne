@@ -1,16 +1,32 @@
 // test: basic
 1 + 1
 --
-(add 1 1)
+BINARY (ADD) 0..5
+  INTEGER (1) 0..1
+  INTEGER (1) 4..5
 
 
 // test: integers and floats
 3.14 ^ 2
 --
-(exp 3.14 2)
+BINARY (EXP) 0..8
+  NUMBER (3.14) 0..4
+  INTEGER (2) 7..8
 
 
 // test: operator precedence
 1 + 2 - 3 * 4 / 5 ^ 2 ^ 2
 --
-(sub (add 1 2) (div (mul 3 4) (exp 5 (exp 2 2))))
+BINARY (SUB) 0..25
+  BINARY (ADD) 0..5
+    INTEGER (1) 0..1
+    INTEGER (2) 4..5
+  BINARY (DIV) 8..25
+    BINARY (MUL) 8..13
+      INTEGER (3) 8..9
+      INTEGER (4) 12..13
+    BINARY (EXP) 16..25
+      INTEGER (5) 16..17
+      BINARY (EXP) 20..25
+        INTEGER (2) 20..21
+        INTEGER (2) 24..25

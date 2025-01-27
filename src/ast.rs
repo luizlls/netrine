@@ -19,13 +19,36 @@ pub enum NodeKind {
 
 impl Display for Node {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match &self.kind {
-            NodeKind::Unary(unary) => write!(f, "{}", unary),
-            NodeKind::Binary(binary) => write!(f, "{}", binary),
-            NodeKind::Group(group) => write!(f, "({})", group),
-            NodeKind::Number(literal)
-          | NodeKind::Integer(literal) => write!(f, "{}", literal),
+        fn write(f: &mut Formatter, node: &Node, depth: usize) -> fmt::Result {
+
+            write!(f, "{}", " ".repeat(depth))?;
+
+            match &node.kind {
+                NodeKind::Unary(unary) => {
+                    writeln!(f, "UNARY ({}) {}", format!("{}", unary.operator).to_uppercase(), node.span)?;
+                    write(f, &unary.expr, depth + 2)?;
+                }
+                NodeKind::Binary(binary) => {
+                    writeln!(f, "BINARY ({}) {}", format!("{}", binary.operator).to_uppercase(), node.span)?;
+                    write(f, &binary.lexpr, depth + 2)?;
+                    write(f, &binary.rexpr, depth + 2)?;
+                }
+                NodeKind::Group(group) => {
+                    writeln!(f, "GROUP {}", node.span)?;
+                    write(f, &group.inner, depth + 2)?;
+                }
+                NodeKind::Number(literal) => {
+                    writeln!(f, "NUMBER ({}) {}", literal.value, node.span)?;
+                }
+                NodeKind::Integer(literal) => {
+                    writeln!(f, "INTEGER ({}) {}", literal.value, node.span)?;
+              }
+            }
+
+            Ok(())
         }
+
+        write(f, self, 0)
     }
 }
 
