@@ -1,15 +1,7 @@
 use std::fmt;
 
-use crate::source::Span;
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-pub enum TokenKind {
+pub enum Token {
     #[default]
     EOF,
     NewLine,
@@ -31,13 +23,6 @@ pub enum TokenKind {
     And,
     Or,
     Not,
-    Is,
-    Mut,
-    If,
-    Else,
-    Case,
-    Where,
-    Import,
 
     Plus,  // +
     Minus, // -
@@ -63,80 +48,73 @@ pub enum TokenKind {
     UnterminatedString,
 }
 
-impl fmt::Display for TokenKind {
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
-            TokenKind::EOF => "end of input",
-            TokenKind::NewLine => "new line",
-            TokenKind::LParen => "(",
-            TokenKind::RParen => ")",
-            TokenKind::LBrace => "{",
-            TokenKind::RBrace => "}",
-            TokenKind::LBracket => "[",
-            TokenKind::RBracket => "]",
-            TokenKind::Dot => ".",
-            TokenKind::Comma => ",",
-            TokenKind::Colon => ":",
-            TokenKind::Semi => ";",
-            TokenKind::Equals => "=",
-            TokenKind::Arrow => "=>",
-            TokenKind::And => "and",
-            TokenKind::Or => "or",
-            TokenKind::Not => "not",
-            TokenKind::Is => "is",
-            TokenKind::Mut => "mut",
-            TokenKind::If => "if",
-            TokenKind::Else => "else",
-            TokenKind::Case => "case",
-            TokenKind::Where => "where",
-            TokenKind::Import => "import",
-            TokenKind::Plus => "+",
-            TokenKind::Minus => "-",
-            TokenKind::Star => "*",
-            TokenKind::Slash => "/",
-            TokenKind::Caret => "^",
-            TokenKind::Mod => "%",
-            TokenKind::EqEq => "==",
-            TokenKind::NoEq => "!=",
-            TokenKind::Lt => "<",
-            TokenKind::LtEq => "<=",
-            TokenKind::Gt => ">",
-            TokenKind::GtEq => ">=",
-            TokenKind::Dots => "..",
-            TokenKind::Identifier => "identifier",
-            TokenKind::Underscore => "_",
-            TokenKind::Number => "number",
-            TokenKind::Integer => "integer",
-            TokenKind::String => "string",
-            TokenKind::UnexpectedCharacter => "unexpected character",
-            TokenKind::UnterminatedString => "unterminated string",
+            Token::EOF => "end of input",
+            Token::NewLine => "new line",
+            Token::LParen => "(",
+            Token::RParen => ")",
+            Token::LBrace => "{",
+            Token::RBrace => "}",
+            Token::LBracket => "[",
+            Token::RBracket => "]",
+            Token::Dot => ".",
+            Token::Comma => ",",
+            Token::Colon => ":",
+            Token::Semi => ";",
+            Token::Equals => "=",
+            Token::Arrow => "=>",
+            Token::And => "and",
+            Token::Or => "or",
+            Token::Not => "not",
+            Token::Plus => "+",
+            Token::Minus => "-",
+            Token::Star => "*",
+            Token::Slash => "/",
+            Token::Caret => "^",
+            Token::Mod => "%",
+            Token::EqEq => "==",
+            Token::NoEq => "!=",
+            Token::Lt => "<",
+            Token::LtEq => "<=",
+            Token::Gt => ">",
+            Token::GtEq => ">=",
+            Token::Dots => "..",
+            Token::Identifier => "identifier",
+            Token::Underscore => "_",
+            Token::Number => "number",
+            Token::Integer => "integer",
+            Token::String => "string",
+            Token::UnexpectedCharacter => "unexpected character",
+            Token::UnterminatedString => "unterminated string",
         };
         write!(f, "{description}")
     }
 }
 
 impl Token {
-    pub fn is(self, kind: TokenKind) -> bool {
-        self.kind == kind
+    pub fn is(self, kind: Token) -> bool {
+        self == kind
     }
 
     pub fn non_terminal(self) -> bool {
         matches!(
-            self.kind,
-            TokenKind::Dot
-          | TokenKind::Plus
-          | TokenKind::Minus
-          | TokenKind::Star
-          | TokenKind::Slash
-          | TokenKind::Mod
-          | TokenKind::Caret
-          | TokenKind::EqEq
-          | TokenKind::NoEq
-          | TokenKind::Lt
-          | TokenKind::LtEq
-          | TokenKind::Gt
-          | TokenKind::GtEq
-          | TokenKind::Dots
+            self,
+            Token::Dot
+          | Token::Plus
+          | Token::Minus
+          | Token::Star
+          | Token::Slash
+          | Token::Mod
+          | Token::Caret
+          | Token::EqEq
+          | Token::NoEq
+          | Token::Lt
+          | Token::LtEq
+          | Token::Gt
+          | Token::GtEq
+          | Token::Dots
         )
     }
 }

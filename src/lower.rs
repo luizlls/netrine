@@ -1,5 +1,5 @@
 use crate::mir::*;
-use crate::ast::Node;
+use crate::syntax::Node;
 
 struct Lower {
     blocks: Vec<Block>,

@@ -1,7 +1,7 @@
 #![feature(let_chains)]
 #![feature(box_patterns)]
 
-mod ast;
+mod syntax;
 mod error;
 mod lexer;
 mod lower;
@@ -11,5 +11,5 @@ mod source;
 mod token;
 
 pub use source::*;
-pub use ast::*;
+pub use syntax::*;
 pub use parser::Parser;
