@@ -27,15 +27,19 @@ pub struct Span {
     pub end: u32,
 }
 
+pub trait ToSpan {
+    fn span(&self) -> Span;
+}
+
 impl Span {
     pub fn new(start: u32, end: u32) -> Span {
         Span { start, end }
     }
 
-    pub fn of(from: Span, to: Span) -> Span {
+    pub fn of(from: &impl ToSpan, to: &impl ToSpan) -> Span {
         Span {
-            start: from.start,
-            end: to.end,
+            start: from.span().start,
+            end: to.span().end,
         }
     }
 }
@@ -55,5 +59,11 @@ impl From<Span> for Range<usize> {
 impl Span {
     pub fn range(self) -> Range<usize> {
         (self.start as usize)..(self.end as usize)
+    }
+}
+
+impl ToSpan for Span {
+    fn span(&self) -> Span {
+        *self
     }
 }
