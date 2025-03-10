@@ -26,10 +26,12 @@ impl Display for Error {
 }
 
 impl Error {
-    pub fn report(&self, source: &Source, buf: &mut String) -> fmt::Result {
+    pub fn report(&self, source: &Source) -> Result<String, std::fmt::Error> {
+        let mut buf = String::new();
 
         let Some(Span { start, end }) = self.span else {
-            return writeln!(buf, "error: {}\n", self.error);
+            writeln!(buf, "error: {}\n", self.error)?;
+            return Ok(buf);
         };
 
         let Source {
@@ -76,7 +78,9 @@ impl Error {
         writeln!(buf, "{number_padding} |")?;
 
         writeln!(buf, "\n")?;
-        writeln!(buf, "error: could not compile {file_path}")
+        writeln!(buf, "error: could not compile {file_path}")?;
+
+        Ok(buf)
     }
 
     fn find_line(source: &str, position: usize) -> (usize, usize) {

@@ -12,4 +12,5 @@ mod token;
 
 pub use source::*;
 pub use syntax::*;
-pub use parser::Parser;
+pub use lexer::tokens;
+pub use parser::parse;

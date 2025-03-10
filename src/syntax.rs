@@ -3,16 +3,10 @@ use std::fmt::{self, Display, Formatter};
 use crate::source::{Span, ToSpan};
 
 #[derive(Debug, Clone)]
-pub struct Node {
-    pub kind: NodeKind,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub enum NodeKind {
-    Binary(Operator, Box<Node>, Box<Node>),
-    Unary(Operator, Box<Node>),
-    Group(Box<Node>),
+pub enum Node {
+    Unary(Box<Unary>),
+    Binary(Box<Binary>),
+    Group(Box<Group>),
     Number(Literal),
     Integer(Literal),
 }
@@ -23,24 +17,24 @@ impl Display for Node {
 
             write!(f, "{}", " ".repeat(depth))?;
 
-            match &node.kind {
-                NodeKind::Unary(operator, expr) => {
-                    writeln!(f, "UNARY ({}) {}", format!("{}", operator).to_uppercase(), node.span)?;
-                    write(f, expr, depth + 2)?;
+            match &node {
+                Node::Unary(unary) => {
+                    writeln!(f, "UNARY ({}) {}", format!("{}", unary.operator).to_uppercase(), unary.span)?;
+                    write(f, &unary.expr, depth + 2)?;
                 }
-                NodeKind::Binary(operator, lexpr, rexpr) => {
-                    writeln!(f, "BINARY ({}) {}", format!("{}", operator).to_uppercase(), node.span)?;
-                    write(f, lexpr, depth + 2)?;
-                    write(f, rexpr, depth + 2)?;
+                Node::Binary(binary) => {
+                    writeln!(f, "BINARY ({}) {}", format!("{}", binary.operator).to_uppercase(), binary.span)?;
+                    write(f, &binary.lexpr, depth + 2)?;
+                    write(f, &binary.rexpr, depth + 2)?;
                 }
-                NodeKind::Group(inner) => {
-                    writeln!(f, "GROUP {}", node.span)?;
-                    write(f, &inner, depth + 2)?;
+                Node::Group(group) => {
+                    writeln!(f, "GROUP {}", group.span)?;
+                    write(f, &group.inner, depth + 2)?;
                 }
-                NodeKind::Number(literal) => {
+                Node::Number(literal) => {
                     writeln!(f, "NUMBER ({}) {}", literal.value, literal.span)?;
                 }
-                NodeKind::Integer(literal) => {
+                Node::Integer(literal) => {
                     writeln!(f, "INTEGER ({}) {}", literal.value, literal.span)?;
               }
             }
@@ -54,8 +48,35 @@ impl Display for Node {
 
 impl ToSpan for Node {
     fn span(&self) -> Span {
-        self.span
+        match self {
+            Node::Unary(unary) => unary.span,
+            Node::Binary(binary) => binary.span,
+            Node::Group(group) => group.span,
+            Node::Number(literal) => literal.span,
+            Node::Integer(literal) => literal.span,
+        }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Unary {
+    pub operator: Operator,
+    pub expr: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Binary {
+    pub operator: Operator,
+    pub lexpr: Node,
+    pub rexpr: Node,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Group {
+    pub inner: Node,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +89,15 @@ pub struct Literal {
 pub struct Operator {
     pub kind: OperatorKind,
     pub span: Span,
+}
+
+impl Operator {
+    pub fn new(kind: OperatorKind, span: Span) -> Operator {
+        Operator {
+            kind,
+            span,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -104,14 +134,6 @@ pub enum Associativity {
 }
 
 impl Operator {
-    pub fn new(kind: OperatorKind, span: Span) -> Operator {
-        Operator { kind, span }
-    }
-
-    pub fn is_unary(self) -> bool {
-        matches!(self.kind, OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not)
-    }
-
     pub fn precedence(self) -> Precedence {
         match self.kind {
             OperatorKind::Pos

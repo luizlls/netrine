@@ -1,55 +1,40 @@
 use crate::syntax::{
-    Node, NodeKind, Operator, OperatorKind, Precedence, Associativity, Literal,
+    Node, Unary, Binary, Group, Operator, OperatorKind, Precedence, Associativity, Literal,
 };
 use crate::error::{Error, Result};
-use crate::lexer::Lexer;
 use crate::source::{Source, Span};
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
 pub struct Parser<'p> {
     source: &'p Source,
-    lexer: Lexer<'p>,
+    tokens: &'p [Token],
     token: Token,
-    prev:  Token,
-    peek:  Token,
+    index: usize,
 }
 
 impl<'p> Parser<'p> {
-    pub fn new(source: &'p Source) -> Parser<'p> {
-        let lexer = Lexer::new(&source.content);
+    fn new(source: &'p Source, tokens: &'p [Token]) -> Parser<'p> {
         Parser {
             source,
-            lexer,
-            token: Default::default(),
-            prev:  Default::default(),
-            peek:  Default::default(),
+            tokens,
+            token: tokens.first().copied().unwrap_or_default(),
+            index: 0,
         }
-        .init()
-    }
-
-    fn init(mut self) -> Parser<'p> {
-        self.bump();
-        self.bump();
-        self
     }
 
     fn bump(&mut self) {
-        self.prev = self.token;
-        self.token = self.peek;
-        self.peek = self.lexer.next().unwrap_or_default();
+        self.index += 1;
+        self.token = self.nth(self.index);
     }
 
-    fn kind(&self) -> TokenKind {
-        self.token.kind
+    fn nth(&self, index: usize) -> Token {
+        self.tokens.get(index).copied().unwrap_or_default()
     }
 
-    fn span(&self) -> Span {
-        self.token.span
-    }
-
-    fn done(&self, start: Span) -> Span {
-        Span::of(&start, &self.prev)
+    fn span(&self, start: Span) -> Span {
+        let prev = self.nth(self.index.saturating_sub(1));
+        Span::of(&start, &prev)
     }
 
     fn at(&self, kind: TokenKind) -> bool {
@@ -61,7 +46,7 @@ impl<'p> Parser<'p> {
     }
 
     fn fail<T>(&mut self, error: std::string::String) -> Result<T> {
-        let span = self.span();
+        let span = self.token.span;
         self.recover();
         Err(Error::new(error, span))
     }
@@ -71,16 +56,15 @@ impl<'p> Parser<'p> {
     }
 }
 
-impl Iterator for Parser<'_> {
-    type Item = Result<Node>;
+pub fn parse(source: &Source, tokens: &[Token]) -> Result<Vec<Node>> {
+    let mut parser = Parser::new(source, tokens);
+    let mut nodes = vec![];
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.at(TokenKind::EOF) {
-            None
-        } else {
-            Some(expr(self))
-        }
+    while !parser.at(TokenKind::EOF) {
+        nodes.push(expr(&mut parser)?);
     }
+
+    Ok(nodes)
 }
 
 fn expr(p: &mut Parser) -> Result<Node> {
@@ -88,12 +72,12 @@ fn expr(p: &mut Parser) -> Result<Node> {
 }
 
 fn atom(p: &mut Parser) -> Result<Node> {
-    match p.kind() {
+    match p.token.kind {
         TokenKind::Number => number(p),
         TokenKind::Integer => integer(p),
         TokenKind::LParen => parens(p),
         _ => p.fail(
-            match p.kind() {
+            match p.token.kind {
                 TokenKind::UnexpectedCharacter => "unexpected character",
                 TokenKind::UnterminatedString => "unterminated string",
                 _ => "unexpected expression",
@@ -103,47 +87,45 @@ fn atom(p: &mut Parser) -> Result<Node> {
     }
 }
 
-fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
+fn literal(p: &mut Parser, kind: TokenKind, ctor: fn(Literal) -> Node) -> Result<Node> {
     let span = token(p, kind)?;
+    let value = p.slice(span).to_string();
 
-    Ok(node(ctor(Literal {
-        value: p.slice(span).to_string(),
-        span,
-    }), span))
+    Ok(ctor(Literal { value, span }.into()))
 }
 
 fn number(p: &mut Parser) -> Result<Node> {
-    literal(p, TokenKind::Number, NodeKind::Number)
+    literal(p, TokenKind::Number, Node::Number)
 }
 
 fn integer(p: &mut Parser) -> Result<Node> {
-    literal(p, TokenKind::Integer, NodeKind::Integer)
+    literal(p, TokenKind::Integer, Node::Integer)
 }
 
 fn parens(p: &mut Parser) -> Result<Node> {
-    let start = p.span();
+    let start = p.token.span;
 
     token(p, TokenKind::LParen)?;
     let inner = expr(p)?;
     token(p, TokenKind::RParen)?;
 
-    let span = p.done(start);
+    let span = p.span(start);
 
-    Ok(node(
-        NodeKind::Group(Box::new(inner)),
-        span,
-    ))
+    Ok(Node::Group(Group { inner, span }.into()))
 }
 
 fn unary(p: &mut Parser) -> Result<Node> {
-    if let Some(operator) = operator(p, true) && operator.is_unary() {
-        p.bump(); // operator
-        let expr = unary(p)?;
+
+    if let Some(operator) = operator(p, -1 as Precedence, true) {
+        let expr = atom(p)?;
         let span = Span::of(&operator, &expr);
 
-        Ok(node(
-            NodeKind::Unary(operator, Box::new(expr)),
-            span,
+        Ok(Node::Unary(
+            Unary {
+                operator,
+                expr,
+                span,
+            }.into()
         ))
     } else {
         atom(p)
@@ -153,9 +135,7 @@ fn unary(p: &mut Parser) -> Result<Node> {
 fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
     let mut expr = unary(p)?;
 
-    while let Some(operator) = operator(p, false) && operator.precedence() >= precedence {
-        p.bump(); // operator
-
+    while let Some(operator) = operator(p, precedence, false) {
         let precedence = match operator.associativity() {
             Associativity::None
           | Associativity::Left => operator.precedence() + 1,
@@ -166,25 +146,30 @@ fn binary(p: &mut Parser, precedence: Precedence) -> Result<Node> {
         let lexpr = expr;
         let span = Span::of(&lexpr, &rexpr);
 
-        expr = node(
-            NodeKind::Binary(operator, Box::new(lexpr), Box::new(rexpr)),
-            span,
+        expr = Node::Binary(
+            Binary {
+                operator,
+                lexpr,
+                rexpr,
+                span,
+            }.into()
         );
     }
 
     Ok(expr)
 }
 
-fn operator(p: &mut Parser, unary: bool) -> Option<Operator> {
+fn operator(p: &mut Parser, precedence: Precedence, unary: bool) -> Option<Operator> {
+    let span = p.token.span;
     let kind = if unary {
-        match p.kind() {
+        match p.token.kind {
             TokenKind::Plus  => OperatorKind::Pos,
             TokenKind::Minus => OperatorKind::Neg,
             TokenKind::Not   => OperatorKind::Not,
             _ => return None
         }
     } else {
-        match p.kind() {
+        match p.token.kind {
            TokenKind::Plus  => OperatorKind::Add,
            TokenKind::Minus => OperatorKind::Sub,
            TokenKind::Star  => OperatorKind::Mul,
@@ -204,15 +189,13 @@ fn operator(p: &mut Parser, unary: bool) -> Option<Operator> {
        }
     };
 
-    let span = p.span();
+    let operator = Operator::new(kind, span);
 
-    Some(Operator { kind, span })
-}
-
-fn node(kind: NodeKind, span: Span) -> Node {
-    Node {
-        kind,
-        span,
+    if operator.precedence() >= precedence {
+        p.bump();
+        Some(operator)
+    } else {
+        None
     }
 }
 
@@ -230,7 +213,7 @@ fn endline(p: &mut Parser) -> Result<()> {
 }
 
 fn token(p: &mut Parser, kind: TokenKind) -> Result<Span> {
-    let span = p.span();
+    let span = p.token.span;
     if p.at(kind) {
         p.bump();
         Ok(span)

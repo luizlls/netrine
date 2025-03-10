@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::fs;
 use std::io::{stdin, stdout, Write};
 
-use netrine::{Source, Parser};
+use netrine::{Source, parse, tokens};
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -50,25 +50,17 @@ fn read_line() -> Result<String, ()> {
 
 fn exec(file_path: String, source: String) {
     let source = Source::new(file_path, source);
-    let parser = Parser::new(&source);
+    let tokens = tokens(&source);
 
-    let mut nodes = Vec::new();
-    let mut errors = String::new();
-
-    for node in parser {
-        match node {
-            Ok(node) => nodes.push(node),
-            Err(error) => {
-                error.report(&source, &mut errors).expect("Failed to report error");
+    match parse(&source, &tokens) {
+        Ok(nodes) => {
+            for node in nodes {
+                println!("{node}");
             }
         }
-    }
-
-    if !errors.is_empty() {
-        eprintln!("{errors}");
-    }
-
-    for node in nodes {
-        println!("{node}");
+        Err(error) => {
+            let error = error.report(&source).expect("Failed to report error");
+            eprintln!("{error}");
+        }
     }
 }
