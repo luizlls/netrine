@@ -2,7 +2,9 @@ use std::path::PathBuf;
 use std::fs;
 use std::io::{stdin, stdout, Write};
 
-use netrine::{Source, parse, tokens};
+use netrine::ir;
+use netrine::source::Source;
+use netrine::syntax;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -50,12 +52,13 @@ fn read_line() -> Result<String, ()> {
 
 fn exec(file_path: String, source: String) {
     let source = Source::new(file_path, source);
-    let tokens = tokens(&source);
+    let nodes = syntax::parse(&source);
+    let blocks = nodes.and_then(|nodes| ir::lower(&nodes));
 
-    match parse(&source, &tokens) {
-        Ok(nodes) => {
-            for node in nodes {
-                println!("{node}");
+    match blocks {
+        Ok(blocks) => {
+            for block in blocks {
+                println!("{block}");
             }
         }
         Err(error) => {

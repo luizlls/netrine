@@ -31,13 +31,6 @@ pub enum TokenKind {
     And,
     Or,
     Not,
-    Is,
-    Mut,
-    If,
-    Else,
-    Case,
-    Where,
-    Import,
 
     Plus,  // +
     Minus, // -
@@ -83,13 +76,6 @@ impl fmt::Display for TokenKind {
             TokenKind::And => "and",
             TokenKind::Or => "or",
             TokenKind::Not => "not",
-            TokenKind::Is => "is",
-            TokenKind::Mut => "mut",
-            TokenKind::If => "if",
-            TokenKind::Else => "else",
-            TokenKind::Case => "case",
-            TokenKind::Where => "where",
-            TokenKind::Import => "import",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
             TokenKind::Star => "*",
