@@ -35,12 +35,10 @@ impl Error {
         };
 
         let Source {
-            content,
-            file_path,
-            ..
+            content, file_path, ..
         } = source;
 
-        let (line, column) = Self::find_line(&content, start as usize);
+        let (line, column) = Self::find_line(content, start as usize);
         let (left, right) = content.split_at(start as usize);
 
         let mut left = left.rsplit('\n');

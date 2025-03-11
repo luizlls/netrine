@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use netrine::{Source, tokens, parse};
+use netrine::source::Source;
+use netrine::syntax;
 
 fn test_one(base: &str, path: PathBuf) {
     let file_name = path
@@ -56,11 +57,9 @@ fn test_one(base: &str, path: PathBuf) {
         println!("test {base}::{file_name}::{test_name}");
 
         let source = Source::new("<test>".to_string(), input);
-        let tokens = tokens(&source);
-        
         let mut result = Vec::new();
 
-        match parse(&source, &tokens) {
+        match syntax::parse(&source) {
             Ok(nodes) => {
                 for node in nodes {
                     result.push(format!("{node}"));
@@ -76,7 +75,7 @@ fn test_one(base: &str, path: PathBuf) {
         let result = result.join("\n").trim().to_string();
 
         if result != output {
-            println!("Test failed: {base}::{file_name}::{test_name}");
+            println!("test failed: {base}::{file_name}::{test_name}");
             println!("left:\n{}", output);
             println!("right:\n{}", result);
             panic!();

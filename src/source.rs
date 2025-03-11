@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::ops::Range;
-use std::usize;
 
 #[derive(Debug, Clone)]
 pub struct Source {
@@ -10,10 +9,7 @@ pub struct Source {
 
 impl Source {
     pub fn new(file_path: String, content: String) -> Source {
-        Source {
-            file_path,
-            content,
-        }
+        Source { file_path, content }
     }
 
     pub fn slice(&self, span: Span) -> &str {

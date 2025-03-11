@@ -12,7 +12,7 @@ pub struct Token {
 pub enum TokenKind {
     #[default]
     EOF,
-    NewLine,
+    EOL,
 
     LParen,
     RParen,
@@ -31,13 +31,6 @@ pub enum TokenKind {
     And,
     Or,
     Not,
-    Is,
-    Mut,
-    If,
-    Else,
-    Case,
-    Where,
-    Import,
 
     Plus,  // +
     Minus, // -
@@ -67,7 +60,7 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
             TokenKind::EOF => "end of input",
-            TokenKind::NewLine => "new line",
+            TokenKind::EOL => "new line",
             TokenKind::LParen => "(",
             TokenKind::RParen => ")",
             TokenKind::LBrace => "{",
@@ -83,13 +76,6 @@ impl fmt::Display for TokenKind {
             TokenKind::And => "and",
             TokenKind::Or => "or",
             TokenKind::Not => "not",
-            TokenKind::Is => "is",
-            TokenKind::Mut => "mut",
-            TokenKind::If => "if",
-            TokenKind::Else => "else",
-            TokenKind::Case => "case",
-            TokenKind::Where => "where",
-            TokenKind::Import => "import",
             TokenKind::Plus => "+",
             TokenKind::Minus => "-",
             TokenKind::Star => "*",
@@ -116,14 +102,10 @@ impl fmt::Display for TokenKind {
 }
 
 impl Token {
-    pub fn is(self, kind: TokenKind) -> bool {
-        self.kind == kind
-    }
-
     pub fn non_terminal(self) -> bool {
         matches!(
             self.kind,
-            TokenKind::Dot
+          | TokenKind::Dot
           | TokenKind::Plus
           | TokenKind::Minus
           | TokenKind::Star
