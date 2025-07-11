@@ -1,23 +1,99 @@
 use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct VariableId(u32);
+pub struct TypeId(pub u32);
+
+impl TypeId {
+    #[inline(always)]
+    pub fn id(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<usize> for TypeId {
+    fn from(i: usize) -> Self {
+        TypeId(i as u32)
+    }
+}
+
+impl Into<usize> for TypeId {
+    fn into(self) -> usize {
+        self.id()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Type {
+    Unknown,
+    Number,
+    Integer,
+    Boolean,
+}
+
+pub const TYPE_UNKNOWN: TypeId = TypeId(0);
+pub const TYPE_NUMBER: TypeId = TypeId(1);
+pub const TYPE_INTEGER: TypeId = TypeId(2);
+pub const TYPE_BOOL: TypeId = TypeId(3);
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct VariableId(pub u32);
 
 impl VariableId {
-    pub fn new(index: u32) -> VariableId {
-        VariableId(index)
+    #[inline(always)]
+    pub fn id(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<usize> for VariableId {
+    fn from(i: usize) -> Self {
+        VariableId(i as u32)
+    }
+}
+
+impl Into<usize> for VariableId {
+    fn into(self) -> usize {
+        self.id()
     }
 }
 
 impl Display for VariableId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "v{}", self.0)
+        write!(f, "v{}", self.id())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub blocks: Vec<Block>,
+    pub functions: Vec<Function>,
+}
+
+impl Display for Module {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for function in &self.functions {
+            writeln!(f, "{function}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub block: Block,
+}
+
+impl Function {
+    pub fn new() -> Function {
+        Function {
+            block: Block::new(),
+        }
+    }
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.block)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -27,9 +103,7 @@ pub struct Block {
 
 impl Block {
     pub fn new() -> Block {
-        Block {
-            instructions: Vec::new(),
-        }
+        Block { instructions: Vec::new() }
     }
 }
 

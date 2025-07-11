@@ -8,8 +8,10 @@ pub use node::*;
 use crate::error::Result;
 use crate::source::Source;
 
-pub fn parse(source: &Source) -> Result<Vec<Node>> {
+pub fn parse(source: &Source) -> Result<Module> {
     let tokens = lexer::tokens(source);
-    let nodes = parser::parse(source, &tokens);
-    nodes
+    let nodes = parser::parse(tokens)?;
+    Ok(Module {
+        nodes,
+    })
 }

@@ -1,29 +1,30 @@
 use crate::error::{Error, Result};
+use crate::mir::{TYPE_INTEGER, TYPE_NUMBER, TYPE_BOOL};
 use crate::syntax::{self, Node, OperatorKind};
 
-use super::node::{Binary, Block, Instruction, Integer, Number, Operator, Unary, VariableId};
+use super::node::{Binary, Instruction, Integer, Function, Module, Number, Operator, Unary, TypeId, VariableId};
 
 struct Lower {
     var_id: u32,
-    block: Block,
+    function: Function,
 }
 
 impl Lower {
     fn new() -> Lower {
         Lower {
             var_id: 0,
-            block: Block::new(),
+            function: Function::new(),
         }
     }
 
     fn variable(&mut self) -> VariableId {
         let var_id = self.var_id;
         self.var_id += 1;
-        VariableId::new(var_id)
+        VariableId(var_id)
     }
 
     fn emit(&mut self, instruction: Instruction) {
-        self.block.instructions.push(instruction);
+        self.function.block.instructions.push(instruction);
     }
 
     fn node(&mut self, node: &Node) -> Result<VariableId> {
@@ -39,12 +40,14 @@ impl Lower {
     fn binary(&mut self, binary: &syntax::Binary) -> Result<VariableId> {
         let loperand = self.node(&binary.lexpr)?;
         let roperand = self.node(&binary.rexpr)?;
+        let operator = self.operator(binary.operator);
+
         let target = self.variable();
 
         self.emit(Instruction::Binary(
             Binary {
                 target,
-                operator: self.operator(binary.operator),
+                operator,
                 loperand,
                 roperand,
             }
@@ -55,12 +58,14 @@ impl Lower {
 
     fn unary(&mut self, unary: &syntax::Unary) -> Result<VariableId> {
         let operand = self.node(&unary.expr)?;
+        let operator = self.operator(unary.operator);
+
         let target = self.variable();
 
         self.emit(Instruction::Unary(
             Unary {
                 target,
-                operator: self.operator(unary.operator),
+                operator,
                 operand,
             }
         ));
@@ -137,8 +142,14 @@ impl Lower {
     }
 }
 
-pub fn lower(node: &Node) -> Result<Block> {
+pub fn lower(module: &syntax::Module) -> Result<Vec<Function>> {
     let mut lower = Lower::new();
-    lower.node(node)?;
-    Ok(lower.block)
+
+    for node in module.nodes.iter() {
+        lower.node(&node)?;
+    }
+
+    Ok(vec![
+        lower.function,
+    ])
 }

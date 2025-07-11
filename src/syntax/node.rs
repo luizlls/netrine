@@ -3,6 +3,20 @@ use std::fmt::{self, Display, Formatter};
 use crate::source::{Span, ToSpan};
 
 #[derive(Debug, Clone)]
+pub struct Module {
+    pub nodes: Vec<Node>,
+}
+
+impl Display for Module {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for node in &self.nodes {
+            writeln!(f, "{node}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Node {
     Unary(Box<Unary>),
     Binary(Box<Binary>),
@@ -29,8 +43,7 @@ impl Display for Node {
             Node::Unary(unary) => write!(f, "{unary}"),
             Node::Binary(binary) => write!(f, "{binary}"),
             Node::Group(group) => write!(f, "{group}"),
-            Node::Number(literal)
-          | Node::Integer(literal) => write!(f, "{literal}"),
+            Node::Number(literal) | Node::Integer(literal) => write!(f, "{literal}"),
         }
     }
 }
@@ -125,21 +138,17 @@ pub enum Associativity {
 impl Operator {
     pub fn precedence(self) -> Precedence {
         match self.kind {
-            OperatorKind::Pos
-          | OperatorKind::Neg
-          | OperatorKind::Not => -1,
+            OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not => -1,
             OperatorKind::Exp => 7,
-            OperatorKind::Mul
-          | OperatorKind::Div => 6,
-            OperatorKind::Add
-          | OperatorKind::Sub => 5,
+            OperatorKind::Mul | OperatorKind::Div => 6,
+            OperatorKind::Add | OperatorKind::Sub => 5,
             OperatorKind::Mod => 4,
             OperatorKind::Lt
-          | OperatorKind::Le
-          | OperatorKind::Gt
-          | OperatorKind::Ge
-          | OperatorKind::Ne
-          | OperatorKind::Eq => 3,
+            | OperatorKind::Le
+            | OperatorKind::Gt
+            | OperatorKind::Ge
+            | OperatorKind::Ne
+            | OperatorKind::Eq => 3,
             OperatorKind::And => 2,
             OperatorKind::Or => 1,
         }
@@ -147,9 +156,7 @@ impl Operator {
 
     pub fn associativity(self) -> Associativity {
         match self.kind {
-            OperatorKind::Pos
-          | OperatorKind::Neg
-          | OperatorKind::Not => Associativity::None,
+            OperatorKind::Pos | OperatorKind::Neg | OperatorKind::Not => Associativity::None,
             OperatorKind::Exp => Associativity::Right,
             _ => Associativity::Left,
         }
