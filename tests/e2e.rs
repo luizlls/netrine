@@ -60,10 +60,8 @@ fn test_one(base: &str, path: PathBuf) {
         let mut result = Vec::new();
 
         match syntax::parse(&source) {
-            Ok(nodes) => {
-                for node in nodes {
-                    result.push(format!("{node}"));
-                }
+            Ok(module) => {
+                result.push(format!("{module}"));
             }
             Err(error) => {
                 let error = error.report(&source).expect("Failed to report error");

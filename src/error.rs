@@ -29,7 +29,8 @@ impl Error {
     pub fn report(&self, source: &Source) -> Result<String, std::fmt::Error> {
         let mut buf = String::new();
 
-        let Some(Span { start, end }) = self.span else {
+        let Some(Span { start, end }) = self.span
+        else {
             writeln!(buf, "error: {}\n", self.error)?;
             return Ok(buf);
         };
@@ -39,39 +40,23 @@ impl Error {
         } = source;
 
         let (line, column) = Self::find_line(content, start as usize);
-        let (left, right) = content.split_at(start as usize);
+        let (before, after) = content.split_at(start as usize);
 
-        let mut left = left.rsplit('\n');
-        let left_main = left.next().unwrap();
-        let mut right = right.split('\n');
-        let right_main = right.next().unwrap();
+        let before = before.rsplit('\n').next().unwrap();
+        let after = after.split('\n').next().unwrap();
 
-        let padding_length = (line + 1).to_string().len();
-        let number_padding = " ".repeat(padding_length);
-        let pointer_padding = " ".repeat(left_main.len());
+        let number_length = line.to_string().len();
+        let number_padding = " ".repeat(number_length);
+        let pointer_padding = " ".repeat(before.len());
         let pointer_arrows = "^".repeat((end - start).max(1) as usize);
-
-        let format_line = |n: usize| format!("{n:>padding_length$}");
 
         writeln!(buf, "\nerror: {}\n", self.error)?;
 
         writeln!(buf, "{number_padding}--> {file_path} at {line}:{column}")?;
         writeln!(buf, "{number_padding} |")?;
 
-        if let Some(prev_line) = left.next() {
-            if !prev_line.trim().is_empty() {
-                writeln!(buf, "{} | {prev_line}", format_line(line - 1))?;
-            }
-        }
-
-        writeln!(buf, "{} | {left_main}{right_main}", format_line(line))?;
+        writeln!(buf, "{line:>number_length$} | {before}{after}")?;
         writeln!(buf, "{number_padding} | {pointer_padding}{pointer_arrows}")?;
-
-        if let Some(next_line) = right.next() {
-            if !next_line.trim().is_empty() {
-                writeln!(buf, "{} | {}", format_line(line + 1), next_line)?;
-            }
-        }
 
         writeln!(buf, "{number_padding} |")?;
 

@@ -57,6 +57,10 @@ impl<'p> Parser<'p> {
         }
     }
 
+    fn top_level(&mut self) -> Result<Node> {
+        self.expr()
+    }
+
     fn expr(&mut self) -> Result<Node> {
         self.binary(0 as Precedence)
     }
@@ -110,14 +114,7 @@ impl<'p> Parser<'p> {
             let expr = self.atom()?;
             let span = Span::of(&operator, &expr);
 
-            Ok(Node::Unary(
-                Unary {
-                    operator,
-                    expr,
-                    span,
-                }
-                .into(),
-            ))
+            Ok(Node::Unary(Unary { operator, expr, span }.into()))
         } else {
             self.atom()
         }
@@ -137,15 +134,7 @@ impl<'p> Parser<'p> {
             let lexpr = expr;
             let span = Span::of(&lexpr, &rexpr);
 
-            expr = Node::Binary(
-                Binary {
-                    operator,
-                    lexpr,
-                    rexpr,
-                    span,
-                }
-                .into(),
-            );
+            expr = Node::Binary(Binary { operator, lexpr, rexpr, span }.into());
         }
 
         Ok(expr)
@@ -227,13 +216,12 @@ impl<'p> Parser<'p> {
     where
         F: FnMut(&mut Self) -> Result<T>,
     {
-        let mut res = vec![];
+        let mut result = vec![];
 
         self.newline();
 
         while !self.at(until) {
-            let item = parse(self)?;
-            res.push(item);
+            result.push(parse(self)?);
 
             self.newline();
             if !self.maybe(TokenKind::Comma) {
@@ -242,24 +230,23 @@ impl<'p> Parser<'p> {
             self.newline();
         }
 
-        Ok(res)
+        Ok(result)
     }
 
     fn many<F, T>(&mut self, until: TokenKind, mut parse: F) -> Result<Vec<T>>
     where
         F: FnMut(&mut Self) -> Result<T>,
     {
-        let mut res = vec![];
+        let mut result = vec![];
 
         self.newline();
 
         while !self.at(until) {
-            let item = parse(self)?;
-            res.push(item);
+            result.push(parse(self)?);
             self.endline()?;
         }
 
-        Ok(res)
+        Ok(result)
     }
 
     fn unexpected(&self, expected: &[TokenKind]) -> std::string::String {
@@ -275,7 +262,7 @@ pub fn parse(source: &Source, tokens: &[Token]) -> Result<Vec<Node>> {
     parser.newline();
 
     while !parser.at(TokenKind::EOF) {
-        let node = parser.expr()?;
+        let node = parser.top_level()?;
         nodes.push(node);
         parser.endline()?;
     }
