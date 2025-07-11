@@ -1,49 +1,116 @@
 use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct VariableId(u32);
+pub struct TypeId(pub u32);
 
-impl VariableId {
-    pub fn new(index: u32) -> VariableId {
-        VariableId(index)
+impl TypeId {
+    #[inline(always)]
+    pub fn id(self) -> usize {
+        self.0 as usize
     }
 }
 
-impl Display for VariableId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "v{}", self.0)
+impl From<usize> for TypeId {
+    fn from(i: usize) -> Self {
+        TypeId(i as u32)
     }
 }
+
+impl Into<usize> for TypeId {
+    fn into(self) -> usize {
+        self.id()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Type {
+    Unknown,
+    Number,
+    Integer,
+    Boolean,
+}
+
+pub const TYPE_UNKNOWN: TypeId = TypeId(0);
+pub const TYPE_NUMBER: TypeId = TypeId(1);
+pub const TYPE_INTEGER: TypeId = TypeId(2);
+pub const TYPE_BOOL: TypeId = TypeId(3);
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub blocks: Vec<Block>,
+    pub functions: Vec<Function>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub instructions: Vec<Instruction>,
-}
-
-impl Block {
-    pub fn new() -> Block {
-        Block {
-            instructions: Vec::new(),
-        }
-    }
-}
-
-impl Display for Block {
+impl Display for Module {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for inst in &self.instructions {
-            writeln!(f, "{inst}")?;
+        for function in &self.functions {
+            writeln!(f, "{function}")?;
         }
         Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Instruction {
+pub struct Function {
+    pub instructions: Vec<Instruction>,
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for (idx, instruction) in self.instructions.iter().enumerate() {
+            writeln!(f, "v{idx} := {instruction}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub instructions: Vec<InstructionId>,
+}
+
+impl Block {
+    pub fn new() -> Block {
+        Block {
+            instructions: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct BlockId(pub(crate) u32);
+
+impl BlockId {
+    #[inline(always)]
+    pub fn id(self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Instruction {
+    pub kind: InstructionKind,
+    pub type_id: TypeId,
+    pub block_id: BlockId,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct InstructionId(pub(crate) u32);
+
+impl InstructionId {
+    #[inline(always)]
+    pub fn id(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl Display for InstructionId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "v{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum InstructionKind {
     Unary(Unary),
     Binary(Binary),
     Number(Number),
@@ -52,63 +119,59 @@ pub enum Instruction {
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Instruction::Unary(unary) => write!(f, "{unary}"),
-            Instruction::Binary(binary) => write!(f, "{binary}"),
-            Instruction::Number(number) => write!(f, "{number}"),
-            Instruction::Integer(integer) => write!(f, "{integer}"),
+        match &self.kind {
+            InstructionKind::Unary(unary) => write!(f, "{unary}"),
+            InstructionKind::Binary(binary) => write!(f, "{binary}"),
+            InstructionKind::Number(number) => write!(f, "{number}"),
+            InstructionKind::Integer(integer) => write!(f, "{integer}"),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Unary {
-    pub target: VariableId,
     pub operator: Operator,
-    pub operand: VariableId,
+    pub operand: InstructionId,
 }
 
 impl Display for Unary {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} := {} {}", self.target, self.operator, self.operand)
+        write!(f, "{} {}", self.operator, self.operand)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Binary {
-    pub target: VariableId,
     pub operator: Operator,
-    pub loperand: VariableId,
-    pub roperand: VariableId,
+    pub loperand: InstructionId,
+    pub roperand: InstructionId,
 }
 
 impl Display for Binary {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} := {} {} {}", self.target, self.operator, self.loperand, self.roperand)
+        write!(f, "{} {} {}", self.operator, self.loperand, self.roperand)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Integer {
-    pub target: VariableId,
     pub value: i64,
 }
 
 impl Display for Integer {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} := {}", self.target, self.value)
+        write!(f, "{}", self.value)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Number {
-    pub target: VariableId,
     pub value: f64,
 }
 
 impl Display for Number {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} := {}", self.target, self.value)
+        write!(f, "{}", self.value)
     }
 }
 

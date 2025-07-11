@@ -52,14 +52,11 @@ fn read_line() -> Result<String, ()> {
 
 fn exec(file_path: String, source: String) {
     let source = Source::new(file_path, source);
-    let nodes = syntax::parse(&source);
-    let blocks = nodes.and_then(|nodes| mir::lower(&nodes));
+    let output = syntax::parse(&source).and_then(|module| mir::lower(&module));
 
-    match blocks {
-        Ok(blocks) => {
-            for block in blocks {
-                println!("{block}");
-            }
+    match output {
+        Ok(code) => {
+            println!("{code}");
         }
         Err(error) => {
             let error = error.report(&source).expect("Failed to report error");

@@ -13,7 +13,7 @@ fn test_one(base: &str, path: PathBuf) {
 
     let source = fs::read_to_string(&path).expect("Could not read file");
 
-    let mut cases = Vec::new();
+    let mut cases = vec![];
 
     let mut lines = source.lines().peekable();
     while let Some(line) = lines.next() {
@@ -34,7 +34,7 @@ fn test_one(base: &str, path: PathBuf) {
             }
         }
 
-        let mut output = Vec::new();
+        let mut output = vec![];
 
         while let Some(line) = lines.peek() {
             if line.starts_with("//") && line.contains("test:") {
@@ -57,13 +57,11 @@ fn test_one(base: &str, path: PathBuf) {
         println!("test {base}::{file_name}::{test_name}");
 
         let source = Source::new("<test>".to_string(), input);
-        let mut result = Vec::new();
+        let mut result = vec![];
 
         match syntax::parse(&source) {
-            Ok(nodes) => {
-                for node in nodes {
-                    result.push(format!("{node}"));
-                }
+            Ok(module) => {
+                result.push(format!("{module}"));
             }
             Err(error) => {
                 let error = error.report(&source).expect("Failed to report error");

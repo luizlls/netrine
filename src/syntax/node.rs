@@ -3,12 +3,25 @@ use std::fmt::{self, Display, Formatter};
 use crate::source::{Span, ToSpan};
 
 #[derive(Debug, Clone)]
+pub struct Module {
+    pub nodes: Vec<Node>,
+}
+
+impl Display for Module {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for node in &self.nodes {
+            writeln!(f, "{node}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Node {
     Unary(Box<Unary>),
     Binary(Box<Binary>),
-    Group(Box<Group>),
-    Number(Box<Literal>),
-    Integer(Box<Literal>),
+    Number(Literal),
+    Integer(Literal),
 }
 
 impl ToSpan for Node {
@@ -16,7 +29,6 @@ impl ToSpan for Node {
         match self {
             Node::Unary(unary) => unary.span,
             Node::Binary(binary) => binary.span,
-            Node::Group(group) => group.span,
             Node::Number(literal)
           | Node::Integer(literal) => literal.span,
         }
@@ -28,7 +40,6 @@ impl Display for Node {
         match self {
             Node::Unary(unary) => write!(f, "{unary}"),
             Node::Binary(binary) => write!(f, "{binary}"),
-            Node::Group(group) => write!(f, "{group}"),
             Node::Number(literal)
           | Node::Integer(literal) => write!(f, "{literal}"),
         }
@@ -59,18 +70,6 @@ pub struct Binary {
 impl Display for Binary {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "({} {} {})", self.operator, self.lexpr, self.rexpr)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Group {
-    pub inner: Node,
-    pub span: Span,
-}
-
-impl Display for Group {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
     }
 }
 

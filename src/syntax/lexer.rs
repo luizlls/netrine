@@ -3,17 +3,17 @@ use crate::source::{Source, Span};
 use super::token::{Token, TokenKind};
 
 #[derive(Debug, Clone)]
-pub struct Lexer<'l> {
-    source: &'l Source,
-    bytes: &'l [u8],
+struct Lexer<'src> {
+    source: &'src Source,
+    bytes: &'src [u8],
     curr: u8,
     peek: u8,
     index: usize,
     start: usize,
 }
 
-impl<'l> Lexer<'l> {
-    fn new(source: &'l Source) -> Lexer<'l> {
+impl<'src> Lexer<'src> {
+    fn new(source: &'src Source) -> Lexer<'src> {
         let mut lexer = Lexer {
             source,
             bytes: source.content.as_bytes(),
@@ -32,6 +32,7 @@ impl<'l> Lexer<'l> {
     }
 
     fn bump(&mut self) -> u8 {
+        if self.index == self.bytes.len() { return self.curr; }
         self.index += 1;
         self.curr = self.peek;
         self.peek = self.at(self.index + 1);
@@ -46,7 +47,7 @@ impl<'l> Lexer<'l> {
         }
     }
 
-    fn slice(&self) -> &str {
+    fn slice(&self) -> &'src str {
         &self.source.content[self.start..self.index]
     }
 
@@ -237,18 +238,73 @@ impl<'l> Lexer<'l> {
             }
         }
     }
-}
 
-pub fn tokens(source: &Source) -> Vec<Token> {
-    let mut lexer = Lexer::new(source);
-    let mut tokens = vec![];
-
-    while let kind = lexer.kind() && kind != TokenKind::EOF {
-        tokens.push(Token {
-            kind,
-            span: lexer.span(),
-        });
+    fn token(&mut self) -> Token {
+        Token {
+            kind: self.kind(),
+            span: self.span(),
+        }
     }
 
-    tokens
+    fn value(&self, span: Span) -> &str {
+        &self.source.content[span.range()]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Tokens<'src> {
+    lexer: Lexer<'src>,
+    prev: Token,
+    peek: Token,
+    token: Token,
+}
+
+impl<'src> Tokens<'src> {
+    pub fn new(source: &'src Source) -> Tokens<'src> {
+        Tokens {
+            lexer: Lexer::new(source),
+            prev:  Token::default(),
+            peek:  Token::default(),
+            token: Token::default(),
+        }.init()
+    }
+
+    fn init(mut self) -> Tokens<'src> {
+        self.bump();
+        self.bump();
+        self
+    }
+
+    pub fn bump(&mut self) {
+        self.prev  = self.token;
+        self.token = self.peek;
+        self.peek  = self.lexer.token();
+    }
+
+    #[inline]
+    pub fn token(&self) -> Token {
+        self.token
+    } 
+
+    #[inline]
+    pub fn prev(&self) -> Token {
+        self.token
+    }
+
+    #[inline]
+    pub fn peek(&self) -> Token {
+        self.token
+    }
+
+    pub fn value(&self, token: Token) -> &str {
+        self.lexer.value(token.span)
+    }
+
+    pub fn done(&self) -> bool {
+        self.token.kind == TokenKind::EOF
+    }
+}
+
+pub fn tokens(source: &Source) -> Tokens<'_> {
+    Tokens::new(source)
 }
