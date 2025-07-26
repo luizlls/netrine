@@ -125,8 +125,8 @@ impl Lower {
 pub fn lower(module: &syntax::Module) -> Result<Vec<Instruction>> {
     let mut lower = Lower::new();
 
-    for node in module.nodes.iter() {
-        lower.node(&node)?;
+    for node in &module.nodes {
+        lower.node(node)?;
     }
 
     Ok(lower.instructions)

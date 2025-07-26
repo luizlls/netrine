@@ -4,7 +4,6 @@ use std::fmt::{self, Display, Formatter};
 pub struct TypeId(pub u32);
 
 impl TypeId {
-    #[inline(always)]
     pub fn id(self) -> usize {
         self.0 as usize
     }
@@ -16,9 +15,9 @@ impl From<usize> for TypeId {
     }
 }
 
-impl Into<usize> for TypeId {
-    fn into(self) -> usize {
-        self.id()
+impl From<TypeId> for usize {
+    fn from(value: TypeId) -> Self {
+        value.id()
     }
 }
 
@@ -63,7 +62,7 @@ impl Display for Function {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Block {
     pub instructions: Vec<InstructionId>,
 }

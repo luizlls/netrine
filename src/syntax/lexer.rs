@@ -288,12 +288,12 @@ impl<'src> Tokens<'src> {
 
     #[inline]
     pub fn prev(&self) -> Token {
-        self.token
+        self.prev
     }
 
     #[inline]
     pub fn peek(&self) -> Token {
-        self.token
+        self.peek
     }
 
     pub fn value(&self, token: Token) -> &str {

@@ -32,7 +32,7 @@ impl Span {
         Span { start, end }
     }
 
-    pub fn of(from: &impl ToSpan, to: &impl ToSpan) -> Span {
+    pub fn from(from: &impl ToSpan, to: &impl ToSpan) -> Span {
         Span {
             start: from.span().start,
             end: to.span().end,

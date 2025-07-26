@@ -101,11 +101,14 @@ impl<'src> Parser<'src> {
     }
 
     fn unary(&mut self) -> Result<Node> {
-        if let Some(operator) = self.operator(-1 as Precedence, true) {
+        if let Some(operator) = self.operator(0 as Precedence, true) {
             let expr = self.atom()?;
-            let span = Span::of(&operator, &expr);
 
-            Ok(Node::Unary(Unary { operator, expr, span }.into()))
+            Ok(Node::Unary(Unary {
+                span: Span::from(&operator, &expr),
+                expr,
+                operator,
+            }.into()))
         } else {
             self.atom()
         }
@@ -123,9 +126,13 @@ impl<'src> Parser<'src> {
 
             let rexpr = self.binary(precedence)?;
             let lexpr = expr;
-            let span = Span::of(&lexpr, &rexpr);
 
-            expr = Node::Binary(Binary { operator, lexpr, rexpr, span }.into());
+            expr = Node::Binary(Binary {
+                span: Span::from(&lexpr, &rexpr),
+                lexpr,
+                rexpr,
+                operator,
+            }.into());
         }
 
         Ok(expr)

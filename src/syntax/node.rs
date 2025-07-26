@@ -1,4 +1,4 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display};
 
 use crate::source::{Span, ToSpan};
 
@@ -8,9 +8,9 @@ pub struct Module {
 }
 
 impl Display for Module {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for node in &self.nodes {
-            writeln!(f, "{node}")?;
+            write!(f, "{node}")?;
         }
         Ok(())
     }
@@ -35,14 +35,48 @@ impl ToSpan for Node {
     }
 }
 
-impl Display for Node {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Node::Unary(unary) => write!(f, "{unary}"),
-            Node::Binary(binary) => write!(f, "{binary}"),
-            Node::Number(literal)
-          | Node::Integer(literal) => write!(f, "{literal}"),
+struct DisplayNode(String, Span, Vec<DisplayNode>);
+
+impl DisplayNode {
+    fn write(self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+        let DisplayNode(value, span, children) = self;
+        writeln!(f, "{}{} {}", "  ".repeat(depth), value, span)?;
+        for child in children {
+            child.write(f, depth + 1)?;
         }
+        Ok(())
+    }
+}
+
+impl Node {
+    fn display(&self) -> DisplayNode {
+        match self {
+            Node::Unary(unary) => {
+                DisplayNode("UNARY".to_string(), unary.span, vec![
+                    DisplayNode(format!("OPERATOR `{}`", unary.operator), unary.operator.span, vec![]),
+                    unary.expr.display(),
+                ])
+            },
+            Node::Binary(binary) => {
+                DisplayNode("BINARY".to_string(), binary.span, vec![
+                    binary.lexpr.display(),
+                    DisplayNode(format!("OPERATOR `{}`", binary.operator), binary.operator.span, vec![]),
+                    binary.rexpr.display(),
+                ])
+            },
+            Node::Number(literal) => {
+                DisplayNode(format!("NUMBER `{}`", literal.value), literal.span, vec![])
+            }
+            Node::Integer(literal) => {
+                DisplayNode(format!("INTEGER `{}`", literal.value), literal.span, vec![])
+            },
+        }
+    }
+}
+
+impl Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display().write(f, 0)
     }
 }
 
@@ -53,12 +87,6 @@ pub struct Unary {
     pub span: Span,
 }
 
-impl Display for Unary {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {})", self.operator, self.expr)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Binary {
     pub operator: Operator,
@@ -67,22 +95,10 @@ pub struct Binary {
     pub span: Span,
 }
 
-impl Display for Binary {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.operator, self.lexpr, self.rexpr)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Literal {
     pub value: String,
     pub span: Span,
-}
-
-impl Display for Literal {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -112,7 +128,7 @@ pub enum OperatorKind {
     Ge,  // >=
 }
 
-pub type Precedence = i8;
+pub type Precedence = u8;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Associativity {
@@ -126,7 +142,7 @@ impl Operator {
         match self.kind {
             OperatorKind::Pos
           | OperatorKind::Neg
-          | OperatorKind::Not => -1,
+          | OperatorKind::Not => 0,
             OperatorKind::Exp => 7,
             OperatorKind::Mul
           | OperatorKind::Div => 6,
@@ -156,7 +172,7 @@ impl Operator {
 }
 
 impl Display for Operator {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self.kind {
             OperatorKind::Pos => "+",
             OperatorKind::Neg => "-",
