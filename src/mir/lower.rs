@@ -16,12 +16,12 @@ impl Lower {
         }
     }
 
-    fn emit(&mut self, kind: InstructionKind) -> InstructionId {
+    fn emit(&mut self, kind: InstructionKind, type_id: TypeId) -> InstructionId {
         let instruction_id = InstructionId(self.instructions.len() as u32);
 
         self.instructions.push(Instruction {
             kind,
-            type_id: TYPE_UNKNOWN,
+            type_id,
             block_id: self.block,
         });
 
@@ -42,25 +42,50 @@ impl Lower {
         let roperand = self.node(&binary.rexpr)?;
         let operator = self.operator(binary.operator);
 
+        let result_type = match operator {
+            Operator::Add
+          | Operator::Sub
+          | Operator::Mul
+          | Operator::Div
+          | Operator::Exp
+          | Operator::Mod => TYPE_NUMBER,
+            Operator::Eq
+          | Operator::Ne
+          | Operator::Lt
+          | Operator::Le
+          | Operator::Gt
+          | Operator::Ge
+          | Operator::And
+          | Operator::Or => TYPE_BOOL,
+            _ => unreachable!("Binary instruction with unsupported operator {}", operator)
+        };
+
         Ok(self.emit(InstructionKind::Binary(
             Binary {
                 operator,
                 loperand,
                 roperand,
             }
-        )))
+        ), result_type))
     }
 
     fn unary(&mut self, unary: &syntax::Unary) -> Result<InstructionId> {
         let operand = self.node(&unary.expr)?;
         let operator = self.operator(unary.operator);
 
+        let result_type = match operator {
+            Operator::Not => TYPE_BOOL,
+            Operator::Pos
+          | Operator::Neg => TYPE_NUMBER,
+            _ => unreachable!("Unary instruction with unsupported operator {}", operator)
+        };
+
         Ok(self.emit(InstructionKind::Unary(
             Unary {
                 operator,
                 operand,
             }
-        )))
+        ), result_type))
     }
 
     fn number(&mut self, number: &syntax::Literal) -> Result<InstructionId> {
@@ -75,7 +100,7 @@ impl Lower {
             Number {
                 value,
             }
-        )))
+        ), TYPE_NUMBER))
     }
 
     fn integer(&mut self, integer: &syntax::Literal) -> Result<InstructionId> {
@@ -96,7 +121,7 @@ impl Lower {
             Integer {
                 value,
             }
-        )))
+        ), TYPE_INTEGER))
     }
 
     fn operator(&self, operator: syntax::Operator) -> Operator {

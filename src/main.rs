@@ -2,8 +2,9 @@ use std::fs;
 use std::io::{Write, stdin, stdout};
 use std::path::PathBuf;
 
+use netrine::wasm;
 use netrine::mir;
-use netrine::source::Source;
+use netrine::source;
 use netrine::syntax;
 
 fn main() {
@@ -11,7 +12,14 @@ fn main() {
     if args.len() <= 1 {
         repl();
     } else {
-        file(args.get(1).unwrap().to_string());
+        match args[1].as_str() {
+            "e" => {
+                eval("repl".to_string(), args[2].to_string());
+            }
+            _ => {
+                file(args[1].to_string());
+            }
+        }
     }
 }
 
@@ -19,7 +27,7 @@ fn file(file: String) {
     let file_path = PathBuf::from(file);
     let content = fs::read_to_string(&file_path).expect("Couldn't open the file");
     let file_path = file_path.display().to_string();
-    exec(file_path, content);
+    eval(file_path, content);
 }
 
 fn repl() {
@@ -29,7 +37,7 @@ fn repl() {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            exec("repl".to_string(), input.trim_end().to_string());
+            eval("repl".to_string(), input.trim_end().to_string());
             input.clear();
         } else {
             input.push_str(&line);
@@ -50,13 +58,16 @@ fn read_line() -> Result<String, ()> {
     }
 }
 
-fn exec(file_path: String, source: String) {
-    let source = Source::new(file_path, source);
-    let output = syntax::parse(&source).and_then(|module| mir::lower(&module));
+fn eval(file_path: String, source: String) {
+    let source = source::Source::new(file_path, source);
 
-    match output {
-        Ok(code) => {
-            println!("{code}");
+    let result = syntax::parse(&source)
+        .and_then(|module| mir::lower(&module))
+        .and_then(|module| wasm::compile(&module));
+
+    match result {
+        Ok(wasm) => {
+            fs::write("output.wasm", wasm).unwrap();
         }
         Err(error) => {
             let error = error.report(&source).expect("Failed to report error");

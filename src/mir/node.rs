@@ -23,37 +23,21 @@ impl From<TypeId> for usize {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
-    Unknown,
     Number,
     Integer,
     Boolean,
 }
 
-pub const TYPE_UNKNOWN: TypeId = TypeId(0);
 pub const TYPE_NUMBER: TypeId = TypeId(1);
 pub const TYPE_INTEGER: TypeId = TypeId(2);
 pub const TYPE_BOOL: TypeId = TypeId(3);
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub functions: Vec<Function>,
-}
-
-impl Display for Module {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for function in &self.functions {
-            writeln!(f, "{function}")?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Function {
     pub instructions: Vec<Instruction>,
 }
 
-impl Display for Function {
+impl Display for Module {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (idx, instruction) in self.instructions.iter().enumerate() {
             writeln!(f, "v{idx} := {instruction}")?;
@@ -80,8 +64,8 @@ pub struct BlockId(pub(crate) u32);
 
 impl BlockId {
     #[inline(always)]
-    pub fn id(self) -> usize {
-        self.0 as usize
+    pub fn id(self) -> u32 {
+        self.0
     }
 }
 
@@ -97,8 +81,8 @@ pub struct InstructionId(pub(crate) u32);
 
 impl InstructionId {
     #[inline(always)]
-    pub fn id(self) -> usize {
-        self.0 as usize
+    pub fn id(self) -> u32 {
+        self.0
     }
 }
 

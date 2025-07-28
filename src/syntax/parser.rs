@@ -102,7 +102,7 @@ impl<'src> Parser<'src> {
 
     fn unary(&mut self) -> Result<Node> {
         if let Some(operator) = self.operator(0 as Precedence, true) {
-            let expr = self.atom()?;
+            let expr = self.unary()?;
 
             Ok(Node::Unary(Unary {
                 span: Span::from(&operator, &expr),
@@ -142,8 +142,8 @@ impl<'src> Parser<'src> {
         let token = self.token;
 
         let kind = match token.kind {
-            TokenKind::Plus if unary => OperatorKind::Add,
-            TokenKind::Minus if unary => OperatorKind::Sub,
+            TokenKind::Plus if unary => OperatorKind::Pos,
+            TokenKind::Minus if unary => OperatorKind::Neg,
             TokenKind::Not if unary => OperatorKind::Not,
             TokenKind::Plus => OperatorKind::Add,
             TokenKind::Minus => OperatorKind::Sub,
