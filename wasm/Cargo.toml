@@ -1,0 +1,7 @@
+[package]
+name = "wasm"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compiler = { path = "../compiler" }

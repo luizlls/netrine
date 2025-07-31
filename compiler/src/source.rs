@@ -3,8 +3,8 @@ use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct Source {
-    pub file_path: String,
-    pub content: String,
+    pub(crate) file_path: String,
+    pub(crate) content: String,
 }
 
 impl Source {

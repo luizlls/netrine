@@ -9,15 +9,8 @@
 - [X] Syntax
 - [ ] Types
 - [ ] Analysis
-- [ ] C
-- [ ] WASM
-
-
-&nbsp;
-
-> See the examples directory for more.
-
-&nbsp;
+- [X] WASM
+- [ ] C/Native
 
 
 ⚠️ Netrine is still under development and is not usable at the moment ⚠️

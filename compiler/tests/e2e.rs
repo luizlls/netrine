@@ -1,8 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use netrine::source::Source;
-use netrine::syntax;
+use compiler::source::Source;
 
 fn test_one(base: &str, path: PathBuf) {
     let file_name = path
@@ -59,7 +58,7 @@ fn test_one(base: &str, path: PathBuf) {
         let source = Source::new("<test>".to_string(), input);
         let mut result = vec![];
 
-        match syntax::parse(&source) {
+        match compiler::parse(&source) {
             Ok(module) => {
                 result.push(format!("{module}"));
             }

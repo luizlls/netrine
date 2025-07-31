@@ -2,10 +2,7 @@ use std::fs;
 use std::io::{Write, stdin, stdout};
 use std::path::PathBuf;
 
-use netrine::wasm;
-use netrine::mir;
-use netrine::source;
-use netrine::syntax;
+use compiler::source;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
@@ -61,11 +58,7 @@ fn read_line() -> Result<String, ()> {
 fn eval(file_path: String, source: String) {
     let source = source::Source::new(file_path, source);
 
-    let result = syntax::parse(&source)
-        .and_then(|module| mir::lower(&module))
-        .and_then(|module| wasm::compile(&module));
-
-    match result {
+    match compiler::compile(&source) {
         Ok(wasm) => {
             fs::write("output.wasm", wasm).unwrap();
         }
