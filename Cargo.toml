@@ -11,5 +11,6 @@ rust-version = "1.88"
 debug = true
 
 [profile.release]
-lto = true
 strip = true
+lto = true
+opt-level = "z"

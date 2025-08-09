@@ -2,8 +2,6 @@ use std::fs;
 use std::io::{Write, stdin, stdout};
 use std::path::PathBuf;
 
-use compiler::source;
-
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
     if args.len() <= 1 {
@@ -56,7 +54,7 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn eval(file_path: String, source: String) {
-    let source = source::Source::new(file_path, source);
+    let source = compiler::source(file_path, &source);
 
     match compiler::compile(&source) {
         Ok(wasm) => {

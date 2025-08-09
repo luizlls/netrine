@@ -2,13 +2,13 @@ use std::fmt::Display;
 use std::ops::Range;
 
 #[derive(Debug, Clone)]
-pub struct Source {
+pub struct Source<'s> {
     pub(crate) file_path: String,
-    pub(crate) content: String,
+    pub(crate) content: &'s str,
 }
 
-impl Source {
-    pub fn new(file_path: String, content: String) -> Source {
+impl<'s> Source<'s> {
+    pub fn new(file_path: String, content: &str) -> Source<'_> {
         Source { file_path, content }
     }
 

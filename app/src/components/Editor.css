@@ -1,0 +1,38 @@
+.overlay-editor {
+    position: absolute;
+    width: 250px;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    border-radius: 5px;
+    z-index: 10;
+    resize: both;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+
+.drag-handle {
+    padding: 8px;
+    background-color: #f2f2f2;
+    cursor: move;
+    border-bottom: 1px solid #ccc;
+    font-size: 14px;
+    color: #555;
+}
+
+
+.overlay-editor textarea {
+    border: none;
+    padding: 10px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    resize: none;
+    outline: none;
+    overflow: hidden; /* Hide both scrollbars */
+    min-height: 60px;
+    min-width: 200px;
+    box-sizing: border-box;
+    transition: width 0.1s ease, height 0.1s ease; /* Optional: smooth resize animation */
+}

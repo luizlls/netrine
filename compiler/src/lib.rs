@@ -1,8 +1,12 @@
 pub mod error;
-pub mod source;
+mod source;
 mod mir;
 mod syntax;
 mod wasm;
+
+pub fn source<'s>(file_path: String, content: &'s str) -> source::Source<'s> {
+    source::Source::new(file_path, content)
+}
 
 pub fn parse(source: &source::Source) -> error::Result<syntax::Module> {
     syntax::parse(&source)

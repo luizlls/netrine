@@ -1,8 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use compiler::source::Source;
-
 fn test_one(base: &str, path: PathBuf) {
     let file_name = path
         .file_stem()
@@ -55,7 +53,7 @@ fn test_one(base: &str, path: PathBuf) {
     for (test_name, input, output) in cases {
         println!("test {base}::{file_name}::{test_name}");
 
-        let source = Source::new("<test>".to_string(), input);
+        let source = compiler::source("<test>".to_string(), &input);
         let mut result = vec![];
 
         match compiler::parse(&source) {

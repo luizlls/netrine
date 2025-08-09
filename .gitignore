@@ -4,3 +4,4 @@
 input
 output
 .DS_Store
+*.wasm

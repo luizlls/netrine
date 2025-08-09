@@ -155,13 +155,13 @@ impl Wasm {
         emit_u32(&mut section, 1);
 
         // exported function name
-        let name = b"_start";
+        let name = b"main";
         emit_u32(&mut section, name.len() as u32);
         emit_all(&mut section, name);
 
         emit_u8(&mut section, FUNCTION_EXPORT_TYPE);
 
-        // _start function index
+        // main function index
         emit_u32(&mut section, 0);
 
         self.emit_section(&section, EXPORT_SECTION);
@@ -196,7 +196,7 @@ impl Wasm {
     fn emit_locals(&self, instructions: &Vec<mir::Instruction>, output: &mut Vec<u8>) {
         // initially just declare one local_index for each instruction
         let mut locals: HashMap<u8, u32> = HashMap::new();
-        
+
         for instruction in instructions {
             *locals.entry(self.instruction_type(instruction)).or_insert(0) += 1;
         }
@@ -272,7 +272,7 @@ impl Wasm {
     fn emit_unary(&self, unary: &mir::Unary, local_index: u32, instructions: &mut Vec<u8>) {
         emit_u8(instructions, LOCAL_GET);
         emit_u32(instructions, unary.operand.id());
-        
+
         let operation = match unary.operator {
             mir::Operator::Pos => NOOP,
             mir::Operator::Neg => F64_NEG,

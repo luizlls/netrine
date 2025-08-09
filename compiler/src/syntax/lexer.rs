@@ -4,7 +4,7 @@ use super::token::{Token, TokenKind};
 
 #[derive(Debug, Clone)]
 struct Lexer<'src> {
-    source: &'src Source,
+    source: &'src Source<'src>,
     bytes: &'src [u8],
     curr: u8,
     peek: u8,
@@ -305,6 +305,6 @@ impl<'src> Tokens<'src> {
     }
 }
 
-pub fn tokens(source: &Source) -> Tokens<'_> {
+pub fn tokens<'s>(source: &'s Source) -> Tokens<'s> {
     Tokens::new(source)
 }
