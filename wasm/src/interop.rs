@@ -1,16 +1,15 @@
-use core::str;
-use std::alloc;
+use std::alloc::{alloc, dealloc, Layout};
 
 #[unsafe(no_mangle)]
-pub extern "C" fn alloc(size: usize, align: usize) -> *mut u8 {
-    let layout = alloc::Layout::from_size_align(size, align).unwrap();
-    unsafe { alloc::alloc(layout) }
+pub extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {
+    let layout = Layout::from_size_align(size, align).unwrap();
+    unsafe { alloc(layout) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn dealloc(ptr: *mut u8, size: usize, align: usize) {
-    let layout = alloc::Layout::from_size_align(size, align).unwrap();
-    unsafe { alloc::dealloc(ptr, layout) }
+pub extern "C" fn deallocate(ptr: *mut u8, size: usize, align: usize) {
+    let layout = Layout::from_size_align(size, align).unwrap();
+    unsafe { dealloc(ptr, layout) }
 }
 
 #[repr(C)]
@@ -30,21 +29,29 @@ impl WasmSlice<u8> {
     }
 }
 
-impl<T> WasmSlice<T> {
-    pub fn from_vec(vec: Vec<T>, target: WasmSlicePointer<T>) {
+#[repr(C)]
+pub struct WasmResult {
+    pub ptr: *mut u8,
+    pub len: usize,
+}
+
+pub type WasmResultPointer = *mut WasmResult;
+
+impl WasmResult {
+    pub fn from_vec(vec: Vec<u8>, target: WasmResultPointer) {
         let boxed = vec.into_boxed_slice();
         unsafe {
             let target = &mut *target;
             target.len = boxed.len();
-            target.ptr = Box::into_raw(boxed) as *mut T;
+            target.ptr = Box::into_raw(boxed) as *mut u8;
         }
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn free_slice(slice: WasmSlicePointer<u8>) {
+pub extern "C" fn free_result(result: WasmResultPointer) {
     unsafe {
-        let slice = &*slice;
-        drop(Box::from_raw(std::slice::from_raw_parts_mut(slice.ptr, slice.len)));
+        let result = &*result;
+        drop(Box::from_raw(std::slice::from_raw_parts_mut(result.ptr, result.len)));
     }
 }

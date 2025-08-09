@@ -16,11 +16,12 @@ function App() {
       setNetrine(netrine);
     }
     setup();
-  });
+  }, []);
 
   const onChange = useCallback(
     async (code) => {
-      setHeader(await compile(netrine, code));
+      const module = await compile(netrine, code);
+      setHeader(module.main());
     },
     [netrine],
   );
