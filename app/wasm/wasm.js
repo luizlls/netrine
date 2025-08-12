@@ -49,7 +49,7 @@ function allocResult(instance) {
 }
 
 function freeResult(instance, resultPointer) {
-  instance.free_result(resultPointer);
+  instance.deallocate_result(resultPointer);
   instance.deallocate(resultPointer, RESULT_SIZE, RESULT_ALIGN);
 }
 
@@ -69,8 +69,8 @@ function getResultValue(instance, resultPointer) {
 export async function compile(netrine, source) {
   const slicePointer = allocString(netrine, source);
   const resultPointer = allocResult(netrine);
-  netrine.compile(slicePointer, resultPointer);
 
+  netrine.compile(slicePointer, resultPointer);
   const result = getResultValue(netrine, resultPointer);
   const module = await WebAssembly.instantiate(result);
 

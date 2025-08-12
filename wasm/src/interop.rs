@@ -49,7 +49,7 @@ impl WasmResult {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn free_result(result: WasmResultPointer) {
+pub extern "C" fn deallocate_result(result: WasmResultPointer) {
     unsafe {
         let result = &*result;
         drop(Box::from_raw(std::slice::from_raw_parts_mut(result.ptr, result.len)));
