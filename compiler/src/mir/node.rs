@@ -1,36 +1,6 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct TypeId(pub u32);
-
-impl TypeId {
-    pub fn id(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl From<usize> for TypeId {
-    fn from(i: usize) -> Self {
-        TypeId(i as u32)
-    }
-}
-
-impl From<TypeId> for usize {
-    fn from(value: TypeId) -> Self {
-        value.id()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Type {
-    Number,
-    Integer,
-    Boolean,
-}
-
-pub const TYPE_NUMBER: TypeId = TypeId(1);
-pub const TYPE_INTEGER: TypeId = TypeId(2);
-pub const TYPE_BOOL: TypeId = TypeId(3);
+use crate::semantics::{Type, Operator};
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -38,7 +8,7 @@ pub struct Module {
 }
 
 impl Display for Module {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (idx, instruction) in self.instructions.iter().enumerate() {
             writeln!(f, "v{idx} := {instruction}")?;
         }
@@ -72,8 +42,8 @@ impl BlockId {
 #[derive(Debug, Clone)]
 pub struct Instruction {
     pub kind: InstructionKind,
-    pub type_id: TypeId,
-    pub block_id: BlockId,
+    pub type_: Type,
+    pub block: BlockId,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -87,7 +57,7 @@ impl InstructionId {
 }
 
 impl Display for InstructionId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "v{}", self.0)
     }
 }
@@ -101,7 +71,7 @@ pub enum InstructionKind {
 }
 
 impl Display for Instruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             InstructionKind::Unary(unary) => write!(f, "{unary}"),
             InstructionKind::Binary(binary) => write!(f, "{binary}"),
@@ -118,7 +88,7 @@ pub struct Unary {
 }
 
 impl Display for Unary {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.operator, self.operand)
     }
 }
@@ -131,7 +101,7 @@ pub struct Binary {
 }
 
 impl Display for Binary {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.operator, self.loperand, self.roperand)
     }
 }
@@ -142,7 +112,7 @@ pub struct Integer {
 }
 
 impl Display for Integer {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
@@ -153,54 +123,7 @@ pub struct Number {
 }
 
 impl Display for Number {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Operator {
-    And,
-    Or,
-    Not,
-    Pos,
-    Neg,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Exp,
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-}
-
-impl Display for Operator {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let description = match self {
-            Operator::Pos => "pos",
-            Operator::Neg => "neg",
-            Operator::Add => "add",
-            Operator::Sub => "sub",
-            Operator::Mul => "mul",
-            Operator::Div => "div",
-            Operator::Mod => "mod",
-            Operator::Exp => "exp",
-            Operator::Eq => "eq",
-            Operator::Ne => "ne",
-            Operator::Lt => "lt",
-            Operator::Le => "le",
-            Operator::Gt => "gt",
-            Operator::Ge => "ge",
-            Operator::And => "and",
-            Operator::Or => "or",
-            Operator::Not => "not",
-        };
-
-        write!(f, "{description}")
     }
 }

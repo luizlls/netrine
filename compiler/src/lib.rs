@@ -1,6 +1,7 @@
 pub mod error;
 mod source;
 mod mir;
+mod semantics;
 mod syntax;
 mod wasm;
 
@@ -14,6 +15,7 @@ pub fn parse(source: &source::Source) -> error::Result<syntax::Module> {
 
 pub fn compile(source: &source::Source) -> error::Result<Vec<u8>> {
     syntax::parse(&source)
+        .and_then(|module| semantics::lower(&module))
         .and_then(|module| mir::lower(&module))
         .and_then(|module| wasm::compile(&module))
 }
