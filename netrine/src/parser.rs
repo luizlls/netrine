@@ -1,10 +1,10 @@
-use super::node::{
-    Associativity, Binary, Literal, Node, Operator, OperatorKind, Precedence, Unary,
+use crate::syntax::{
+    Module, Node, Unary, Binary, Literal, Operator, OperatorKind, Associativity, Precedence
 };
 use crate::error::{Error, Result};
-use super::lexer::Tokens;
+use crate::lexer::Tokens;
 use crate::source::Span;
-use super::token::{Token, TokenKind};
+use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
 struct Parser<'src> {
@@ -249,7 +249,7 @@ impl<'src> Parser<'src> {
     }
 }
 
-pub fn parse(tokens: Tokens<'_>) -> Result<Vec<Node>> {
+pub fn parse(tokens: Tokens<'_>) -> Result<Module> {
     let mut parser = Parser::new(tokens);
     let mut nodes = vec![];
 
@@ -261,5 +261,7 @@ pub fn parse(tokens: Tokens<'_>) -> Result<Vec<Node>> {
         parser.endline()?;
     }
 
-    Ok(nodes)
+    Ok(Module {
+        nodes,
+    })
 }

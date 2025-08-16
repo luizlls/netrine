@@ -53,10 +53,10 @@ fn test_one(base: &str, path: PathBuf) {
     for (test_name, input, output) in cases {
         println!("test {base}::{file_name}::{test_name}");
 
-        let source = compiler::source("<test>".to_string(), &input);
+        let source = netrine::source("<test>".to_string(), &input);
         let mut result = vec![];
 
-        match compiler::parse(&source) {
+        match netrine::parse(&source) {
             Ok(module) => {
                 result.push(format!("{module}"));
             }

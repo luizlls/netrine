@@ -54,9 +54,9 @@ fn read_line() -> Result<String, ()> {
 }
 
 fn eval(file_path: String, source: String) {
-    let source = compiler::source(file_path, &source);
+    let source = netrine::source(file_path, &source);
 
-    match compiler::compile(&source) {
+    match netrine::compile(&source) {
         Ok(wasm) => {
             fs::write("output.wasm", wasm).unwrap();
         }

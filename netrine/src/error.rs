@@ -36,7 +36,7 @@ impl Error {
         };
 
         let Source {
-            content, file_path, ..
+            content, path, ..
         } = source;
 
         let (line, column) = Self::find_line(content, start as usize);
@@ -52,7 +52,7 @@ impl Error {
 
         writeln!(buf, "\nerror: {}\n", self.error)?;
 
-        writeln!(buf, "{number_padding}--> {file_path} at {line}:{column}")?;
+        writeln!(buf, "{number_padding}--> {path} at {line}:{column}")?;
         writeln!(buf, "{number_padding} |")?;
 
         writeln!(buf, "{line:>number_length$} | {before}{after}")?;
@@ -61,7 +61,7 @@ impl Error {
         writeln!(buf, "{number_padding} |")?;
 
         writeln!(buf, "\n")?;
-        writeln!(buf, "error: could not compile {file_path}")?;
+        writeln!(buf, "error: could not compile {path}")?;
 
         Ok(buf)
     }

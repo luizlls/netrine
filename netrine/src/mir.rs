@@ -1,6 +1,8 @@
 use std::fmt::{self, Display};
 
-use crate::semantics::{Type, Operator};
+use crate::error::Result;
+use crate::hir;
+use crate::types::Type;
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -81,6 +83,8 @@ impl Display for Instruction {
     }
 }
 
+pub type Operator = crate::hir::Operator;
+
 #[derive(Debug, Clone)]
 pub struct Unary {
     pub operator: Operator,
@@ -126,4 +130,92 @@ impl Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
     }
+}
+
+
+struct LowerHir {
+    instructions: Vec<Instruction>,
+    block: BlockId,
+}
+
+impl LowerHir {
+    fn new() -> LowerHir {
+        LowerHir {
+            instructions: vec![],
+            block: BlockId(0),
+        }
+    }
+
+    fn emit(&mut self, kind: InstructionKind, type_: Type) -> InstructionId {
+        let instruction_id = InstructionId(self.instructions.len() as u32);
+
+        self.instructions.push(Instruction {
+            kind,
+            type_,
+            block: self.block,
+        });
+
+        instruction_id
+    }
+
+    fn node(&mut self, node: &hir::Node) -> Result<InstructionId> {
+        match node {
+            hir::Node::Binary(node) => self.binary(node),
+            hir::Node::Unary(node) => self.unary(node),
+            hir::Node::Number(literal) => self.number(literal),
+            hir::Node::Integer(literal) => self.integer(literal),
+        }
+    }
+
+    fn binary(&mut self, binary: &hir::Binary) -> Result<InstructionId> {
+        let loperand = self.node(&binary.lexpr)?;
+        let roperand = self.node(&binary.rexpr)?;
+
+        Ok(self.emit(InstructionKind::Binary(
+            Binary {
+                operator: binary.operator,
+                loperand,
+                roperand,
+            }
+        ), binary.type_))
+    }
+
+    fn unary(&mut self, unary: &hir::Unary) -> Result<InstructionId> {
+        let operand = self.node(&unary.expr)?;
+
+        Ok(self.emit(InstructionKind::Unary(
+            Unary {
+                operator: unary.operator,
+                operand,
+            }
+        ), unary.type_))
+    }
+
+    fn number(&mut self, number: &hir::Number) -> Result<InstructionId> {
+        Ok(self.emit(InstructionKind::Number(
+            Number {
+                value: number.value,
+            }
+        ), Type::Number))
+    }
+
+    fn integer(&mut self, integer: &hir::Integer) -> Result<InstructionId> {
+        Ok(self.emit(InstructionKind::Integer(
+            Integer {
+                value: integer.value,
+            }
+        ), Type::Integer))
+    }
+}
+
+pub fn from_hir(module: &hir::Module) -> Result<Module> {
+    let mut lower = LowerHir::new();
+
+    for node in &module.nodes {
+        lower.node(node)?;
+    }
+
+    Ok(Module {
+        instructions: lower.instructions,
+    })
 }

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
+use crate::error::Result;
 use crate::mir;
-use crate::semantics::{Type, Operator};
+use crate::types::Type;
 
 const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 const WASM_VERSION: [u8; 4] = [0x01, 0x00, 0x00, 0x00];
@@ -250,18 +251,18 @@ impl Wasm {
         emit_u32(instructions, binary.roperand.id());
 
         let operation = match binary.operator {
-            Operator::Add => F64_ADD,
-            Operator::Sub => F64_SUB,
-            Operator::Mul => F64_MUL,
-            Operator::Div => F64_DIV,
-            Operator::Eq  => F64_EQ,
-            Operator::Ne  => F64_NE,
-            Operator::Lt  => F64_LT,
-            Operator::Le  => F64_LE,
-            Operator::Gt  => F64_GT,
-            Operator::Ge  => F64_GE,
-            Operator::And => I32_AND,
-            Operator::Or  => I32_OR,
+            mir::Operator::Add => F64_ADD,
+            mir::Operator::Sub => F64_SUB,
+            mir::Operator::Mul => F64_MUL,
+            mir::Operator::Div => F64_DIV,
+            mir::Operator::Eq  => F64_EQ,
+            mir::Operator::Ne  => F64_NE,
+            mir::Operator::Lt  => F64_LT,
+            mir::Operator::Le  => F64_LE,
+            mir::Operator::Gt  => F64_GT,
+            mir::Operator::Ge  => F64_GE,
+            mir::Operator::And => I32_AND,
+            mir::Operator::Or  => I32_OR,
             _ => unreachable!("Binary instruction with unsupported operator {}", binary.operator)
         };
         emit_u8(instructions, operation);
@@ -275,9 +276,9 @@ impl Wasm {
         emit_u32(instructions, unary.operand.id());
 
         let operation = match unary.operator {
-            Operator::Pos => NOOP,
-            Operator::Neg => F64_NEG,
-            Operator::Not => {
+            mir::Operator::Pos => NOOP,
+            mir::Operator::Neg => F64_NEG,
+            mir::Operator::Not => {
                 // compare the value with 0
                 emit_u8(instructions, I32_CONST);
                 emit_f64(instructions, 0.0);
@@ -348,6 +349,6 @@ fn emit_sleb128(output: &mut Vec<u8>, mut value: i64) {
     }
 }
 
-pub fn compile(module: &mir::Module) -> Vec<u8> {
-    Wasm::new().compile(module)
+pub fn compile(module: &mir::Module) -> Result<Vec<u8>> {
+    Ok(Wasm::new().compile(module))
 }

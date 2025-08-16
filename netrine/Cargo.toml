@@ -1,11 +1,4 @@
 [package]
-name = "netrine"
-description = "A minimalist programming language"
-authors = ["Luiz Lopes <luizlopesdev@gmail.com>"]
-license = "MIT"
 version.workspace = true
 edition.workspace = true
-
-[dependencies]
-clap = { version = "4.5", features = ["derive"] }
-compiler = { path = "../compiler" }
+name = "netrine"

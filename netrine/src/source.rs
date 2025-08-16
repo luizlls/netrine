@@ -3,13 +3,13 @@ use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct Source<'s> {
-    pub(crate) file_path: String,
+    pub(crate) path: String,
     pub(crate) content: &'s str,
 }
 
 impl<'s> Source<'s> {
-    pub fn new(file_path: String, content: &str) -> Source<'_> {
-        Source { file_path, content }
+    pub fn new(path: String, content: &str) -> Source<'_> {
+        Source { path, content }
     }
 
     pub fn slice(&self, span: Span) -> &str {
