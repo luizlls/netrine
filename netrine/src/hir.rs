@@ -3,11 +3,20 @@ use std::fmt::{self, Display};
 use crate::error::{Error, Result};
 use crate::source::Span;
 use crate::syntax;
-use crate::types::Type;
+use crate::types::{self, Type};
 
 #[derive(Debug, Clone)]
 pub struct Module {
     pub nodes: Vec<Node>,
+}
+
+impl Display for Module {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for node in &self.nodes {
+            write!(f, "{node}")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -18,10 +27,66 @@ pub enum Node {
     Integer(Integer),
 }
 
+impl Node {
+    pub fn span(&self) -> Span {
+        match self {
+            Node::Unary(unary) => unary.span,
+            Node::Binary(binary) => binary.span,
+            Node::Number(number) => number.span,
+            Node::Integer(integer) => integer.span,
+        }
+    }
+}
+
+struct DisplayNode(String, Type, Vec<DisplayNode>);
+
+impl DisplayNode {
+    fn write(self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
+        let DisplayNode(value, type_, children) = self;
+        writeln!(f, "{}{}: {}", "  ".repeat(depth), value, type_)?;
+        for child in children {
+            child.write(f, depth + 1)?;
+        }
+        Ok(())
+    }
+}
+
+impl Node {
+    fn display(&self) -> DisplayNode {
+        match self {
+            Node::Unary(unary) => {
+                DisplayNode("UNARY".to_string(), unary.type_, vec![
+                    DisplayNode(format!("OPERATOR `{}`", unary.operator), unary.type_, vec![]),
+                    unary.operand.display(),
+                ])
+            },
+            Node::Binary(binary) => {
+                DisplayNode("BINARY".to_string(), binary.type_, vec![
+                    binary.loperand.display(),
+                    DisplayNode(format!("OPERATOR `{}`", binary.operator), binary.type_, vec![]),
+                    binary.roperand.display(),
+                ])
+            },
+            Node::Number(literal) => {
+                DisplayNode(format!("NUMBER `{}`", literal.value), types::NUMBER, vec![])
+            }
+            Node::Integer(literal) => {
+                DisplayNode(format!("INTEGER `{}`", literal.value), types::INTEGER, vec![])
+            },
+        }
+    }
+}
+
+impl Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display().write(f, 0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Unary {
     pub operator: Operator,
-    pub expr: Node,
+    pub operand: Node,
     pub span: Span,
     pub type_: Type,
 }
@@ -29,8 +94,8 @@ pub struct Unary {
 #[derive(Debug, Clone)]
 pub struct Binary {
     pub operator: Operator,
-    pub lexpr: Node,
-    pub rexpr: Node,
+    pub loperand: Node,
+    pub roperand: Node,
     pub span: Span,
     pub type_: Type,
 }
@@ -94,11 +159,18 @@ impl Display for Operator {
     }
 }
 
-
 struct LowerSyntax {
 }
 
 impl LowerSyntax {
+    fn new() -> LowerSyntax {
+        LowerSyntax {}
+    }
+
+    fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
+        Err(Error::error(span, message.into()))
+    }
+
     fn node(&mut self, node: &syntax::Node) -> Result<Node> {
         match node {
             syntax::Node::Binary(node) => self.binary(node),
@@ -109,57 +181,57 @@ impl LowerSyntax {
     }
 
     fn binary(&mut self, binary: &syntax::Binary) -> Result<Node> {
-        let operator = self.operator(binary.operator);
+        let loperand = self.node(&binary.lexpr)?;
+        let roperand = self.node(&binary.rexpr)?;
 
-        let type_ = match operator {
-            Operator::Add
-          | Operator::Sub
-          | Operator::Mul
-          | Operator::Div
-          | Operator::Exp
-          | Operator::Mod => Type::Number,
-            Operator::Eq
-          | Operator::Ne
-          | Operator::Lt
-          | Operator::Le
-          | Operator::Gt
-          | Operator::Ge
-          | Operator::And
-          | Operator::Or => Type::Boolean,
-            _ => unreachable!("Binary instruction with unsupported operator {}", operator)
+        let operator = match binary.operator.kind {
+            syntax::OperatorKind::Add => Operator::Add,
+            syntax::OperatorKind::Sub => Operator::Sub,
+            syntax::OperatorKind::Mul => Operator::Mul,
+            syntax::OperatorKind::Div => Operator::Div,
+            syntax::OperatorKind::Mod => Operator::Mod,
+            syntax::OperatorKind::Exp => Operator::Exp,
+            syntax::OperatorKind::Eq => Operator::Eq,
+            syntax::OperatorKind::Ne => Operator::Ne,
+            syntax::OperatorKind::Lt => Operator::Lt,
+            syntax::OperatorKind::Le => Operator::Le,
+            syntax::OperatorKind::Gt => Operator::Gt,
+            syntax::OperatorKind::Ge => Operator::Ge,
+            syntax::OperatorKind::And => Operator::And,
+            syntax::OperatorKind::Or => Operator::Or,
+            _ => {
+                return self.fail(binary.operator.span, "unsupported binary operator");
+            }
         };
-
-        let lexpr = self.node(&binary.lexpr)?;
-        let rexpr = self.node(&binary.rexpr)?;
 
         Ok(Node::Binary(
             Binary {
                 operator,
-                lexpr,
-                rexpr,
-                type_,
+                loperand,
+                roperand,
+                type_: Type::Unknown,
                 span: binary.span,
             }.into()
         ))
     }
 
     fn unary(&mut self, unary: &syntax::Unary) -> Result<Node> {
-        let operator = self.operator(unary.operator);
+        let operand = self.node(&unary.expr)?;
 
-        let type_ = match operator {
-            Operator::Not => Type::Boolean,
-            Operator::Pos
-          | Operator::Neg => Type::Number,
-            _ => unreachable!("Unary instruction with unsupported operator {}", operator)
+        let operator = match unary.operator.kind {
+            syntax::OperatorKind::Pos => Operator::Pos,
+            syntax::OperatorKind::Neg => Operator::Neg,
+            syntax::OperatorKind::Not => Operator::Not,
+            _ => {
+                return self.fail(unary.operator.span, "unsupported unary operator");
+            }
         };
-
-        let expr = self.node(&unary.expr)?;
 
         Ok(Node::Unary(
             Unary {
                 operator,
-                expr,
-                type_,
+                operand,
+                type_: Type::Unknown,
                 span: unary.span,
             }.into()
         ))
@@ -167,10 +239,7 @@ impl LowerSyntax {
 
     fn number(&mut self, number: &syntax::Literal) -> Result<Node> {
         let Ok(value) = str::parse(&number.value) else {
-            return Err(Error::new(
-                "value is not supported as a number".to_string(),
-                number.span,
-            ));
+            return self.fail(number.span, "value is not supported as an number");
         };
 
         Ok(Node::Number(
@@ -189,10 +258,7 @@ impl LowerSyntax {
         };
 
         let Ok(value) = value else {
-            return Err(Error::new(
-                "value is not supported as an integer".to_string(),
-                integer.span,
-            ));
+            return self.fail(integer.span, "value is not supported as an integer");
         };
 
         Ok(Node::Integer(
@@ -202,32 +268,10 @@ impl LowerSyntax {
             }
         ))
     }
-
-    fn operator(&self, operator: syntax::Operator) -> Operator {
-        match operator.kind {
-            syntax::OperatorKind::Pos => Operator::Pos,
-            syntax::OperatorKind::Neg => Operator::Neg,
-            syntax::OperatorKind::Add => Operator::Add,
-            syntax::OperatorKind::Sub => Operator::Sub,
-            syntax::OperatorKind::Mul => Operator::Mul,
-            syntax::OperatorKind::Div => Operator::Div,
-            syntax::OperatorKind::Mod => Operator::Mod,
-            syntax::OperatorKind::Exp => Operator::Exp,
-            syntax::OperatorKind::Eq => Operator::Eq,
-            syntax::OperatorKind::Ne => Operator::Ne,
-            syntax::OperatorKind::Lt => Operator::Lt,
-            syntax::OperatorKind::Le => Operator::Le,
-            syntax::OperatorKind::Gt => Operator::Gt,
-            syntax::OperatorKind::Ge => Operator::Ge,
-            syntax::OperatorKind::And => Operator::And,
-            syntax::OperatorKind::Or => Operator::Or,
-            syntax::OperatorKind::Not => Operator::Not,
-        }
-    }
 }
 
 pub fn from_syntax(module: &syntax::Module) -> Result<Module> {
-    let mut lower = LowerSyntax {};
+    let mut lower = LowerSyntax::new();
     let mut nodes = vec![];
 
     for node in &module.nodes {

@@ -7,6 +7,7 @@ mod syntax;
 mod hir;
 mod mir;
 mod types;
+mod type_check;
 mod wasm;
 
 pub fn source<'s>(path: String, content: &'s str) -> source::Source<'s> {
@@ -22,7 +23,8 @@ pub fn parse(source: &source::Source) -> error::Result<syntax::Module> {
 pub fn compile(source: &source::Source) -> error::Result<Vec<u8>> {
     let tokens = lexer::tokens(source);
     let syntax = parser::parse(tokens)?;
-    let hir = hir::from_syntax(&syntax)?;
+    let mut hir = hir::from_syntax(&syntax)?;
+    type_check::check(&mut hir)?;
     let mir = mir::from_hir(&hir)?;
     let wasm = wasm::compile(&mir)?;
     Ok(wasm)

@@ -11,7 +11,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(error: String, span: Span) -> Error {
+    pub fn error(span: Span, error: String) -> Error {
         Error {
             error,
             span: Some(span),

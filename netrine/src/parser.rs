@@ -30,10 +30,10 @@ impl<'src> Parser<'src> {
         self.token = self.tokens.token();
     }
 
-    fn fail(&mut self, error: String) -> Error {
+    fn fail<T>(&mut self, message: impl Into<String>) -> Result<T> {
         let span = self.token.span;
         self.recover();
-        Error::new(error, span)
+        Err(Error::error(span, message.into()))
     }
 
     fn recover(&mut self) {
@@ -64,14 +64,13 @@ impl<'src> Parser<'src> {
             TokenKind::Number => self.number(),
             TokenKind::Integer => self.integer(),
             TokenKind::LParen => self.parens(),
-            _ => Err(self.fail(
+            _ => self.fail(
                 match token.kind {
                     TokenKind::UnexpectedCharacter => "unexpected character",
                     TokenKind::UnterminatedString => "unterminated string",
                     _ => "unexpected expression",
-                }
-                .to_string(),
-            )),
+                },
+            ),
         }
     }
 
@@ -184,7 +183,7 @@ impl<'src> Parser<'src> {
         || self.maybe(TokenKind::EOF) {
             Ok(())
         } else {
-            Err(self.fail(self.unexpected(&[TokenKind::EOL])))
+            self.fail(self.unexpected(&[TokenKind::EOL]))
         }
     }
 
@@ -193,7 +192,7 @@ impl<'src> Parser<'src> {
             self.bump();
             Ok(())
         } else {
-            Err(self.fail(self.unexpected(&[kind])))
+            self.fail(self.unexpected(&[kind]))
         }
     }
 
@@ -243,9 +242,10 @@ impl<'src> Parser<'src> {
         Ok(result)
     }
 
-    fn unexpected(&self, expected: &[TokenKind]) -> std::string::String {
+    fn unexpected(&self, expected: &[TokenKind]) -> String {
         let expected = expected.iter().map(|it| format!("`{it}`")).collect::<Vec<_>>().join(", ");
-        format!("expected {expected}")
+        let actual = self.token.kind;
+        format!("expected {expected}, found `{actual}`")
     }
 }
 

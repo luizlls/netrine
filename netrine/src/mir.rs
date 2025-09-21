@@ -1,12 +1,18 @@
 use std::fmt::{self, Display};
 
 use crate::error::Result;
-use crate::hir;
+use crate::{hir, types};
 use crate::types::Type;
 
 #[derive(Debug, Clone)]
 pub struct Module {
     pub instructions: Vec<Instruction>,
+}
+
+impl Module {
+    pub fn get_type(&self, instruction_id: &InstructionId) -> Type {
+        self.instructions[instruction_id.id() as usize].type_
+    }
 }
 
 impl Display for Module {
@@ -168,8 +174,8 @@ impl LowerHir {
     }
 
     fn binary(&mut self, binary: &hir::Binary) -> Result<InstructionId> {
-        let loperand = self.node(&binary.lexpr)?;
-        let roperand = self.node(&binary.rexpr)?;
+        let loperand = self.node(&binary.loperand)?;
+        let roperand = self.node(&binary.roperand)?;
 
         Ok(self.emit(InstructionKind::Binary(
             Binary {
@@ -181,7 +187,7 @@ impl LowerHir {
     }
 
     fn unary(&mut self, unary: &hir::Unary) -> Result<InstructionId> {
-        let operand = self.node(&unary.expr)?;
+        let operand = self.node(&unary.operand)?;
 
         Ok(self.emit(InstructionKind::Unary(
             Unary {
@@ -196,7 +202,7 @@ impl LowerHir {
             Number {
                 value: number.value,
             }
-        ), Type::Number))
+        ), types::NUMBER))
     }
 
     fn integer(&mut self, integer: &hir::Integer) -> Result<InstructionId> {
@@ -204,7 +210,7 @@ impl LowerHir {
             Integer {
                 value: integer.value,
             }
-        ), Type::Integer))
+        ), types::INTEGER))
     }
 }
 
