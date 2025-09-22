@@ -4,5 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
 netrine = { path = "../netrine" }
+clap = { version = "4.5", features = ["derive"] }
+wasmer = "6"
+anyhow = "1"

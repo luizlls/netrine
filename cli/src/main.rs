@@ -1,68 +1,40 @@
 use std::fs;
-use std::io::{Write, stdin, stdout};
 use std::path::PathBuf;
 
-fn main() {
+use cli::cmd;
+
+fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<String>>();
     if args.len() <= 1 {
-        repl();
+        cmd::repl()
     } else {
         match args[1].as_str() {
             "e" => {
-                eval("repl".to_string(), args[2].to_string());
+                exec("<eval>".to_string(), args[2].to_string())
+            }
+            "c" => {
+                compile("<eval>".to_string(), args[2].to_string())
             }
             _ => {
-                file(args[1].to_string());
+                file(args[1].to_string())
             }
         }
     }
 }
 
-fn file(file: String) {
-    let file_path = PathBuf::from(file);
+fn file(file_path: String) -> anyhow::Result<()> {
+    let file_path = PathBuf::from(file_path);
     let content = fs::read_to_string(&file_path).expect("Couldn't open the file");
     let file_path = file_path.display().to_string();
-    eval(file_path, content);
+
+    exec(file_path, content)
 }
 
-fn repl() {
-    println!("netrine v{}", env!("CARGO_PKG_VERSION"));
-
-    let mut input = String::new();
-
-    while let Ok(line) = read_line() {
-        if line.is_empty() {
-            eval("repl".to_string(), input.trim_end().to_string());
-            input.clear();
-        } else {
-            input.push_str(&line);
-            input.push('\n');
-        }
-    }
+fn exec(file_path: String, source: String) -> anyhow::Result<()> {
+    println!("{}", cmd::eval(file_path, &source)?);
+    Ok(())
 }
 
-fn read_line() -> Result<String, ()> {
-    let mut line = String::new();
-    print!(">>>> ");
-
-    stdout().flush().unwrap();
-
-    match stdin().read_line(&mut line) {
-        Ok(_) => Ok(line.trim_end().to_string()),
-        Err(_) => Err(()),
-    }
-}
-
-fn eval(file_path: String, source: String) {
-    let source = netrine::source(file_path, &source);
-
-    match netrine::compile(&source) {
-        Ok(wasm) => {
-            fs::write("output.wasm", wasm).unwrap();
-        }
-        Err(error) => {
-            let error = error.report(&source).expect("Failed to report error");
-            eprintln!("{error}");
-        }
-    }
+fn compile(file_path: String, source: String) -> anyhow::Result<()> {
+    cmd::compile(file_path, &source)
 }

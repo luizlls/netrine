@@ -25,6 +25,9 @@ impl Display for Error {
     }
 }
 
+impl std::error::Error for Error {
+}
+
 impl Error {
     pub fn report(&self, source: &Source) -> Result<String, std::fmt::Error> {
         let mut buf = String::new();

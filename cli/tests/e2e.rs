@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-fn test_one(base: &str, path: PathBuf) {
+use cli::cmd;
+
+fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
     let file_name = path
         .file_stem()
         .expect("Expected a valid file")
@@ -14,7 +16,7 @@ fn test_one(base: &str, path: PathBuf) {
 
     let mut lines = source.lines().peekable();
     while let Some(line) = lines.next() {
-        if !line.starts_with("//") && !line.contains("test:") {
+        if !line.trim_start().starts_with("#") {
             continue;
         }
 
@@ -22,7 +24,7 @@ fn test_one(base: &str, path: PathBuf) {
         let test_name = line.split_once("test:").expect("Invalid test comment").1.trim();
 
         while let Some(line) = lines.next() {
-            if line.starts_with("--") {
+            if line.trim_start().starts_with("#") && line.contains("expect") {
                 break;
             }
             if !line.is_empty() {
@@ -34,7 +36,7 @@ fn test_one(base: &str, path: PathBuf) {
         let mut output = vec![];
 
         while let Some(line) = lines.peek() {
-            if line.starts_with("//") && line.contains("test:") {
+            if line.trim_start().starts_with("#") && line.contains("test:") || line.starts_with("//") {
                 break;
             }
             let line = lines.next().unwrap();
@@ -42,6 +44,8 @@ fn test_one(base: &str, path: PathBuf) {
                 output.push(line);
             }
         }
+
+        let output = output.join("\n").trim().to_string();
 
         cases.push((
             test_name.to_string(),
@@ -53,21 +57,7 @@ fn test_one(base: &str, path: PathBuf) {
     for (test_name, input, output) in cases {
         println!("test {base}::{file_name}::{test_name}");
 
-        let source = netrine::source("<test>".to_string(), &input);
-        let mut result = vec![];
-
-        match netrine::parse(&source) {
-            Ok(module) => {
-                result.push(format!("{module}"));
-            }
-            Err(error) => {
-                let error = error.report(&source).expect("Failed to report error");
-                result.push(format!("{error}"));
-            }
-        }
-
-        let output = output.join("\n").trim().to_string();
-        let result = result.join("\n").trim().to_string();
+        let result = cmd::eval("<test>".to_string(), &input)?;
 
         if result != output {
             println!("test failed: {base}::{file_name}::{test_name}");
@@ -76,9 +66,11 @@ fn test_one(base: &str, path: PathBuf) {
             panic!();
         }
     }
+
+    Ok(())
 }
 
-fn test(name: &str, path: &str) {
+fn test(name: &str, path: &str) -> anyhow::Result<()> {
     let paths = fs::read_dir(path).expect("Could not run tests");
 
     let mut test_paths = vec![];
@@ -89,13 +81,15 @@ fn test(name: &str, path: &str) {
     println!("\nRunning {} {} tests\n", test_paths.len(), name);
 
     for path in test_paths {
-        test_one(name, path);
+        test_one(name, path)?;
     }
 
     println!("\nAll {name} tests passed!\n");
+
+    Ok(())
 }
 
 #[test]
-fn e2e() {
-    test("syntax", "./tests/syntax");
+fn e2e() -> anyhow::Result<()> {
+    test("eval", "./tests/eval")
 }

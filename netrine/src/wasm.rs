@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use crate::error::Result;
-use crate::mir::{Instruction, InstructionId, InstructionKind, Unary, Binary, Operator, Integer, Number, Module};
+use crate::mir::{Binary, Instruction, InstructionId, InstructionKind, Integer, Module, Number, Operator, Unary};
 use crate::types::{self, Type};
 
 const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
@@ -245,24 +243,28 @@ impl<'w> Wasm<'w> {
         emit_u32(output, local_index);
     }
 
-    fn coerce_integer(&self, output: &mut Vec<u8>, operand_type: Type, result_type: Type) {
+    // TODO: Implement coercion in MIR
+    fn coerced_type(&self, output: &mut Vec<u8>, result_type: Type, instruction_id: InstructionId) -> Type {
+        let operand_type = self.module.get_type(&instruction_id);
+
         if operand_type == types::INTEGER && result_type == types::NUMBER {
             emit_u8(output, F64_CONVERT_S_I64);
+            result_type
+        } else {
+            operand_type
         }
     }
 
     fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary, local_index: u32, result_type: Type) {
-        let loperand_type = self.module.get_type(&binary.loperand);
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.loperand.id());
 
-        self.coerce_integer(output, loperand_type, result_type);
+        let loperand_type = self.coerced_type(output, result_type, binary.loperand);
 
-        let roperand_type = self.module.get_type(&binary.roperand);
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.roperand.id());
-
-        self.coerce_integer(output, roperand_type, result_type);
+        
+        let roperand_type = self.coerced_type(output, result_type, binary.roperand);
 
         let operation_type = match (loperand_type, roperand_type) {
             (types::BOOLEAN, types::BOOLEAN) => types::BOOLEAN,
@@ -286,7 +288,6 @@ impl<'w> Wasm<'w> {
             (types::INTEGER, Operator::Add) => I64_ADD,
             (types::INTEGER, Operator::Sub) => I64_SUB,
             (types::INTEGER, Operator::Mul) => I64_MUL,
-            (types::INTEGER, Operator::Div) => I64_DIV_S,
             (types::INTEGER, Operator::Eq) => I64_EQ,
             (types::INTEGER, Operator::Ne) => I64_NE,
             (types::INTEGER, Operator::Lt) => I64_LT_S,

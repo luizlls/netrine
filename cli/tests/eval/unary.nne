@@ -1,0 +1,22 @@
+# test: negative
+-10
+# expect:
+-10
+
+
+# test: chained
+--1
+# expect:
+1
+
+
+# test: mixed
+1 - -10
+# expect:
+11
+
+
+# test: positive
++1
+# expect:
+1
