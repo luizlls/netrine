@@ -1,4 +1,4 @@
-use wasmer::{Store, Module, Instance, Value, imports};
+use wasmer::{Instance, Module, Store, Value, imports};
 
 pub fn eval(file_path: String, source: &str) -> anyhow::Result<String> {
     let source = netrine::source(file_path, source);
@@ -17,7 +17,7 @@ pub fn eval(file_path: String, source: &str) -> anyhow::Result<String> {
         Value::I64(value) => value.to_string(),
         Value::F32(value) => value.to_string(),
         Value::F64(value) => value.to_string(),
-        _ => unimplemented!()
+        _ => unimplemented!(),
     };
 
     Ok(result)

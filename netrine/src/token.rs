@@ -102,6 +102,7 @@ impl fmt::Display for TokenKind {
 }
 
 impl Token {
+    #[rustfmt::skip]
     pub fn non_terminal(self) -> bool {
         matches!(
             self.kind,

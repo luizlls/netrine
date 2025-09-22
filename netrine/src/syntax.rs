@@ -25,6 +25,7 @@ pub enum Node {
 }
 
 impl ToSpan for Node {
+    #[rustfmt::skip]
     fn span(&self) -> Span {
         match self {
             Node::Unary(unary) => unary.span,
@@ -51,25 +52,37 @@ impl DisplayNode {
 impl Node {
     fn display(&self) -> DisplayNode {
         match self {
-            Node::Unary(unary) => {
-                DisplayNode("UNARY".to_string(), unary.span, vec![
-                    DisplayNode(format!("OPERATOR `{}`", unary.operator), unary.operator.span, vec![]),
+            Node::Unary(unary) => DisplayNode(
+                "UNARY".to_string(),
+                unary.span,
+                vec![
+                    DisplayNode(
+                        format!("OPERATOR `{}`", unary.operator),
+                        unary.operator.span,
+                        vec![],
+                    ),
                     unary.expr.display(),
-                ])
-            },
-            Node::Binary(binary) => {
-                DisplayNode("BINARY".to_string(), binary.span, vec![
+                ],
+            ),
+            Node::Binary(binary) => DisplayNode(
+                "BINARY".to_string(),
+                binary.span,
+                vec![
                     binary.lexpr.display(),
-                    DisplayNode(format!("OPERATOR `{}`", binary.operator), binary.operator.span, vec![]),
+                    DisplayNode(
+                        format!("OPERATOR `{}`", binary.operator),
+                        binary.operator.span,
+                        vec![],
+                    ),
                     binary.rexpr.display(),
-                ])
-            },
+                ],
+            ),
             Node::Number(literal) => {
                 DisplayNode(format!("NUMBER `{}`", literal.value), literal.span, vec![])
             }
             Node::Integer(literal) => {
                 DisplayNode(format!("INTEGER `{}`", literal.value), literal.span, vec![])
-            },
+            }
         }
     }
 }
@@ -138,6 +151,7 @@ pub enum Associativity {
 }
 
 impl Operator {
+    #[rustfmt::skip]
     pub fn precedence(self) -> Precedence {
         match self.kind {
             OperatorKind::Pos
@@ -160,6 +174,7 @@ impl Operator {
         }
     }
 
+    #[rustfmt::skip]
     pub fn associativity(self) -> Associativity {
         match self.kind {
             OperatorKind::Pos
@@ -167,6 +182,14 @@ impl Operator {
           | OperatorKind::Not => Associativity::None,
             OperatorKind::Exp => Associativity::Right,
             _ => Associativity::Left,
+        }
+    }
+
+    pub fn next_precedence(self) -> Precedence {
+        if self.associativity() == Associativity::Right {
+            self.precedence()
+        } else {
+            self.precedence() + 1
         }
     }
 }

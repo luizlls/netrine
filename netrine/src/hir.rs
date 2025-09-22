@@ -54,25 +54,29 @@ impl DisplayNode {
 impl Node {
     fn display(&self) -> DisplayNode {
         match self {
-            Node::Unary(unary) => {
-                DisplayNode("UNARY".to_string(), unary.type_, vec![
+            Node::Unary(unary) => DisplayNode(
+                "UNARY".to_string(),
+                unary.type_,
+                vec![
                     DisplayNode(format!("OPERATOR `{}`", unary.operator), unary.type_, vec![]),
                     unary.operand.display(),
-                ])
-            },
-            Node::Binary(binary) => {
-                DisplayNode("BINARY".to_string(), binary.type_, vec![
+                ],
+            ),
+            Node::Binary(binary) => DisplayNode(
+                "BINARY".to_string(),
+                binary.type_,
+                vec![
                     binary.loperand.display(),
                     DisplayNode(format!("OPERATOR `{}`", binary.operator), binary.type_, vec![]),
                     binary.roperand.display(),
-                ])
-            },
+                ],
+            ),
             Node::Number(literal) => {
                 DisplayNode(format!("NUMBER `{}`", literal.value), types::NUMBER, vec![])
             }
             Node::Integer(literal) => {
                 DisplayNode(format!("INTEGER `{}`", literal.value), types::INTEGER, vec![])
-            },
+            }
         }
     }
 }
@@ -159,8 +163,7 @@ impl Display for Operator {
     }
 }
 
-struct LowerSyntax {
-}
+struct LowerSyntax {}
 
 impl LowerSyntax {
     fn new() -> LowerSyntax {
@@ -211,7 +214,8 @@ impl LowerSyntax {
                 roperand,
                 type_: Type::Unknown,
                 span: binary.span,
-            }.into()
+            }
+            .into(),
         ))
     }
 
@@ -233,7 +237,8 @@ impl LowerSyntax {
                 operand,
                 type_: Type::Unknown,
                 span: unary.span,
-            }.into()
+            }
+            .into(),
         ))
     }
 
@@ -242,12 +247,10 @@ impl LowerSyntax {
             return self.fail(number.span, "value is not supported as an number");
         };
 
-        Ok(Node::Number(
-            Number {
-                value,
-                span: number.span,
-            }
-        ))
+        Ok(Node::Number(Number {
+            value,
+            span: number.span,
+        }))
     }
 
     fn integer(&mut self, integer: &syntax::Literal) -> Result<Node> {
@@ -261,12 +264,10 @@ impl LowerSyntax {
             return self.fail(integer.span, "value is not supported as an integer");
         };
 
-        Ok(Node::Integer(
-            Integer {
-                value,
-                span: integer.span,
-            }
-        ))
+        Ok(Node::Integer(Integer {
+            value,
+            span: integer.span,
+        }))
     }
 }
 

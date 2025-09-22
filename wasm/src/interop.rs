@@ -1,4 +1,4 @@
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{Layout, alloc, dealloc};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {

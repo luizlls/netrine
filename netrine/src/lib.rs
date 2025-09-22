@@ -1,13 +1,13 @@
 mod error;
-mod source;
-mod lexer;
-mod token;
-mod parser;
-mod syntax;
 mod hir;
+mod lexer;
 mod mir;
-mod types;
+mod parser;
+mod source;
+mod syntax;
+mod token;
 mod type_check;
+mod types;
 mod wasm;
 
 pub fn source<'s>(path: String, content: &'s str) -> source::Source<'s> {

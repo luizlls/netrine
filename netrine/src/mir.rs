@@ -1,8 +1,8 @@
 use std::fmt::{self, Display};
 
 use crate::error::Result;
-use crate::{hir, types};
 use crate::types::Type;
+use crate::{hir, types};
 
 #[derive(Debug, Clone)]
 pub struct Module {
@@ -138,7 +138,6 @@ impl Display for Number {
     }
 }
 
-
 struct LowerHir {
     instructions: Vec<Instruction>,
     block: BlockId,
@@ -177,40 +176,44 @@ impl LowerHir {
         let loperand = self.node(&binary.loperand)?;
         let roperand = self.node(&binary.roperand)?;
 
-        Ok(self.emit(InstructionKind::Binary(
-            Binary {
+        Ok(self.emit(
+            InstructionKind::Binary(Binary {
                 operator: binary.operator,
                 loperand,
                 roperand,
-            }
-        ), binary.type_))
+            }),
+            binary.type_,
+        ))
     }
 
     fn unary(&mut self, unary: &hir::Unary) -> Result<InstructionId> {
         let operand = self.node(&unary.operand)?;
 
-        Ok(self.emit(InstructionKind::Unary(
-            Unary {
+        Ok(self.emit(
+            InstructionKind::Unary(Unary {
                 operator: unary.operator,
                 operand,
-            }
-        ), unary.type_))
+            }),
+            unary.type_,
+        ))
     }
 
     fn number(&mut self, number: &hir::Number) -> Result<InstructionId> {
-        Ok(self.emit(InstructionKind::Number(
-            Number {
+        Ok(self.emit(
+            InstructionKind::Number(Number {
                 value: number.value,
-            }
-        ), types::NUMBER))
+            }),
+            types::NUMBER,
+        ))
     }
 
     fn integer(&mut self, integer: &hir::Integer) -> Result<InstructionId> {
-        Ok(self.emit(InstructionKind::Integer(
-            Integer {
+        Ok(self.emit(
+            InstructionKind::Integer(Integer {
                 value: integer.value,
-            }
-        ), types::INTEGER))
+            }),
+            types::INTEGER,
+        ))
     }
 }
 

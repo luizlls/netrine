@@ -25,15 +25,13 @@ impl Display for Error {
     }
 }
 
-impl std::error::Error for Error {
-}
+impl std::error::Error for Error {}
 
 impl Error {
     pub fn report(&self, source: &Source) -> Result<String, std::fmt::Error> {
         let mut buf = String::new();
 
-        let Some(Span { start, end }) = self.span
-        else {
+        let Some(Span { start, end }) = self.span else {
             writeln!(buf, "error: {}\n", self.error)?;
             return Ok(buf);
         };

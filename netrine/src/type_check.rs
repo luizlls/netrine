@@ -1,14 +1,13 @@
 use crate::error::{Error, Result};
-use crate::hir::{Unary, Binary, Operator, Module, Node};
+use crate::hir::{Binary, Module, Node, Operator, Unary};
 use crate::source::Span;
 use crate::types::{self, Type};
 
-struct TypeCheck {
-}
+struct TypeCheck {}
 
 impl TypeCheck {
     fn new() -> TypeCheck {
-        TypeCheck { }
+        TypeCheck {}
     }
 
     fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
@@ -32,12 +31,11 @@ impl TypeCheck {
                 self.expect(&unary.operand, operand_type, types::BOOLEAN)?;
                 types::BOOLEAN
             }
-            Operator::Pos
-          | Operator::Neg => {
+            Operator::Pos | Operator::Neg => {
                 self.expect(&unary.operand, operand_type, types::NUMBER)?;
                 operand_type
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         Ok(unary.type_)
@@ -48,34 +46,29 @@ impl TypeCheck {
         let roperand_type = self.check(&mut binary.roperand)?;
 
         binary.type_ = match binary.operator {
-            Operator::And
-          | Operator::Or => {
+            Operator::And | Operator::Or => {
                 self.expect(&binary.loperand, loperand_type, types::BOOLEAN)?;
                 self.expect(&binary.roperand, roperand_type, types::BOOLEAN)?;
                 types::BOOLEAN
             }
-            Operator::Eq
-          | Operator::Ne => {
+            Operator::Eq | Operator::Ne => {
                 match loperand_type {
-                    types::BOOLEAN => self.expect(&binary.roperand, roperand_type, types::BOOLEAN)?,
-                    types::INTEGER
-                  | types::NUMBER => self.expect(&binary.roperand, roperand_type, types::NUMBER)?,
-                    _ => unreachable!()
+                    types::BOOLEAN => {
+                        self.expect(&binary.roperand, roperand_type, types::BOOLEAN)?
+                    }
+                    types::INTEGER | types::NUMBER => {
+                        self.expect(&binary.roperand, roperand_type, types::NUMBER)?
+                    }
+                    _ => unreachable!(),
                 }
                 types::BOOLEAN
             }
-            Operator::Lt
-          | Operator::Le
-          | Operator::Gt
-          | Operator::Ge => {
+            Operator::Lt | Operator::Le | Operator::Gt | Operator::Ge => {
                 self.expect(&binary.loperand, loperand_type, types::NUMBER)?;
                 self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
                 types::BOOLEAN
             }
-            Operator::Add
-          | Operator::Sub
-          | Operator::Mul
-          | Operator::Exp => {
+            Operator::Add | Operator::Sub | Operator::Mul | Operator::Exp => {
                 self.expect(&binary.loperand, loperand_type, types::NUMBER)?;
                 self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
 
@@ -95,7 +88,7 @@ impl TypeCheck {
                 self.expect(&binary.roperand, roperand_type, types::INTEGER)?;
                 types::INTEGER
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         Ok(binary.type_)
@@ -105,21 +98,14 @@ impl TypeCheck {
         if node_type.is(expected) {
             Ok(())
         } else {
-            self.fail(
-                node.span(),
-                format!(
-                    "expected `{}`, found `{}`",
-                    expected,
-                    node_type,
-                ),
-            )
+            self.fail(node.span(), format!("expected `{}`, found `{}`", expected, node_type))
         }
     }
 }
 
 pub fn check(module: &mut Module) -> Result<()> {
     let mut type_checker = TypeCheck::new();
-    
+
     for node in &mut module.nodes {
         type_checker.check(node)?;
     }

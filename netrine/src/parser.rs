@@ -1,9 +1,9 @@
-use crate::syntax::{
-    Module, Node, Unary, Binary, Literal, Operator, OperatorKind, Associativity, Precedence
-};
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
+use crate::syntax::{
+    Associativity, Binary, Literal, Module, Node, Operator, OperatorKind, Precedence, Unary,
+};
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
@@ -17,7 +17,8 @@ impl<'src> Parser<'src> {
         Parser {
             tokens,
             token: Token::default(),
-        }.init()
+        }
+        .init()
     }
 
     fn init(mut self) -> Parser<'src> {
@@ -64,20 +65,18 @@ impl<'src> Parser<'src> {
             TokenKind::Number => self.number(),
             TokenKind::Integer => self.integer(),
             TokenKind::LParen => self.parens(),
-            _ => self.fail(
-                match token.kind {
-                    TokenKind::UnexpectedCharacter => "unexpected character",
-                    TokenKind::UnterminatedString => "unterminated string",
-                    _ => "unexpected expression",
-                },
-            ),
+            _ => self.fail(match token.kind {
+                TokenKind::UnexpectedCharacter => "unexpected character",
+                TokenKind::UnterminatedString => "unterminated string",
+                _ => "unexpected expression",
+            }),
         }
     }
 
     fn literal(&mut self, kind: TokenKind, ctor: fn(Literal) -> Node) -> Result<Node> {
         let token = self.token;
         self.expect(kind)?;
-        let span  = token.span;
+        let span = token.span;
         let value = self.tokens.value(token).to_string();
 
         Ok(ctor(Literal { value, span }))
@@ -103,11 +102,14 @@ impl<'src> Parser<'src> {
         if let Some(operator) = self.operator(0 as Precedence, true) {
             let expr = self.unary()?;
 
-            Ok(Node::Unary(Unary {
-                span: Span::from(&operator, &expr),
-                expr,
-                operator,
-            }.into()))
+            Ok(Node::Unary(
+                Unary {
+                    span: Span::from(&operator, &expr),
+                    expr,
+                    operator,
+                }
+                .into(),
+            ))
         } else {
             self.atom()
         }
@@ -117,21 +119,18 @@ impl<'src> Parser<'src> {
         let mut expr = self.unary()?;
 
         while let Some(operator) = self.operator(precedence, false) {
-            let precedence = match operator.associativity() {
-                Associativity::None
-              | Associativity::Left => operator.precedence() + 1,
-                Associativity::Right => operator.precedence(),
-            };
-
-            let rexpr = self.binary(precedence)?;
             let lexpr = expr;
+            let rexpr = self.binary(operator.next_precedence())?;
 
-            expr = Node::Binary(Binary {
-                span: Span::from(&lexpr, &rexpr),
-                lexpr,
-                rexpr,
-                operator,
-            }.into());
+            expr = Node::Binary(
+                Binary {
+                    span: Span::from(&lexpr, &rexpr),
+                    lexpr,
+                    rexpr,
+                    operator,
+                }
+                .into(),
+            );
         }
 
         Ok(expr)
@@ -179,8 +178,7 @@ impl<'src> Parser<'src> {
     }
 
     fn endline(&mut self) -> Result<()> {
-        if self.maybe(TokenKind::EOL)
-        || self.maybe(TokenKind::EOF) {
+        if self.maybe(TokenKind::EOL) || self.maybe(TokenKind::EOF) {
             Ok(())
         } else {
             self.fail(self.unexpected(&[TokenKind::EOL]))
@@ -243,7 +241,11 @@ impl<'src> Parser<'src> {
     }
 
     fn unexpected(&self, expected: &[TokenKind]) -> String {
-        let expected = expected.iter().map(|it| format!("`{it}`")).collect::<Vec<_>>().join(", ");
+        let expected = expected
+            .iter()
+            .map(|it| format!("`{it}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let actual = self.token.kind;
         format!("expected {expected}, found `{actual}`")
     }
@@ -261,7 +263,5 @@ pub fn parse(tokens: Tokens<'_>) -> Result<Module> {
         parser.endline()?;
     }
 
-    Ok(Module {
-        nodes,
-    })
+    Ok(Module { nodes })
 }

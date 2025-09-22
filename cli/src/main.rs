@@ -9,15 +9,9 @@ fn main() -> anyhow::Result<()> {
         cmd::repl()
     } else {
         match args[1].as_str() {
-            "e" => {
-                exec("<eval>".to_string(), args[2].to_string())
-            }
-            "c" => {
-                compile("<eval>".to_string(), args[2].to_string())
-            }
-            _ => {
-                file(args[1].to_string())
-            }
+            "e" => exec("<eval>".to_string(), args[2].to_string()),
+            "c" => compile("<eval>".to_string(), args[2].to_string()),
+            _ => file(args[1].to_string()),
         }
     }
 }

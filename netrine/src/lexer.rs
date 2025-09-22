@@ -32,7 +32,9 @@ impl<'src> Lexer<'src> {
     }
 
     fn bump(&mut self) -> u8 {
-        if self.index == self.bytes.len() { return self.curr; }
+        if self.index == self.bytes.len() {
+            return self.curr;
+        }
         self.index += 1;
         self.curr = self.peek;
         self.peek = self.at(self.index + 1);
@@ -119,6 +121,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    #[rustfmt::skip]
     fn is_symbol(&self, chr: u8) -> bool {
         matches!(
             chr,
@@ -263,10 +266,11 @@ impl<'src> Tokens<'src> {
     pub fn new(source: &'src Source) -> Tokens<'src> {
         Tokens {
             lexer: Lexer::new(source),
-            prev:  Token::default(),
-            peek:  Token::default(),
+            prev: Token::default(),
+            peek: Token::default(),
             token: Token::default(),
-        }.init()
+        }
+        .init()
     }
 
     fn init(mut self) -> Tokens<'src> {
@@ -276,15 +280,15 @@ impl<'src> Tokens<'src> {
     }
 
     pub fn bump(&mut self) {
-        self.prev  = self.token;
+        self.prev = self.token;
         self.token = self.peek;
-        self.peek  = self.lexer.token();
+        self.peek = self.lexer.token();
     }
 
     #[inline]
     pub fn token(&self) -> Token {
         self.token
-    } 
+    }
 
     #[inline]
     pub fn prev(&self) -> Token {

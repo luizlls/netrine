@@ -21,7 +21,7 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
         }
 
         let mut input = String::new();
-        let test_name = line.split_once("test:").expect("Invalid test comment").1.trim();
+        let test_name = line.split_once("test:").unwrap().1.trim();
 
         while let Some(line) = lines.next() {
             if line.trim_start().starts_with("#") && line.contains("expect") {
@@ -36,7 +36,9 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
         let mut output = vec![];
 
         while let Some(line) = lines.peek() {
-            if line.trim_start().starts_with("#") && line.contains("test:") || line.starts_with("//") {
+            if line.trim_start().starts_with("#") && line.contains("test:")
+                || line.starts_with("//")
+            {
                 break;
             }
             let line = lines.next().unwrap();
@@ -47,11 +49,7 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
 
         let output = output.join("\n").trim().to_string();
 
-        cases.push((
-            test_name.to_string(),
-            input.trim().to_string(),
-            output,
-        ));
+        cases.push((test_name.to_string(), input.trim().to_string(), output));
     }
 
     for (test_name, input, output) in cases {

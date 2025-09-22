@@ -26,19 +26,14 @@ pub const INTEGER: Type = Type::Builtin(INTEGER_ID);
 pub const BOOLEAN: Type = Type::Builtin(BOOL_ID);
 
 pub const fn builtin_types() -> &'static [Type] {
-    &[
-        NOTHING,
-        NUMBER,
-        INTEGER,
-        BOOLEAN,
-    ]
+    &[NOTHING, NUMBER, INTEGER, BOOLEAN]
 }
 
 impl Type {
     pub fn is(self, other: Type) -> bool {
         match (self, other) {
             (INTEGER | NUMBER, NUMBER) => true,
-            _ => self == other  
+            _ => self == other,
         }
     }
 }

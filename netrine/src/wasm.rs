@@ -1,5 +1,7 @@
 use crate::error::Result;
-use crate::mir::{Binary, Instruction, InstructionId, InstructionKind, Integer, Module, Number, Operator, Unary};
+use crate::mir::{
+    Binary, Instruction, InstructionId, InstructionKind, Integer, Module, Number, Operator, Unary,
+};
 use crate::types::{self, Type};
 
 const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
@@ -137,9 +139,9 @@ impl<'w> Wasm<'w> {
         emit_u32(&mut section, 1);
         // regular function
         emit_u8(&mut section, FUNCTION_TYPE);
-         // no parameters
+        // no parameters
         emit_u32(&mut section, 0);
-         // one return value
+        // one return value
         emit_u32(&mut section, 1);
         emit_u8(&mut section, self.instruction_type(self.module.instructions.last().unwrap()));
 
@@ -216,16 +218,18 @@ impl<'w> Wasm<'w> {
             types::NUMBER => F64_TYPE,
             types::INTEGER => I64_TYPE,
             types::BOOLEAN => I32_TYPE,
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
     fn emit_instruction(&self, output: &mut Vec<u8>, instruction: &Instruction, local_index: u32) {
         match &instruction.kind {
-            InstructionKind::Unary(unary) => self.emit_unary(output, unary, local_index),
-            InstructionKind::Binary(binary) => self.emit_binary(output, binary, local_index, instruction.type_),
             InstructionKind::Number(number) => self.emit_number(output, number, local_index),
             InstructionKind::Integer(integer) => self.emit_integer(output, integer, local_index),
+            InstructionKind::Unary(unary) => self.emit_unary(output, unary, local_index),
+            InstructionKind::Binary(binary) => {
+                self.emit_binary(output, binary, local_index, instruction.type_)
+            }
         }
     }
 
@@ -244,7 +248,12 @@ impl<'w> Wasm<'w> {
     }
 
     // TODO: Implement coercion in MIR
-    fn coerced_type(&self, output: &mut Vec<u8>, result_type: Type, instruction_id: InstructionId) -> Type {
+    fn coerced_type(
+        &self,
+        output: &mut Vec<u8>,
+        result_type: Type,
+        instruction_id: InstructionId,
+    ) -> Type {
         let operand_type = self.module.get_type(&instruction_id);
 
         if operand_type == types::INTEGER && result_type == types::NUMBER {
@@ -255,7 +264,13 @@ impl<'w> Wasm<'w> {
         }
     }
 
-    fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary, local_index: u32, result_type: Type) {
+    fn emit_binary(
+        &self,
+        output: &mut Vec<u8>,
+        binary: &Binary,
+        local_index: u32,
+        result_type: Type,
+    ) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.loperand.id());
 
@@ -263,7 +278,7 @@ impl<'w> Wasm<'w> {
 
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.roperand.id());
-        
+
         let roperand_type = self.coerced_type(output, result_type, binary.roperand);
 
         let operation_type = match (loperand_type, roperand_type) {
@@ -295,10 +310,10 @@ impl<'w> Wasm<'w> {
             (types::INTEGER, Operator::Gt) => I64_GT_S,
             (types::INTEGER, Operator::Ge) => I64_GE_S,
 
-            (types::BOOLEAN, Operator::Eq)  => I32_EQ,
-            (types::BOOLEAN, Operator::Ne)  => I32_NE,
+            (types::BOOLEAN, Operator::Eq) => I32_EQ,
+            (types::BOOLEAN, Operator::Ne) => I32_NE,
             (types::BOOLEAN, Operator::And) => I32_AND,
-            (types::BOOLEAN, Operator::Or)  => I32_OR,
+            (types::BOOLEAN, Operator::Or) => I32_OR,
 
             (type_, operator) => unreachable!("unsupported operator {operator} for {type_} type"),
         };
@@ -316,18 +331,16 @@ impl<'w> Wasm<'w> {
         let operation = match unary.operator {
             Operator::Not => I32_EQZ,
             Operator::Pos => NOOP,
-            Operator::Neg => {
-                match self.module.get_type(&unary.operand) {
-                    types::NUMBER => F64_NEG,
-                    types::INTEGER => {
-                        emit_u8(output, I64_CONST);
-                        emit_i64(output, -1);
-                        I64_MUL
-                    }
-                    _ => unreachable!()
+            Operator::Neg => match self.module.get_type(&unary.operand) {
+                types::NUMBER => F64_NEG,
+                types::INTEGER => {
+                    emit_u8(output, I64_CONST);
+                    emit_i64(output, -1);
+                    I64_MUL
                 }
-            }
-            _ => unreachable!()
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
         };
         emit_u8(output, operation);
 
