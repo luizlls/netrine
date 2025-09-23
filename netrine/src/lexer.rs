@@ -42,11 +42,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn at(&self, idx: usize) -> u8 {
-        if idx < self.bytes.len() {
-            self.bytes[idx]
-        } else {
-            b'\0'
-        }
+        if idx < self.bytes.len() { self.bytes[idx] } else { b'\0' }
     }
 
     fn slice(&self) -> &'src str {
@@ -257,7 +253,7 @@ impl<'src> Lexer<'src> {
 #[derive(Debug, Clone)]
 pub struct Tokens<'src> {
     lexer: Lexer<'src>,
-    prev: Token,
+    prev: Option<Token>,
     peek: Token,
     token: Token,
 }
@@ -266,7 +262,7 @@ impl<'src> Tokens<'src> {
     pub fn new(source: &'src Source) -> Tokens<'src> {
         Tokens {
             lexer: Lexer::new(source),
-            prev: Token::default(),
+            prev: None,
             peek: Token::default(),
             token: Token::default(),
         }
@@ -280,7 +276,7 @@ impl<'src> Tokens<'src> {
     }
 
     pub fn bump(&mut self) {
-        self.prev = self.token;
+        self.prev = Some(self.token);
         self.token = self.peek;
         self.peek = self.lexer.token();
     }
@@ -291,7 +287,7 @@ impl<'src> Tokens<'src> {
     }
 
     #[inline]
-    pub fn prev(&self) -> Token {
+    pub fn prev(&self) -> Option<Token> {
         self.prev
     }
 
@@ -309,6 +305,188 @@ impl<'src> Tokens<'src> {
     }
 }
 
+impl<'s> Iterator for Tokens<'s> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let token = self.token;
+        self.bump();
+        if token.kind != TokenKind::EOF { Some(token) } else { None }
+    }
+}
+
 pub fn tokens<'s>(source: &'s Source) -> Tokens<'s> {
     Tokens::new(source)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! assert_token {
+        ($tokens: expr, $kind: expr) => {{
+            assert_eq!($kind, $tokens.token().kind);
+            $tokens.bump();
+        }};
+        ($tokens: expr, $kind: expr, $value: expr) => {{
+            assert_eq!($kind, $tokens.token().kind);
+            assert_eq!($value, $tokens.value($tokens.token()));
+            $tokens.bump();
+        }};
+    }
+
+    #[test]
+    fn identifier() {
+        let source = Source::new("<test>".to_string(), "ident test_1 True CONST _ ___");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::Identifier, "ident");
+        assert_token!(tokens, TokenKind::Identifier, "test_1");
+        assert_token!(tokens, TokenKind::Identifier, "True");
+        assert_token!(tokens, TokenKind::Identifier, "CONST");
+        assert_token!(tokens, TokenKind::Underscore, "_");
+        assert_token!(tokens, TokenKind::Identifier, "___");
+    }
+
+    #[test]
+    fn keywords() {
+        let source = Source::new("<test>".to_string(), "and or not");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::And);
+        assert_token!(tokens, TokenKind::Or);
+        assert_token!(tokens, TokenKind::Not);
+    }
+
+    #[test]
+    fn punctuation() {
+        let source = Source::new("<test>".to_string(), ". , ; ( ) [ ] { }");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::Dot);
+        assert_token!(tokens, TokenKind::Comma);
+        assert_token!(tokens, TokenKind::Semi);
+        assert_token!(tokens, TokenKind::LParen);
+        assert_token!(tokens, TokenKind::RParen);
+        assert_token!(tokens, TokenKind::LBracket);
+        assert_token!(tokens, TokenKind::RBracket);
+        assert_token!(tokens, TokenKind::LBrace);
+        assert_token!(tokens, TokenKind::RBrace);
+    }
+
+    #[test]
+    fn operators() {
+        let source = Source::new("<test>".to_string(), ". : => = == != + - * / % ^ > >= < <= ..");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::Dot, ".");
+        assert_token!(tokens, TokenKind::Colon, ":");
+        assert_token!(tokens, TokenKind::Arrow, "=>");
+        assert_token!(tokens, TokenKind::Equals, "=");
+        assert_token!(tokens, TokenKind::EqEq, "==");
+        assert_token!(tokens, TokenKind::NoEq, "!=");
+        assert_token!(tokens, TokenKind::Plus, "+");
+        assert_token!(tokens, TokenKind::Minus, "-");
+        assert_token!(tokens, TokenKind::Star, "*");
+        assert_token!(tokens, TokenKind::Slash, "/");
+        assert_token!(tokens, TokenKind::Mod, "%");
+        assert_token!(tokens, TokenKind::Caret, "^");
+        assert_token!(tokens, TokenKind::Gt, ">");
+        assert_token!(tokens, TokenKind::GtEq, ">=");
+        assert_token!(tokens, TokenKind::Lt, "<");
+        assert_token!(tokens, TokenKind::LtEq, "<=");
+        assert_token!(tokens, TokenKind::Dots, "..");
+    }
+
+    #[test]
+    fn number() {
+        let source = Source::new("<test>".to_string(), "42 3.14 0xABCDEF 0b0101");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::Integer, "42");
+        assert_token!(tokens, TokenKind::Number, "3.14");
+        assert_token!(tokens, TokenKind::Integer, "0xABCDEF");
+        assert_token!(tokens, TokenKind::Integer, "0b0101");
+    }
+
+    #[test]
+    fn simple_string() {
+        let source = Source::new("<test>".to_string(), r#""Hello, World""#);
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::String, "\"Hello, World\"");
+    }
+
+    #[test]
+    fn nested_string() {
+        let source = Source::new("<test>".to_string(), r#""code = \"n = 42\"""#);
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::String, "\"code = \\\"n = 42\\\"\"");
+    }
+
+    #[test]
+    fn empty_lines() {
+        let source = Source::new("<test>".to_string(), "\n\n\n");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::EOL);
+        assert_token!(tokens, TokenKind::EOF);
+    }
+
+    #[test]
+    fn unterminated_string() {
+        let source = Source::new("<test>".to_string(), r#""Hello"#);
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::UnterminatedString);
+    }
+
+    #[test]
+    fn unbalanced_quotes() {
+        let source = Source::new("<test>".to_string(), r#""Hello"""#);
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::String, "\"Hello\"");
+        assert_token!(tokens, TokenKind::UnterminatedString);
+    }
+
+    #[test]
+    fn invalid_escaped_string() {
+        let source = Source::new("<test>".to_string(), r#""escape \a""#);
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::UnexpectedCharacter);
+    }
+
+    #[test]
+    fn unexpected_character() {
+        let source = Source::new("<test>".to_string(), "😀 = 10");
+        let mut tokens = tokens(&source);
+
+        assert_token!(tokens, TokenKind::UnexpectedCharacter);
+    }
+
+    #[test]
+    fn peek_prev() {
+        let source = Source::new("<test>".to_string(), "text 3.14 _");
+        let mut tokens = tokens(&source);
+
+        assert_eq!(tokens.token().kind, TokenKind::Identifier);
+        assert_eq!(tokens.value(tokens.token()), "text");
+
+        assert_eq!(tokens.peek().kind, TokenKind::Number);
+        assert_eq!(tokens.value(tokens.peek()), "3.14");
+
+        tokens.bump();
+
+        assert_eq!(tokens.token().kind, TokenKind::Number);
+        assert_eq!(tokens.value(tokens.token()), "3.14");
+
+        assert_eq!(tokens.peek().kind, TokenKind::Underscore);
+        assert_eq!(tokens.value(tokens.peek()), "_");
+
+        assert_eq!(tokens.prev().unwrap().kind, TokenKind::Identifier);
+        assert_eq!(tokens.value(tokens.prev().unwrap()), "text");
+    }
 }

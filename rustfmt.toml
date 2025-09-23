@@ -1,7 +1,6 @@
 unstable_features=true
-use_small_heuristics="Default"
+use_small_heuristics="Max"
 max_width=100
-fn_call_width=100
 chain_width=60
 struct_lit_width=15
 use_field_init_shorthand=true
