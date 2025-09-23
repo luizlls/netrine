@@ -1,9 +1,7 @@
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
-use crate::syntax::{
-    Associativity, Binary, Literal, Module, Node, Operator, OperatorKind, Precedence, Unary,
-};
+use crate::syntax::{Binary, Literal, Module, Node, Operator, OperatorKind, Precedence, Unary};
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
@@ -99,20 +97,20 @@ impl<'src> Parser<'src> {
     }
 
     fn unary(&mut self) -> Result<Node> {
-        if let Some(operator) = self.operator(0 as Precedence, true) {
-            let expr = self.unary()?;
+        let Some(operator) = self.operator(0 as Precedence, true) else {
+            return self.atom();
+        };
 
-            Ok(Node::Unary(
-                Unary {
-                    span: Span::from(&operator, &expr),
-                    expr,
-                    operator,
-                }
-                .into(),
-            ))
-        } else {
-            self.atom()
-        }
+        let expr = self.unary()?;
+
+        Ok(Node::Unary(
+            Unary {
+                span: Span::from(&operator, &expr),
+                expr,
+                operator,
+            }
+            .into(),
+        ))
     }
 
     fn binary(&mut self, precedence: Precedence) -> Result<Node> {
@@ -264,4 +262,500 @@ pub fn parse(tokens: Tokens<'_>) -> Result<Module> {
     }
 
     Ok(Module { nodes })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::*;
+    use crate::source::*;
+
+    fn parse_module(input: &str) -> Result<Module> {
+        let source = Source::new("<test>".to_string(), input);
+        parse(tokens(&source))
+    }
+
+    #[test]
+    fn empty() {
+        let module = parse_module("").unwrap();
+
+        assert_eq!(module.nodes, vec![]);
+    }
+
+    #[test]
+    fn empty_lines() {
+        let module = parse_module("\n\n\n").unwrap();
+
+        assert_eq!(module.nodes, vec![]);
+    }
+
+    #[test]
+    fn integer() {
+        let module = parse_module("42").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Integer(Literal {
+                value: "42".to_string(),
+                span: Span::new(0, 2),
+            })]
+        );
+    }
+
+    #[test]
+    fn number() {
+        let module = parse_module("3.14").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Number(Literal {
+                value: "3.14".to_string(),
+                span: Span::new(0, 4),
+            })]
+        );
+    }
+
+    #[test]
+    fn multiple_items() {
+        let module = parse_module("1\n2\n\n3").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![
+                Node::Integer(Literal {
+                    value: "1".to_string(),
+                    span: Span::new(0, 1),
+                }),
+                Node::Integer(Literal {
+                    value: "2".to_string(),
+                    span: Span::new(2, 3),
+                }),
+                Node::Integer(Literal {
+                    value: "3".to_string(),
+                    span: Span::new(5, 6),
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn unary_negative() {
+        let module = parse_module("-10").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Unary(
+                Unary {
+                    operator: Operator {
+                        kind: OperatorKind::Neg,
+                        span: Span::new(0, 1),
+                    },
+                    expr: Node::Integer(Literal {
+                        value: "10".to_string(),
+                        span: Span::new(1, 3),
+                    }),
+                    span: Span::new(0, 3)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn unary_positive() {
+        let module = parse_module("+3.14").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Unary(
+                Unary {
+                    operator: Operator {
+                        kind: OperatorKind::Pos,
+                        span: Span::new(0, 1),
+                    },
+                    expr: Node::Number(Literal {
+                        value: "3.14".to_string(),
+                        span: Span::new(1, 5),
+                    }),
+                    span: Span::new(0, 5)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn unary_chained() {
+        let module = parse_module("---5").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Unary(
+                Unary {
+                    operator: Operator {
+                        kind: OperatorKind::Neg,
+                        span: Span::new(0, 1),
+                    },
+                    expr: Node::Unary(
+                        Unary {
+                            operator: Operator {
+                                kind: OperatorKind::Neg,
+                                span: Span::new(1, 2),
+                            },
+                            expr: Node::Unary(
+                                Unary {
+                                    operator: Operator {
+                                        kind: OperatorKind::Neg,
+                                        span: Span::new(2, 3),
+                                    },
+                                    expr: Node::Integer(Literal {
+                                        value: "5".to_string(),
+                                        span: Span::new(3, 4),
+                                    }),
+                                    span: Span::new(2, 4)
+                                }
+                                .into()
+                            ),
+                            span: Span::new(1, 4)
+                        }
+                        .into()
+                    ),
+                    span: Span::new(0, 4)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn unary_confusing() {
+        let module = parse_module("1--10").unwrap();
+        // 1 - -10
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Sub,
+                        span: Span::new(1, 2),
+                    },
+                    lexpr: Node::Integer(Literal {
+                        value: "1".to_string(),
+                        span: Span::new(0, 1),
+                    }),
+                    rexpr: Node::Unary(
+                        Unary {
+                            operator: Operator {
+                                kind: OperatorKind::Neg,
+                                span: Span::new(2, 3),
+                            },
+                            expr: Node::Integer(Literal {
+                                value: "10".to_string(),
+                                span: Span::new(3, 5),
+                            }),
+                            span: Span::new(2, 5)
+                        }
+                        .into()
+                    ),
+                    span: Span::new(0, 5)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn binary() {
+        let module = parse_module("50 + 2.10").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Add,
+                        span: Span::new(3, 4),
+                    },
+                    lexpr: Node::Integer(Literal {
+                        value: "50".to_string(),
+                        span: Span::new(0, 2),
+                    }),
+                    rexpr: Node::Number(Literal {
+                        value: "2.10".to_string(),
+                        span: Span::new(5, 9),
+                    }),
+                    span: Span::new(0, 9)
+                }
+                .into()
+            ),]
+        );
+    }
+
+    #[test]
+    fn logical() {
+        let module = parse_module("1 or not 0 and 1").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Or,
+                        span: Span::new(2, 4),
+                    },
+                    lexpr: Node::Integer(Literal {
+                        value: "1".to_string(),
+                        span: Span::new(0, 1),
+                    }),
+                    rexpr: Node::Binary(
+                        Binary {
+                            operator: Operator {
+                                kind: OperatorKind::And,
+                                span: Span::new(11, 14),
+                            },
+                            lexpr: Node::Unary(
+                                Unary {
+                                    operator: Operator {
+                                        kind: OperatorKind::Not,
+                                        span: Span::new(5, 8),
+                                    },
+                                    expr: Node::Integer(Literal {
+                                        value: "0".to_string(),
+                                        span: Span::new(9, 10),
+                                    }),
+                                    span: Span::new(5, 10),
+                                }
+                                .into()
+                            ),
+                            rexpr: Node::Integer(Literal {
+                                value: "1".to_string(),
+                                span: Span::new(15, 16),
+                            }),
+                            span: Span::new(5, 16),
+                        }
+                        .into()
+                    ),
+                    span: Span::new(0, 16)
+                }
+                .into()
+            ),]
+        );
+    }
+
+    #[test]
+    fn precendece() {
+        let module = parse_module("1 + 2 * 3 / 4 - 5").unwrap();
+        // ((1 + ((2 * 3) / 4)) - 5)
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Sub,
+                        span: Span::new(14, 15),
+                    },
+                    lexpr: Node::Binary(
+                        Binary {
+                            operator: Operator {
+                                kind: OperatorKind::Add,
+                                span: Span::new(2, 3),
+                            },
+                            lexpr: Node::Integer(Literal {
+                                value: "1".to_string(),
+                                span: Span::new(0, 1),
+                            }),
+                            rexpr: Node::Binary(
+                                Binary {
+                                    operator: Operator {
+                                        kind: OperatorKind::Div,
+                                        span: Span::new(10, 11),
+                                    },
+                                    lexpr: Node::Binary(
+                                        Binary {
+                                            operator: Operator {
+                                                kind: OperatorKind::Mul,
+                                                span: Span::new(6, 7),
+                                            },
+                                            lexpr: Node::Integer(Literal {
+                                                value: "2".to_string(),
+                                                span: Span::new(4, 5),
+                                            }),
+                                            rexpr: Node::Integer(Literal {
+                                                value: "3".to_string(),
+                                                span: Span::new(8, 9),
+                                            }),
+                                            span: Span::new(4, 9)
+                                        }
+                                        .into()
+                                    ),
+                                    rexpr: Node::Integer(Literal {
+                                        value: "4".to_string(),
+                                        span: Span::new(12, 13),
+                                    }),
+                                    span: Span::new(4, 13)
+                                }
+                                .into()
+                            ),
+                            span: Span::new(0, 13)
+                        }
+                        .into()
+                    ),
+                    rexpr: Node::Integer(Literal {
+                        value: "5".to_string(),
+                        span: Span::new(16, 17),
+                    }),
+                    span: Span::new(0, 17)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn parenthesis_precedence() {
+        let module = parse_module("1 * (2 + 3)").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Mul,
+                        span: Span::new(2, 3),
+                    },
+                    lexpr: Node::Integer(Literal {
+                        value: "1".to_string(),
+                        span: Span::new(0, 1),
+                    }),
+                    rexpr: Node::Binary(
+                        Binary {
+                            operator: Operator {
+                                kind: OperatorKind::Add,
+                                span: Span::new(7, 8),
+                            },
+                            lexpr: Node::Integer(Literal {
+                                value: "2".to_string(),
+                                span: Span::new(5, 6),
+                            }),
+                            rexpr: Node::Integer(Literal {
+                                value: "3".to_string(),
+                                span: Span::new(9, 10),
+                            }),
+                            span: Span::new(5, 10)
+                        }
+                        .into()
+                    ),
+                    span: Span::new(0, 10)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn unary_precedence() {
+        let module = parse_module("-2 ^ 3").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Exp,
+                        span: Span::new(3, 4),
+                    },
+                    lexpr: Node::Unary(
+                        Unary {
+                            operator: Operator {
+                                kind: OperatorKind::Neg,
+                                span: Span::new(0, 1),
+                            },
+                            expr: Node::Integer(Literal {
+                                value: "2".to_string(),
+                                span: Span::new(1, 2),
+                            }),
+                            span: Span::new(0, 2)
+                        }
+                        .into()
+                    ),
+                    rexpr: Node::Integer(Literal {
+                        value: "3".to_string(),
+                        span: Span::new(5, 6),
+                    }),
+                    span: Span::new(0, 6)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn right_associativity() {
+        let module = parse_module("1 ^ 2 ^ 3").unwrap();
+
+        assert_eq!(
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Exp,
+                        span: Span::new(2, 3),
+                    },
+                    lexpr: Node::Integer(Literal {
+                        value: "1".to_string(),
+                        span: Span::new(0, 1),
+                    }),
+                    rexpr: Node::Binary(
+                        Binary {
+                            operator: Operator {
+                                kind: OperatorKind::Exp,
+                                span: Span::new(6, 7),
+                            },
+                            lexpr: Node::Integer(Literal {
+                                value: "2".to_string(),
+                                span: Span::new(4, 5),
+                            }),
+                            rexpr: Node::Integer(Literal {
+                                value: "3".to_string(),
+                                span: Span::new(8, 9),
+                            }),
+                            span: Span::new(4, 9)
+                        }
+                        .into()
+                    ),
+                    span: Span::new(0, 9)
+                }
+                .into()
+            )]
+        );
+    }
+
+    #[test]
+    fn unsupported_expression() {
+        let error = parse_module("foo").unwrap_err();
+
+        assert_eq!(error, Error::error(Span::new(0, 3), "unexpected expression".to_string()));
+    }
+
+    #[test]
+    fn incomplete_expression() {
+        let error = parse_module("(1 + 2").unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::error(Span::new(6, 6), "expected `)`, found `end of input`".to_string())
+        );
+    }
+
+    #[test]
+    fn missing_newlines() {
+        let error = parse_module("1 2").unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::error(Span::new(2, 3), "expected `new line`, found `integer`".to_string())
+        );
+    }
 }
