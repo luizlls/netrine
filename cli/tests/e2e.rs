@@ -16,7 +16,7 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
 
     let mut lines = source.lines().peekable();
     while let Some(line) = lines.next() {
-        if !line.trim_start().starts_with("#") {
+        if !line.starts_with("//!") {
             continue;
         }
 
@@ -24,7 +24,7 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
         let test_name = line.split_once("test:").unwrap().1.trim();
 
         while let Some(line) = lines.next() {
-            if line.trim_start().starts_with("#") && line.contains("expect") {
+            if line.starts_with("//!") && line.contains("expect") {
                 break;
             }
             if !line.is_empty() {
@@ -36,9 +36,7 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
         let mut output = vec![];
 
         while let Some(line) = lines.peek() {
-            if line.trim_start().starts_with("#") && line.contains("test:")
-                || line.starts_with("//")
-            {
+            if line.starts_with("//!") && line.contains("test:") || line.starts_with("//") {
                 break;
             }
             let line = lines.next().unwrap();
@@ -53,7 +51,7 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
     }
 
     for (test_name, input, output) in cases {
-        println!("test {base}::{file_name}::{test_name}");
+        println!("test e2e::{base}::{file_name}::{test_name}");
 
         let result = cmd::eval("<test>".to_string(), &input)?;
 
