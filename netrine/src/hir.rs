@@ -5,7 +5,7 @@ use crate::source::Span;
 use crate::syntax;
 use crate::types::{self, Type};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub nodes: Vec<Node>,
 }
@@ -19,7 +19,7 @@ impl Display for Module {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Unary(Box<Unary>),
     Binary(Box<Binary>),
@@ -87,7 +87,7 @@ impl Display for Node {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
     pub operator: Operator,
     pub operand: Node,
@@ -95,7 +95,7 @@ pub struct Unary {
     pub type_: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
     pub operator: Operator,
     pub loperand: Node,
@@ -104,13 +104,13 @@ pub struct Binary {
     pub type_: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
     pub value: i64,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Number {
     pub value: f64,
     pub span: Span,
@@ -280,4 +280,293 @@ pub fn from_syntax(module: &syntax::Module) -> Result<Module> {
     }
 
     Ok(Module { nodes })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::*;
+    use crate::lexer::*;
+    use crate::parser::*;
+    use crate::source::*;
+    use crate::syntax;
+
+    fn lower_module(input: &str) -> Module {
+        let source = Source::new("<test>".to_string(), input);
+        let tokens = tokens(&source);
+        let syntax = parse(tokens).unwrap();
+
+        from_syntax(&syntax).unwrap()
+    }
+
+    #[test]
+    fn integer() {
+        let module = lower_module("42");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Integer(Integer {
+                    value: 42,
+                    span: Span::new(0, 2),
+                })],
+            }
+        );
+    }
+
+    #[test]
+    fn binary_integer() {
+        let module = lower_module("0b1010");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Integer(Integer {
+                    value: 0b1010,
+                    span: Span::new(0, 6),
+                })],
+            }
+        );
+    }
+
+    #[test]
+    fn hex_integer() {
+        let module = lower_module("0xff");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Integer(Integer {
+                    value: 0xff,
+                    span: Span::new(0, 4),
+                })],
+            }
+        );
+    }
+
+    #[test]
+    fn number() {
+        let module = lower_module("3.14");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Number(Number {
+                    value: 3.14,
+                    span: Span::new(0, 4),
+                })],
+            }
+        );
+    }
+
+    #[test]
+    fn unary() {
+        let module = lower_module("-10");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Unary(
+                    Unary {
+                        operator: Operator::Neg,
+                        operand: Node::Integer(Integer {
+                            value: 10,
+                            span: Span::new(1, 3),
+                        }),
+                        span: Span::new(0, 3),
+                        type_: Type::Unknown,
+                    }
+                    .into()
+                )],
+            }
+        );
+    }
+
+    #[test]
+    fn chain_unary() {
+        let module = lower_module("++5");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Unary(
+                    Unary {
+                        operator: Operator::Pos,
+                        operand: Node::Unary(
+                            Unary {
+                                operator: Operator::Pos,
+                                operand: Node::Integer(Integer {
+                                    value: 5,
+                                    span: Span::new(2, 3),
+                                }),
+                                span: Span::new(1, 3),
+                                type_: Type::Unknown,
+                            }
+                            .into()
+                        ),
+                        span: Span::new(0, 3),
+                        type_: Type::Unknown,
+                    }
+                    .into()
+                )],
+            }
+        );
+    }
+
+    #[test]
+    fn binary() {
+        let module = lower_module("1+2");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Binary(
+                    Binary {
+                        operator: Operator::Add,
+                        loperand: Node::Integer(Integer {
+                            value: 1,
+                            span: Span::new(0, 1),
+                        }),
+                        roperand: Node::Integer(Integer {
+                            value: 2,
+                            span: Span::new(2, 3),
+                        }),
+                        span: Span::new(0, 3),
+                        type_: Type::Unknown,
+                    }
+                    .into()
+                )],
+            }
+        );
+    }
+
+    #[test]
+    fn logical() {
+        let module = lower_module("1 and 0");
+
+        assert_eq!(
+            module,
+            Module {
+                nodes: vec![Node::Binary(
+                    Binary {
+                        operator: Operator::And,
+                        loperand: Node::Integer(Integer {
+                            value: 1,
+                            span: Span::new(0, 1),
+                        }),
+                        roperand: Node::Integer(Integer {
+                            value: 0,
+                            span: Span::new(6, 7),
+                        }),
+                        span: Span::new(0, 7),
+                        type_: Type::Unknown,
+                    }
+                    .into()
+                )],
+            }
+        );
+    }
+
+    #[test]
+    fn invalid_number() {
+        let module = syntax::Module {
+            nodes: vec![syntax::Node::Number(syntax::Literal {
+                value: "12f".to_string(),
+                span: Span::new(0, 3),
+            })],
+        };
+
+        let error = from_syntax(&module).unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::error(Span::new(0, 3), "value is not supported as an number".to_string())
+        );
+    }
+
+    #[test]
+    fn invalid_binary_integer() {
+        let module = syntax::Module {
+            nodes: vec![syntax::Node::Integer(syntax::Literal {
+                value: "0b012".to_string(),
+                span: Span::new(0, 5),
+            })],
+        };
+
+        let error = from_syntax(&module).unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::error(Span::new(0, 5), "value is not supported as an integer".to_string())
+        );
+    }
+
+    #[test]
+    fn invalid_hex_integer() {
+        let module = syntax::Module {
+            nodes: vec![syntax::Node::Integer(syntax::Literal {
+                value: "0xfgh".to_string(),
+                span: Span::new(0, 5),
+            })],
+        };
+
+        let error = from_syntax(&module).unwrap_err();
+
+        assert_eq!(
+            error,
+            Error::error(Span::new(0, 5), "value is not supported as an integer".to_string())
+        );
+    }
+
+    #[test]
+    fn invalid_binary_operator() {
+        let module = syntax::Module {
+            nodes: vec![syntax::Node::Binary(
+                syntax::Binary {
+                    operator: syntax::Operator {
+                        kind: syntax::OperatorKind::Not,
+                        span: Span::new(1, 2),
+                    },
+                    lexpr: syntax::Node::Integer(syntax::Literal {
+                        value: "1".to_string(),
+                        span: Span::new(0, 1),
+                    }),
+                    rexpr: syntax::Node::Integer(syntax::Literal {
+                        value: "2".to_string(),
+                        span: Span::new(2, 3),
+                    }),
+                    span: Span::new(0, 3),
+                }
+                .into(),
+            )],
+        };
+
+        let error = from_syntax(&module).unwrap_err();
+
+        assert_eq!(error, Error::error(Span::new(1, 2), "unsupported binary operator".to_string()));
+    }
+
+    #[test]
+    fn invalid_unary_operator() {
+        let module = syntax::Module {
+            nodes: vec![syntax::Node::Unary(
+                syntax::Unary {
+                    operator: syntax::Operator {
+                        kind: syntax::OperatorKind::Add,
+                        span: Span::new(0, 1),
+                    },
+                    expr: syntax::Node::Integer(syntax::Literal {
+                        value: "1".to_string(),
+                        span: Span::new(1, 2),
+                    }),
+                    span: Span::new(0, 2),
+                }
+                .into(),
+            )],
+        };
+
+        let error = from_syntax(&module).unwrap_err();
+
+        assert_eq!(error, Error::error(Span::new(0, 1), "unsupported unary operator".to_string()));
+    }
 }
