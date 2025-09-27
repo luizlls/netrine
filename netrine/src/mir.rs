@@ -47,7 +47,7 @@ impl BlockId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Instruction {
     pub kind: InstructionKind,
     pub type_: Type,
@@ -70,7 +70,7 @@ impl Display for InstructionId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InstructionKind {
     Unary(Unary),
     Binary(Binary),
@@ -91,7 +91,7 @@ impl Display for Instruction {
 
 pub type Operator = crate::hir::Operator;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
     pub operator: Operator,
     pub operand: InstructionId,
@@ -103,7 +103,7 @@ impl Display for Unary {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
     pub operator: Operator,
     pub loperand: InstructionId,
@@ -116,7 +116,7 @@ impl Display for Binary {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
     pub value: i64,
 }
@@ -127,7 +127,7 @@ impl Display for Integer {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Number {
     pub value: f64,
 }
@@ -227,4 +227,212 @@ pub fn from_hir(module: &hir::Module) -> Result<Module> {
     Ok(Module {
         instructions: lower.instructions,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hir;
+    use crate::source::*;
+
+    #[test]
+    fn integer() {
+        let module = hir::Module {
+            nodes: vec![hir::Node::Integer(hir::Integer {
+                value: 42,
+                span: Span::new(0, 2),
+            })],
+        };
+
+        let module = from_hir(&module).unwrap();
+
+        assert_eq!(
+            module.instructions,
+            vec![Instruction {
+                kind: InstructionKind::Integer(Integer { value: 42 }),
+                block: BlockId(0),
+                type_: types::INTEGER,
+            }]
+        )
+    }
+
+    #[test]
+    fn number() {
+        let module = hir::Module {
+            nodes: vec![hir::Node::Number(hir::Number {
+                value: 3.14,
+                span: Span::new(0, 4),
+            })],
+        };
+
+        let module = from_hir(&module).unwrap();
+
+        assert_eq!(
+            module.instructions,
+            vec![Instruction {
+                kind: InstructionKind::Number(Number { value: 3.14 }),
+                block: BlockId(0),
+                type_: types::NUMBER,
+            }]
+        )
+    }
+
+    #[test]
+    fn unary() {
+        // -7
+        let module = hir::Module {
+            nodes: vec![hir::Node::Unary(
+                hir::Unary {
+                    operator: hir::Operator::Neg,
+                    operand: hir::Node::Integer(hir::Integer {
+                        value: 7,
+                        span: Span::new(1, 2),
+                    }),
+                    span: Span::new(0, 2),
+                    type_: types::INTEGER,
+                }
+                .into(),
+            )],
+        };
+
+        let module = from_hir(&module).unwrap();
+
+        assert_eq!(
+            module.instructions,
+            vec![
+                Instruction {
+                    kind: InstructionKind::Integer(Integer { value: 7 }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+                Instruction {
+                    kind: InstructionKind::Unary(Unary {
+                        operator: hir::Operator::Neg,
+                        operand: InstructionId(0),
+                    }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+            ]
+        )
+    }
+
+    #[test]
+    fn binary() {
+        // 1 + 2.5
+        let module = hir::Module {
+            nodes: vec![hir::Node::Binary(
+                hir::Binary {
+                    operator: hir::Operator::Add,
+                    loperand: hir::Node::Integer(hir::Integer {
+                        value: 1,
+                        span: Span::new(0, 3),
+                    }),
+                    roperand: hir::Node::Number(hir::Number {
+                        value: 2.5,
+                        span: Span::new(4, 7),
+                    }),
+                    span: Span::new(0, 7),
+                    type_: types::NUMBER,
+                }
+                .into(),
+            )],
+        };
+
+        let module = from_hir(&module).unwrap();
+
+        assert_eq!(
+            module.instructions,
+            vec![
+                Instruction {
+                    kind: InstructionKind::Integer(Integer { value: 1 }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+                Instruction {
+                    kind: InstructionKind::Number(Number { value: 2.5 }),
+                    block: BlockId(0),
+                    type_: types::NUMBER,
+                },
+                Instruction {
+                    kind: InstructionKind::Binary(
+                        Binary {
+                            operator: hir::Operator::Add,
+                            loperand: InstructionId(0),
+                            roperand: InstructionId(1),
+                        }
+                        .into()
+                    ),
+                    block: BlockId(0),
+                    type_: types::NUMBER,
+                },
+            ]
+        )
+    }
+
+    #[test]
+    fn unary_binary() {
+        // -5 * 3
+        let module = hir::Module {
+            nodes: vec![hir::Node::Binary(
+                hir::Binary {
+                    operator: hir::Operator::Mul,
+                    loperand: hir::Node::Unary(
+                        hir::Unary {
+                            operator: hir::Operator::Neg,
+                            operand: hir::Node::Integer(hir::Integer {
+                                value: 5,
+                                span: Span::new(1, 2),
+                            }),
+                            span: Span::new(0, 2),
+                            type_: types::INTEGER,
+                        }
+                        .into(),
+                    ),
+                    roperand: hir::Node::Integer(hir::Integer {
+                        value: 3,
+                        span: Span::new(3, 4),
+                    }),
+                    span: Span::new(0, 4),
+                    type_: types::INTEGER,
+                }
+                .into(),
+            )],
+        };
+
+        let module = from_hir(&module).unwrap();
+
+        assert_eq!(
+            module.instructions,
+            vec![
+                Instruction {
+                    kind: InstructionKind::Integer(Integer { value: 5 }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+                Instruction {
+                    kind: InstructionKind::Unary(Unary {
+                        operator: hir::Operator::Neg,
+                        operand: InstructionId(0),
+                    }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+                Instruction {
+                    kind: InstructionKind::Integer(Integer { value: 3 }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+                Instruction {
+                    kind: InstructionKind::Binary(Binary {
+                        operator: hir::Operator::Mul,
+                        loperand: InstructionId(1),
+                        roperand: InstructionId(2),
+                    }),
+                    block: BlockId(0),
+                    type_: types::INTEGER,
+                },
+            ]
+        )
+    }
 }

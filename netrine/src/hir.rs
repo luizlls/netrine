@@ -304,13 +304,11 @@ mod tests {
         let module = lower_module("42");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Integer(Integer {
-                    value: 42,
-                    span: Span::new(0, 2),
-                })],
-            }
+            module.nodes,
+            vec![Node::Integer(Integer {
+                value: 42,
+                span: Span::new(0, 2),
+            })]
         );
     }
 
@@ -319,13 +317,11 @@ mod tests {
         let module = lower_module("0b1010");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Integer(Integer {
-                    value: 0b1010,
-                    span: Span::new(0, 6),
-                })],
-            }
+            module.nodes,
+            vec![Node::Integer(Integer {
+                value: 0b1010,
+                span: Span::new(0, 6),
+            })]
         );
     }
 
@@ -334,13 +330,11 @@ mod tests {
         let module = lower_module("0xff");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Integer(Integer {
-                    value: 0xff,
-                    span: Span::new(0, 4),
-                })],
-            }
+            module.nodes,
+            vec![Node::Integer(Integer {
+                value: 0xff,
+                span: Span::new(0, 4),
+            })]
         );
     }
 
@@ -349,13 +343,11 @@ mod tests {
         let module = lower_module("3.14");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Number(Number {
-                    value: 3.14,
-                    span: Span::new(0, 4),
-                })],
-            }
+            module.nodes,
+            vec![Node::Number(Number {
+                value: 3.14,
+                span: Span::new(0, 4),
+            })]
         );
     }
 
@@ -364,21 +356,19 @@ mod tests {
         let module = lower_module("-10");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Unary(
-                    Unary {
-                        operator: Operator::Neg,
-                        operand: Node::Integer(Integer {
-                            value: 10,
-                            span: Span::new(1, 3),
-                        }),
-                        span: Span::new(0, 3),
-                        type_: Type::Unknown,
-                    }
-                    .into()
-                )],
-            }
+            module.nodes,
+            vec![Node::Unary(
+                Unary {
+                    operator: Operator::Neg,
+                    operand: Node::Integer(Integer {
+                        value: 10,
+                        span: Span::new(1, 3),
+                    }),
+                    span: Span::new(0, 3),
+                    type_: Type::Unknown,
+                }
+                .into()
+            )]
         );
     }
 
@@ -387,29 +377,27 @@ mod tests {
         let module = lower_module("++5");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Unary(
-                    Unary {
-                        operator: Operator::Pos,
-                        operand: Node::Unary(
-                            Unary {
-                                operator: Operator::Pos,
-                                operand: Node::Integer(Integer {
-                                    value: 5,
-                                    span: Span::new(2, 3),
-                                }),
-                                span: Span::new(1, 3),
-                                type_: Type::Unknown,
-                            }
-                            .into()
-                        ),
-                        span: Span::new(0, 3),
-                        type_: Type::Unknown,
-                    }
-                    .into()
-                )],
-            }
+            module.nodes,
+            vec![Node::Unary(
+                Unary {
+                    operator: Operator::Pos,
+                    operand: Node::Unary(
+                        Unary {
+                            operator: Operator::Pos,
+                            operand: Node::Integer(Integer {
+                                value: 5,
+                                span: Span::new(2, 3),
+                            }),
+                            span: Span::new(1, 3),
+                            type_: Type::Unknown,
+                        }
+                        .into()
+                    ),
+                    span: Span::new(0, 3),
+                    type_: Type::Unknown,
+                }
+                .into()
+            )]
         );
     }
 
@@ -418,25 +406,23 @@ mod tests {
         let module = lower_module("1+2");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Binary(
-                    Binary {
-                        operator: Operator::Add,
-                        loperand: Node::Integer(Integer {
-                            value: 1,
-                            span: Span::new(0, 1),
-                        }),
-                        roperand: Node::Integer(Integer {
-                            value: 2,
-                            span: Span::new(2, 3),
-                        }),
-                        span: Span::new(0, 3),
-                        type_: Type::Unknown,
-                    }
-                    .into()
-                )],
-            }
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator::Add,
+                    loperand: Node::Integer(Integer {
+                        value: 1,
+                        span: Span::new(0, 1),
+                    }),
+                    roperand: Node::Integer(Integer {
+                        value: 2,
+                        span: Span::new(2, 3),
+                    }),
+                    span: Span::new(0, 3),
+                    type_: Type::Unknown,
+                }
+                .into()
+            )]
         );
     }
 
@@ -445,25 +431,23 @@ mod tests {
         let module = lower_module("1 and 0");
 
         assert_eq!(
-            module,
-            Module {
-                nodes: vec![Node::Binary(
-                    Binary {
-                        operator: Operator::And,
-                        loperand: Node::Integer(Integer {
-                            value: 1,
-                            span: Span::new(0, 1),
-                        }),
-                        roperand: Node::Integer(Integer {
-                            value: 0,
-                            span: Span::new(6, 7),
-                        }),
-                        span: Span::new(0, 7),
-                        type_: Type::Unknown,
-                    }
-                    .into()
-                )],
-            }
+            module.nodes,
+            vec![Node::Binary(
+                Binary {
+                    operator: Operator::And,
+                    loperand: Node::Integer(Integer {
+                        value: 1,
+                        span: Span::new(0, 1),
+                    }),
+                    roperand: Node::Integer(Integer {
+                        value: 0,
+                        span: Span::new(6, 7),
+                    }),
+                    span: Span::new(0, 7),
+                    type_: Type::Unknown,
+                }
+                .into()
+            )]
         );
     }
 

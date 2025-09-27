@@ -16,7 +16,7 @@ impl Display for Module {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Unary(Box<Unary>),
     Binary(Box<Binary>),
@@ -93,14 +93,14 @@ impl Display for Node {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
     pub operator: Operator,
     pub expr: Node,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
     pub operator: Operator,
     pub lexpr: Node,
@@ -108,19 +108,19 @@ pub struct Binary {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Literal {
     pub value: String,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Operator {
     pub kind: OperatorKind,
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OperatorKind {
     And, // and
     Or,  // or
