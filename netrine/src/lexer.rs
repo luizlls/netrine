@@ -217,14 +217,16 @@ impl<'src> Lexer<'src> {
                     self.bump();
                     break;
                 }
-                b'\\' => match self.bump() {
-                    b'\\' | b'n' | b'r' | b't' | b'"' | b'0' => {}
-                    b'u' => todo!("validate escaped unicode"),
-                    b'x' => todo!("validate escaped binary"),
-                    _ => {
-                        return self.invalid_escape_character();
+                b'\\' => {
+                    match self.bump() {
+                        b'\\' | b'n' | b'r' | b't' | b'"' | b'0' => {}
+                        b'u' => todo!("validate escaped unicode"),
+                        b'x' => todo!("validate escaped binary"),
+                        _ => {
+                            return self.invalid_escape_character();
+                        }
                     }
-                },
+                }
                 _ => {}
             }
         }

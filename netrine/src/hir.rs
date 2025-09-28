@@ -1,7 +1,8 @@
 use std::fmt::{self, Display};
 
 use crate::error::{Error, Result};
-use crate::source::Span;
+use crate::pprint::{PrettyPrint, PrettyPrintNode, PrettyPrinter};
+use crate::source::{Span, ToSpan};
 use crate::syntax;
 use crate::types::{self, Type};
 
@@ -27,8 +28,8 @@ pub enum Node {
     Integer(Integer),
 }
 
-impl Node {
-    pub fn span(&self) -> Span {
+impl ToSpan for Node {
+    fn span(&self) -> Span {
         match self {
             Node::Unary(unary) => unary.span,
             Node::Binary(binary) => binary.span,
@@ -38,52 +39,20 @@ impl Node {
     }
 }
 
-struct DisplayNode(String, Type, Vec<DisplayNode>);
-
-impl DisplayNode {
-    fn write(self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-        let DisplayNode(value, type_, children) = self;
-        writeln!(f, "{}{}: {}", "  ".repeat(depth), value, type_)?;
-        for child in children {
-            child.write(f, depth + 1)?;
-        }
-        Ok(())
-    }
-}
-
-impl Node {
-    fn display(&self) -> DisplayNode {
-        match self {
-            Node::Unary(unary) => DisplayNode(
-                "UNARY".to_string(),
-                unary.type_,
-                vec![
-                    DisplayNode(format!("OPERATOR `{}`", unary.operator), unary.type_, vec![]),
-                    unary.operand.display(),
-                ],
-            ),
-            Node::Binary(binary) => DisplayNode(
-                "BINARY".to_string(),
-                binary.type_,
-                vec![
-                    binary.loperand.display(),
-                    DisplayNode(format!("OPERATOR `{}`", binary.operator), binary.type_, vec![]),
-                    binary.roperand.display(),
-                ],
-            ),
-            Node::Number(literal) => {
-                DisplayNode(format!("NUMBER `{}`", literal.value), types::NUMBER, vec![])
-            }
-            Node::Integer(literal) => {
-                DisplayNode(format!("INTEGER `{}`", literal.value), types::INTEGER, vec![])
-            }
-        }
-    }
-}
-
 impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.display().write(f, 0)
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Node {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        match self {
+            Node::Unary(unary) => unary.print(),
+            Node::Binary(binary) => binary.print(),
+            Node::Number(number) => number.print(),
+            Node::Integer(integer) => integer.print(),
+        }
     }
 }
 
@@ -95,6 +64,22 @@ pub struct Unary {
     pub type_: Type,
 }
 
+impl Display for Unary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Unary {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("UNARY: {} {}", self.type_, self.span))
+            .child(&self.operator)
+            .child(&self.operand)
+            .print()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
     pub operator: Operator,
@@ -104,16 +89,61 @@ pub struct Binary {
     pub type_: Type,
 }
 
+impl Display for Binary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Binary {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("BINARY: {} {}", self.type_, self.span))
+            .child(&self.loperand)
+            .child(&self.operator)
+            .child(&self.roperand)
+            .print()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
     pub value: i64,
     pub span: Span,
 }
 
+impl Display for Integer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Integer {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("INTEGER({}): {} {}", self, types::INTEGER, self.span))
+            .print()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Number {
     pub value: f64,
     pub span: Span,
+}
+
+impl Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Number {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("NUMBER({}): {} {}", self, types::NUMBER, self.span))
+            .print()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,6 +165,14 @@ pub enum Operator {
     Le,
     Gt,
     Ge,
+}
+
+impl PrettyPrint for Operator {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("OPERATOR({})", self))
+            .print()
+    }
 }
 
 impl Display for Operator {
@@ -292,7 +330,7 @@ mod tests {
     use crate::syntax;
 
     fn lower_module(input: &str) -> Module {
-        let source = Source::new("<test>".to_string(), input);
+        let source = Source::new("<test>".into(), input);
         let tokens = tokens(&source);
         let syntax = parse(tokens).unwrap();
 
@@ -455,7 +493,7 @@ mod tests {
     fn invalid_number() {
         let module = syntax::Module {
             nodes: vec![syntax::Node::Number(syntax::Literal {
-                value: "12f".to_string(),
+                value: "12f".into(),
                 span: Span::new(0, 3),
             })],
         };
@@ -464,7 +502,7 @@ mod tests {
 
         assert_eq!(
             error,
-            Error::error(Span::new(0, 3), "value is not supported as an number".to_string())
+            Error::error(Span::new(0, 3), "value is not supported as an number".into())
         );
     }
 
@@ -472,7 +510,7 @@ mod tests {
     fn invalid_binary_integer() {
         let module = syntax::Module {
             nodes: vec![syntax::Node::Integer(syntax::Literal {
-                value: "0b012".to_string(),
+                value: "0b012".into(),
                 span: Span::new(0, 5),
             })],
         };
@@ -481,7 +519,7 @@ mod tests {
 
         assert_eq!(
             error,
-            Error::error(Span::new(0, 5), "value is not supported as an integer".to_string())
+            Error::error(Span::new(0, 5), "value is not supported as an integer".into())
         );
     }
 
@@ -489,7 +527,7 @@ mod tests {
     fn invalid_hex_integer() {
         let module = syntax::Module {
             nodes: vec![syntax::Node::Integer(syntax::Literal {
-                value: "0xfgh".to_string(),
+                value: "0xfgh".into(),
                 span: Span::new(0, 5),
             })],
         };
@@ -498,7 +536,7 @@ mod tests {
 
         assert_eq!(
             error,
-            Error::error(Span::new(0, 5), "value is not supported as an integer".to_string())
+            Error::error(Span::new(0, 5), "value is not supported as an integer".into())
         );
     }
 
@@ -512,11 +550,11 @@ mod tests {
                         span: Span::new(1, 2),
                     },
                     lexpr: syntax::Node::Integer(syntax::Literal {
-                        value: "1".to_string(),
+                        value: "1".into(),
                         span: Span::new(0, 1),
                     }),
                     rexpr: syntax::Node::Integer(syntax::Literal {
-                        value: "2".to_string(),
+                        value: "2".into(),
                         span: Span::new(2, 3),
                     }),
                     span: Span::new(0, 3),
@@ -527,7 +565,7 @@ mod tests {
 
         let error = from_syntax(&module).unwrap_err();
 
-        assert_eq!(error, Error::error(Span::new(1, 2), "unsupported binary operator".to_string()));
+        assert_eq!(error, Error::error(Span::new(1, 2), "unsupported binary operator".into()));
     }
 
     #[test]
@@ -540,7 +578,7 @@ mod tests {
                         span: Span::new(0, 1),
                     },
                     expr: syntax::Node::Integer(syntax::Literal {
-                        value: "1".to_string(),
+                        value: "1".into(),
                         span: Span::new(1, 2),
                     }),
                     span: Span::new(0, 2),
@@ -551,6 +589,6 @@ mod tests {
 
         let error = from_syntax(&module).unwrap_err();
 
-        assert_eq!(error, Error::error(Span::new(0, 1), "unsupported unary operator".to_string()));
+        assert_eq!(error, Error::error(Span::new(0, 1), "unsupported unary operator".into()));
     }
 }

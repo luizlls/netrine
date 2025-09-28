@@ -331,15 +331,17 @@ impl<'w> Wasm<'w> {
         let operation = match unary.operator {
             Operator::Not => I32_EQZ,
             Operator::Pos => NOOP,
-            Operator::Neg => match self.module.get_type(&unary.operand) {
-                types::NUMBER => F64_NEG,
-                types::INTEGER => {
-                    emit_u8(output, I64_CONST);
-                    emit_i64(output, -1);
-                    I64_MUL
+            Operator::Neg => {
+                match self.module.get_type(&unary.operand) {
+                    types::NUMBER => F64_NEG,
+                    types::INTEGER => {
+                        emit_u8(output, I64_CONST);
+                        emit_i64(output, -1);
+                        I64_MUL
+                    }
+                    _ => unreachable!(),
                 }
-                _ => unreachable!(),
-            },
+            }
             _ => unreachable!(),
         };
         emit_u8(output, operation);

@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 
+use crate::pprint::{PrettyPrint, PrettyPrintNode, PrettyPrinter};
 use crate::source::{Span, ToSpan};
 
 #[derive(Debug, Clone)]
@@ -36,60 +37,28 @@ impl ToSpan for Node {
     }
 }
 
-struct DisplayNode(String, Span, Vec<DisplayNode>);
-
-impl DisplayNode {
-    fn write(self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-        let DisplayNode(value, span, children) = self;
-        writeln!(f, "{}{} {}", "  ".repeat(depth), value, span)?;
-        for child in children {
-            child.write(f, depth + 1)?;
-        }
-        Ok(())
-    }
-}
-
-impl Node {
-    fn display(&self) -> DisplayNode {
-        match self {
-            Node::Unary(unary) => DisplayNode(
-                "UNARY".to_string(),
-                unary.span,
-                vec![
-                    DisplayNode(
-                        format!("OPERATOR `{}`", unary.operator),
-                        unary.operator.span,
-                        vec![],
-                    ),
-                    unary.expr.display(),
-                ],
-            ),
-            Node::Binary(binary) => DisplayNode(
-                "BINARY".to_string(),
-                binary.span,
-                vec![
-                    binary.lexpr.display(),
-                    DisplayNode(
-                        format!("OPERATOR `{}`", binary.operator),
-                        binary.operator.span,
-                        vec![],
-                    ),
-                    binary.rexpr.display(),
-                ],
-            ),
-            Node::Number(literal) => {
-                DisplayNode(format!("NUMBER `{}`", literal.value), literal.span, vec![])
-            }
-            Node::Integer(literal) => {
-                DisplayNode(format!("INTEGER `{}`", literal.value), literal.span, vec![])
-            }
-        }
-    }
-}
-
 impl Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.display().write(f, 0)
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Node {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        match self {
+            Node::Unary(unary) => unary.print(),
+            Node::Binary(binary) => binary.print(),
+            Node::Number(number) => {
+                PrettyPrintNode::printer()
+                    .label(format!("NUMBER({}) {}", number.value, number.span))
+                    .print()
+            }
+            Node::Integer(integer) => {
+                PrettyPrintNode::printer()
+                    .label(format!("INTEGER({}) {}", integer.value, integer.span))
+                    .print()
+            }
+        }
     }
 }
 
@@ -100,6 +69,22 @@ pub struct Unary {
     pub span: Span,
 }
 
+impl Display for Unary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Unary {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("UNARY {}", self.span))
+            .child(&self.operator)
+            .child(&self.expr)
+            .print()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
     pub operator: Operator,
@@ -108,9 +93,26 @@ pub struct Binary {
     pub span: Span,
 }
 
+impl Display for Binary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Binary {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("BINARY {}", self.span))
+            .child(&self.lexpr)
+            .child(&self.operator)
+            .child(&self.rexpr)
+            .print()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal {
-    pub value: String,
+    pub value: Box<str>,
     pub span: Span,
 }
 
@@ -118,6 +120,14 @@ pub struct Literal {
 pub struct Operator {
     pub kind: OperatorKind,
     pub span: Span,
+}
+
+impl PrettyPrint for Operator {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("OPERATOR({}) {}", self, self.span))
+            .print()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,6 +1,6 @@
 use crate::error::{Error, Result};
 use crate::hir::{Binary, Module, Node, Operator, Unary};
-use crate::source::Span;
+use crate::source::{Span, ToSpan};
 use crate::types::{self, Type};
 
 struct TypeCheck {}

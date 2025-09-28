@@ -5,3 +5,4 @@ array_width=60
 chain_width=60
 struct_lit_width=15
 use_field_init_shorthand=true
+force_multiline_blocks=true

@@ -3,6 +3,7 @@ mod hir;
 mod lexer;
 mod mir;
 mod parser;
+mod pprint;
 mod source;
 mod syntax;
 mod token;

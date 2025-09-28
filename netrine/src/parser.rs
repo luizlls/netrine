@@ -63,11 +63,13 @@ impl<'src> Parser<'src> {
             TokenKind::Number => self.number(),
             TokenKind::Integer => self.integer(),
             TokenKind::LParen => self.parens(),
-            _ => self.fail(match token.kind {
-                TokenKind::UnexpectedCharacter => "unexpected character",
-                TokenKind::UnterminatedString => "unterminated string",
-                _ => "unexpected expression",
-            }),
+            _ => {
+                self.fail(match token.kind {
+                    TokenKind::UnexpectedCharacter => "unexpected character",
+                    TokenKind::UnterminatedString => "unterminated string",
+                    _ => "unexpected expression",
+                })
+            }
         }
     }
 
@@ -75,7 +77,7 @@ impl<'src> Parser<'src> {
         let token = self.token;
         self.expect(kind)?;
         let span = token.span;
-        let value = self.tokens.value(token).to_string();
+        let value = self.tokens.value(token).into();
 
         Ok(ctor(Literal { value, span }))
     }
@@ -271,7 +273,7 @@ mod tests {
     use crate::source::*;
 
     fn parse_module(input: &str) -> Result<Module> {
-        let source = Source::new("<test>".to_string(), input);
+        let source = Source::new("<test>".into(), input);
         parse(tokens(&source))
     }
 
@@ -296,7 +298,7 @@ mod tests {
         assert_eq!(
             module.nodes,
             vec![Node::Integer(Literal {
-                value: "42".to_string(),
+                value: "42".into(),
                 span: Span::new(0, 2),
             })]
         );
@@ -309,7 +311,7 @@ mod tests {
         assert_eq!(
             module.nodes,
             vec![Node::Number(Literal {
-                value: "3.14".to_string(),
+                value: "3.14".into(),
                 span: Span::new(0, 4),
             })]
         );
@@ -323,15 +325,15 @@ mod tests {
             module.nodes,
             vec![
                 Node::Integer(Literal {
-                    value: "1".to_string(),
+                    value: "1".into(),
                     span: Span::new(0, 1),
                 }),
                 Node::Integer(Literal {
-                    value: "2".to_string(),
+                    value: "2".into(),
                     span: Span::new(2, 3),
                 }),
                 Node::Integer(Literal {
-                    value: "3".to_string(),
+                    value: "3".into(),
                     span: Span::new(5, 6),
                 }),
             ]
@@ -351,7 +353,7 @@ mod tests {
                         span: Span::new(0, 1),
                     },
                     expr: Node::Integer(Literal {
-                        value: "10".to_string(),
+                        value: "10".into(),
                         span: Span::new(1, 3),
                     }),
                     span: Span::new(0, 3)
@@ -374,7 +376,7 @@ mod tests {
                         span: Span::new(0, 1),
                     },
                     expr: Node::Number(Literal {
-                        value: "3.14".to_string(),
+                        value: "3.14".into(),
                         span: Span::new(1, 5),
                     }),
                     span: Span::new(0, 5)
@@ -409,7 +411,7 @@ mod tests {
                                         span: Span::new(2, 3),
                                     },
                                     expr: Node::Integer(Literal {
-                                        value: "5".to_string(),
+                                        value: "5".into(),
                                         span: Span::new(3, 4),
                                     }),
                                     span: Span::new(2, 4)
@@ -441,7 +443,7 @@ mod tests {
                         span: Span::new(1, 2),
                     },
                     lexpr: Node::Integer(Literal {
-                        value: "1".to_string(),
+                        value: "1".into(),
                         span: Span::new(0, 1),
                     }),
                     rexpr: Node::Unary(
@@ -451,7 +453,7 @@ mod tests {
                                 span: Span::new(2, 3),
                             },
                             expr: Node::Integer(Literal {
-                                value: "10".to_string(),
+                                value: "10".into(),
                                 span: Span::new(3, 5),
                             }),
                             span: Span::new(2, 5)
@@ -478,11 +480,11 @@ mod tests {
                         span: Span::new(3, 4),
                     },
                     lexpr: Node::Integer(Literal {
-                        value: "50".to_string(),
+                        value: "50".into(),
                         span: Span::new(0, 2),
                     }),
                     rexpr: Node::Number(Literal {
-                        value: "2.10".to_string(),
+                        value: "2.10".into(),
                         span: Span::new(5, 9),
                     }),
                     span: Span::new(0, 9)
@@ -505,7 +507,7 @@ mod tests {
                         span: Span::new(2, 4),
                     },
                     lexpr: Node::Integer(Literal {
-                        value: "1".to_string(),
+                        value: "1".into(),
                         span: Span::new(0, 1),
                     }),
                     rexpr: Node::Binary(
@@ -521,7 +523,7 @@ mod tests {
                                         span: Span::new(5, 8),
                                     },
                                     expr: Node::Integer(Literal {
-                                        value: "0".to_string(),
+                                        value: "0".into(),
                                         span: Span::new(9, 10),
                                     }),
                                     span: Span::new(5, 10),
@@ -529,7 +531,7 @@ mod tests {
                                 .into()
                             ),
                             rexpr: Node::Integer(Literal {
-                                value: "1".to_string(),
+                                value: "1".into(),
                                 span: Span::new(15, 16),
                             }),
                             span: Span::new(5, 16),
@@ -563,7 +565,7 @@ mod tests {
                                 span: Span::new(2, 3),
                             },
                             lexpr: Node::Integer(Literal {
-                                value: "1".to_string(),
+                                value: "1".into(),
                                 span: Span::new(0, 1),
                             }),
                             rexpr: Node::Binary(
@@ -579,11 +581,11 @@ mod tests {
                                                 span: Span::new(6, 7),
                                             },
                                             lexpr: Node::Integer(Literal {
-                                                value: "2".to_string(),
+                                                value: "2".into(),
                                                 span: Span::new(4, 5),
                                             }),
                                             rexpr: Node::Integer(Literal {
-                                                value: "3".to_string(),
+                                                value: "3".into(),
                                                 span: Span::new(8, 9),
                                             }),
                                             span: Span::new(4, 9)
@@ -591,7 +593,7 @@ mod tests {
                                         .into()
                                     ),
                                     rexpr: Node::Integer(Literal {
-                                        value: "4".to_string(),
+                                        value: "4".into(),
                                         span: Span::new(12, 13),
                                     }),
                                     span: Span::new(4, 13)
@@ -603,7 +605,7 @@ mod tests {
                         .into()
                     ),
                     rexpr: Node::Integer(Literal {
-                        value: "5".to_string(),
+                        value: "5".into(),
                         span: Span::new(16, 17),
                     }),
                     span: Span::new(0, 17)
@@ -626,7 +628,7 @@ mod tests {
                         span: Span::new(2, 3),
                     },
                     lexpr: Node::Integer(Literal {
-                        value: "1".to_string(),
+                        value: "1".into(),
                         span: Span::new(0, 1),
                     }),
                     rexpr: Node::Binary(
@@ -636,11 +638,11 @@ mod tests {
                                 span: Span::new(7, 8),
                             },
                             lexpr: Node::Integer(Literal {
-                                value: "2".to_string(),
+                                value: "2".into(),
                                 span: Span::new(5, 6),
                             }),
                             rexpr: Node::Integer(Literal {
-                                value: "3".to_string(),
+                                value: "3".into(),
                                 span: Span::new(9, 10),
                             }),
                             span: Span::new(5, 10)
@@ -673,7 +675,7 @@ mod tests {
                                 span: Span::new(0, 1),
                             },
                             expr: Node::Integer(Literal {
-                                value: "2".to_string(),
+                                value: "2".into(),
                                 span: Span::new(1, 2),
                             }),
                             span: Span::new(0, 2)
@@ -681,7 +683,7 @@ mod tests {
                         .into()
                     ),
                     rexpr: Node::Integer(Literal {
-                        value: "3".to_string(),
+                        value: "3".into(),
                         span: Span::new(5, 6),
                     }),
                     span: Span::new(0, 6)
@@ -704,7 +706,7 @@ mod tests {
                         span: Span::new(2, 3),
                     },
                     lexpr: Node::Integer(Literal {
-                        value: "1".to_string(),
+                        value: "1".into(),
                         span: Span::new(0, 1),
                     }),
                     rexpr: Node::Binary(
@@ -714,11 +716,11 @@ mod tests {
                                 span: Span::new(6, 7),
                             },
                             lexpr: Node::Integer(Literal {
-                                value: "2".to_string(),
+                                value: "2".into(),
                                 span: Span::new(4, 5),
                             }),
                             rexpr: Node::Integer(Literal {
-                                value: "3".to_string(),
+                                value: "3".into(),
                                 span: Span::new(8, 9),
                             }),
                             span: Span::new(4, 9)
@@ -736,7 +738,7 @@ mod tests {
     fn unsupported_expression() {
         let error = parse_module("foo").unwrap_err();
 
-        assert_eq!(error, Error::error(Span::new(0, 3), "unexpected expression".to_string()));
+        assert_eq!(error, Error::error(Span::new(0, 3), "unexpected expression".into()));
     }
 
     #[test]
@@ -745,7 +747,7 @@ mod tests {
 
         assert_eq!(
             error,
-            Error::error(Span::new(6, 6), "expected `)`, found `end of input`".to_string())
+            Error::error(Span::new(6, 6), "expected `)`, found `end of input`".into())
         );
     }
 
@@ -755,7 +757,7 @@ mod tests {
 
         assert_eq!(
             error,
-            Error::error(Span::new(2, 3), "expected `new line`, found `integer`".to_string())
+            Error::error(Span::new(2, 3), "expected `new line`, found `integer`".into())
         );
     }
 }
