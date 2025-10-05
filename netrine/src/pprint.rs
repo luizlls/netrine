@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::fmt;
 
 pub struct PrettyPrintNode<'pp> {
-    label: Box<str>,
+    label: Cow<'pp, str>,
     children: Vec<&'pp dyn PrettyPrint>,
 }
 
@@ -22,7 +23,7 @@ impl<'pp> PrettyPrintNode<'pp> {
 }
 
 pub struct PrettyPrintNodeBuilder<'pp> {
-    label: Option<Box<str>>,
+    label: Option<Cow<'pp, str>>,
     children: Vec<&'pp dyn PrettyPrint>,
 }
 
@@ -34,7 +35,7 @@ impl<'pp> PrettyPrintNodeBuilder<'pp> {
         }
     }
 
-    pub fn label(mut self, label: impl Into<Box<str>>) -> PrettyPrintNodeBuilder<'pp> {
+    pub fn label(mut self, label: impl Into<Cow<'pp, str>>) -> PrettyPrintNodeBuilder<'pp> {
         self.label = Some(label.into());
         self
     }
@@ -63,3 +64,9 @@ pub trait PrettyPrinter: PrettyPrint {
 }
 
 impl<T: ?Sized + PrettyPrint> PrettyPrinter for T {}
+
+impl<T: ?Sized + AsRef<str>> PrettyPrint for T {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer().label(self.as_ref()).print()
+    }
+}

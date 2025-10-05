@@ -10,7 +10,25 @@
 6.28
 
 
+//! test: parenthesis
+5 * (2 + 3)
+//! expect:
+25
+
+
 //! test: operator precedence
 1 + 2 - 3 * 4 / 5 + 2.54
 //! expect:
 3.14
+
+
+// //! test: logical
+// True or not False and True
+// //! expect:
+// 1
+
+// TODO waiting for pow support
+// //! test: unary precedence
+// -2 ^ 3
+// //! expect:
+// -8

@@ -68,7 +68,7 @@ impl TypeCheck {
                 self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
                 types::BOOLEAN
             }
-            Operator::Add | Operator::Sub | Operator::Mul | Operator::Exp => {
+            Operator::Add | Operator::Sub | Operator::Mul | Operator::Pow => {
                 self.expect(&binary.loperand, loperand_type, types::NUMBER)?;
                 self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
 
@@ -103,12 +103,12 @@ impl TypeCheck {
     }
 }
 
-pub fn check(module: &mut Module) -> Result<()> {
+pub fn check(mut module: Module) -> Result<Module> {
     let mut type_checker = TypeCheck::new();
 
     for node in &mut module.nodes {
         type_checker.check(node)?;
     }
 
-    Ok(())
+    Ok(module)
 }

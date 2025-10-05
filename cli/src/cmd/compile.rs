@@ -1,10 +1,16 @@
-use std::fs;
+use std::process::exit;
 
 use anyhow::Context;
 
-pub fn compile(file_path: String, source: &str) -> anyhow::Result<()> {
-    let source = netrine::source(file_path, &source);
-    let wasm = netrine::compile(&source)?;
+pub fn compile(file_path: String, source: &str) -> anyhow::Result<Vec<u8>> {
+    let source = netrine::source(file_path, source);
+    let wasm = netrine::compile(&source);
 
-    fs::write("output.wasm", wasm).context("failed to write output file")
+    match wasm {
+        Ok(wasm) => Ok(wasm),
+        Err(error) => {
+            eprintln!("{}", error.report(&source).context("failed to report error")?);
+            exit(1);
+        }
+    }
 }

@@ -9,7 +9,7 @@ pub fn repl() -> anyhow::Result<()> {
 
     while let Ok(line) = read_line() {
         if line.is_empty() {
-            cmd::eval("repl".to_string(), input.trim_end())?;
+            eval(input.trim_end())?;
             input.clear();
         } else {
             input.push_str(&line);
@@ -28,4 +28,9 @@ fn read_line() -> anyhow::Result<String> {
 
     let _ = stdin().read_line(&mut line)?;
     Ok(line.trim_end().to_string())
+}
+
+fn eval(source: &str) -> anyhow::Result<()> {
+    println!("{}", cmd::eval("repl".to_string(), source)?);
+    Ok(())
 }

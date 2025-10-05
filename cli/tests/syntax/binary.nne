@@ -1,0 +1,86 @@
+//! test: basic arithmetic
+1 + 1
+//! expect:
+BINARY 0..5
+  INTEGER(1) 0..1
+  OPERATOR(+) 2..3
+  INTEGER(1) 4..5
+
+
+//! test: integers and floats
+3.14 * 2
+//! expect:
+BINARY 0..8
+  NUMBER(3.14) 0..4
+  OPERATOR(*) 5..6
+  INTEGER(2) 7..8
+
+
+//! test: parenthesis
+5 * (2 + 3)
+//! expect:
+BINARY 0..10
+  INTEGER(5) 0..1
+  OPERATOR(*) 2..3
+  BINARY 5..10
+    INTEGER(2) 5..6
+    OPERATOR(+) 7..8
+    INTEGER(3) 9..10
+
+
+//! test: operator precedence
+1 + 2 - 3 * 4 / 5 + 2.54
+//! expect:
+BINARY 0..24
+  BINARY 0..17
+    BINARY 0..5
+      INTEGER(1) 0..1
+      OPERATOR(+) 2..3
+      INTEGER(2) 4..5
+    OPERATOR(-) 6..7
+    BINARY 8..17
+      BINARY 8..13
+        INTEGER(3) 8..9
+        OPERATOR(*) 10..11
+        INTEGER(4) 12..13
+      OPERATOR(/) 14..15
+      INTEGER(5) 16..17
+  OPERATOR(+) 18..19
+  NUMBER(2.54) 20..24
+
+
+// TODO waiting for boolean support
+// //! test: logical
+// True or not False and True
+// //! expect:
+// 1
+
+
+//! test: unary precedence
+-2 ^ 3
+//! expect:
+BINARY 0..6
+  UNARY 0..2
+    OPERATOR(-) 0..1
+    INTEGER(2) 1..2
+  OPERATOR(^) 3..4
+  INTEGER(3) 5..6
+
+
+//! test: multiple lines
+1 + 2
+3 * 4
+5 / 6
+//! expect:
+BINARY 0..5
+  INTEGER(1) 0..1
+  OPERATOR(+) 2..3
+  INTEGER(2) 4..5
+BINARY 6..11
+  INTEGER(3) 6..7
+  OPERATOR(*) 8..9
+  INTEGER(4) 10..11
+BINARY 12..17
+  INTEGER(5) 12..13
+  OPERATOR(/) 14..15
+  INTEGER(6) 16..17

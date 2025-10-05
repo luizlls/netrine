@@ -5,7 +5,7 @@ use crate::source::{Span, ToSpan};
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub nodes: Vec<Node>,
+    pub(crate) nodes: Vec<Node>,
 }
 
 impl Display for Module {
@@ -64,9 +64,9 @@ impl PrettyPrint for Node {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
-    pub operator: Operator,
-    pub expr: Node,
-    pub span: Span,
+    pub(crate) operator: Operator,
+    pub(crate) expr: Node,
+    pub(crate) span: Span,
 }
 
 impl Display for Unary {
@@ -87,10 +87,10 @@ impl PrettyPrint for Unary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
-    pub operator: Operator,
-    pub lexpr: Node,
-    pub rexpr: Node,
-    pub span: Span,
+    pub(crate) operator: Operator,
+    pub(crate) lexpr: Node,
+    pub(crate) rexpr: Node,
+    pub(crate) span: Span,
 }
 
 impl Display for Binary {
@@ -112,14 +112,14 @@ impl PrettyPrint for Binary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal {
-    pub value: Box<str>,
-    pub span: Span,
+    pub(crate) value: Box<str>,
+    pub(crate) span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Operator {
-    pub kind: OperatorKind,
-    pub span: Span,
+    pub(crate) kind: OperatorKind,
+    pub(crate) span: Span,
 }
 
 impl PrettyPrint for Operator {
@@ -142,7 +142,7 @@ pub enum OperatorKind {
     Mul, // *
     Div, // /
     Mod, // %
-    Exp, // ^
+    Pow, // ^
     Eq,  // ==
     Ne,  // !=
     Lt,  // <
@@ -151,7 +151,7 @@ pub enum OperatorKind {
     Ge,  // >=
 }
 
-pub type Precedence = u8;
+pub(crate) type Precedence = u8;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Associativity {
@@ -167,7 +167,7 @@ impl Operator {
             OperatorKind::Pos
           | OperatorKind::Neg
           | OperatorKind::Not => 0,
-            OperatorKind::Exp => 7,
+            OperatorKind::Pow => 7,
             OperatorKind::Mul
           | OperatorKind::Div => 6,
             OperatorKind::Add
@@ -190,7 +190,7 @@ impl Operator {
             OperatorKind::Pos
           | OperatorKind::Neg
           | OperatorKind::Not => Associativity::None,
-            OperatorKind::Exp => Associativity::Right,
+            OperatorKind::Pow => Associativity::Right,
             _ => Associativity::Left,
         }
     }
@@ -214,7 +214,7 @@ impl Display for Operator {
             OperatorKind::Mul => "*",
             OperatorKind::Div => "/",
             OperatorKind::Mod => "%",
-            OperatorKind::Exp => "^",
+            OperatorKind::Pow => "^",
             OperatorKind::Eq => "==",
             OperatorKind::Ne => "!=",
             OperatorKind::Lt => "<",

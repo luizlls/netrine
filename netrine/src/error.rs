@@ -37,7 +37,9 @@ impl Error {
         };
 
         let Source {
-            content, path, ..
+            content,
+            file_path: path,
+            ..
         } = source;
 
         let (line, column) = Self::find_line(content, start as usize);

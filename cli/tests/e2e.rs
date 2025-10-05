@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use cli::cmd;
 
-fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
+fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
     let file_name = path
         .file_stem()
         .expect("Expected a valid file")
@@ -51,12 +51,22 @@ fn test_one(base: &str, path: PathBuf) -> anyhow::Result<()> {
     }
 
     for (test_name, input, output) in cases {
-        println!("test e2e::{base}::{file_name}::{test_name}");
+        println!("test e2e::{pass}::{file_name}::{test_name}");
 
-        let result = cmd::eval("<test>".to_string(), &input)?;
+        let path = format!("e2e {test_name}");
+
+        let result = match pass {
+            "syntax" => cmd::dump_ast(path, &input)?,
+            "hir" => cmd::dump_hir(path, &input)?,
+            "mir" => cmd::dump_mir(path, &input)?,
+            "eval" => cmd::eval(path, &input)?,
+            _ => unreachable!(),
+        }
+        .trim()
+        .to_string();
 
         if result != output {
-            println!("test failed: {base}::{file_name}::{test_name}");
+            println!("test failed: {pass}::{file_name}::{test_name}");
             println!("left:\n{}", output);
             println!("right:\n{}", result);
             panic!();
@@ -87,5 +97,8 @@ fn test(name: &str, path: &str) -> anyhow::Result<()> {
 
 #[test]
 fn e2e() -> anyhow::Result<()> {
-    test("eval", "./tests/eval")
+    test("syntax", "./tests/syntax")?;
+    test("eval", "./tests/eval")?;
+
+    Ok(())
 }

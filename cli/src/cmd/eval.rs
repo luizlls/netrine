@@ -1,17 +1,9 @@
-use std::process::exit;
-
 use wasmer::{Instance, Module, Store, Value, imports};
 
-pub fn eval(file_path: String, source: &str) -> anyhow::Result<String> {
-    let source = netrine::source(file_path, source);
+use crate::cmd;
 
-    let wasm = match netrine::compile(&source) {
-        Ok(wasm) => wasm,
-        Err(err) => {
-            eprintln!("{}", err.report(&source).unwrap());
-            exit(1);
-        }
-    };
+pub fn eval(file_path: String, source: &str) -> anyhow::Result<String> {
+    let wasm = cmd::compile(file_path, &source)?;
 
     let mut store = Store::default();
 

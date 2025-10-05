@@ -6,7 +6,7 @@ use crate::{hir, types};
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub instructions: Vec<Instruction>,
+    pub(crate) instructions: Vec<Instruction>,
 }
 
 impl Module {
@@ -26,7 +26,7 @@ impl Display for Module {
 
 #[derive(Debug, Clone, Default)]
 pub struct Block {
-    pub instructions: Vec<InstructionId>,
+    pub(crate) instructions: Vec<InstructionId>,
 }
 
 impl Block {
@@ -49,9 +49,9 @@ impl BlockId {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Instruction {
-    pub kind: InstructionKind,
-    pub type_: Type,
-    pub block: BlockId,
+    pub(crate) kind: InstructionKind,
+    pub(crate) type_: Type,
+    pub(crate) block: BlockId,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -89,12 +89,12 @@ impl Display for Instruction {
     }
 }
 
-pub type Operator = crate::hir::Operator;
+pub(crate) type Operator = crate::hir::Operator;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
-    pub operator: Operator,
-    pub operand: InstructionId,
+    pub(crate) operator: Operator,
+    pub(crate) operand: InstructionId,
 }
 
 impl Display for Unary {
@@ -105,9 +105,9 @@ impl Display for Unary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
-    pub operator: Operator,
-    pub loperand: InstructionId,
-    pub roperand: InstructionId,
+    pub(crate) operator: Operator,
+    pub(crate) loperand: InstructionId,
+    pub(crate) roperand: InstructionId,
 }
 
 impl Display for Binary {
@@ -118,7 +118,7 @@ impl Display for Binary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
-    pub value: i64,
+    pub(crate) value: i64,
 }
 
 impl Display for Integer {
@@ -129,7 +129,7 @@ impl Display for Integer {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Number {
-    pub value: f64,
+    pub(crate) value: f64,
 }
 
 impl Display for Number {

@@ -1,0 +1,48 @@
+//! test: negative
+-10
+//! expect:
+UNARY 0..3
+  OPERATOR(-) 0..1
+  INTEGER(10) 1..3
+
+
+//! test: negative float
+-3.14
+//! expect:
+UNARY 0..5
+  OPERATOR(-) 0..1
+  NUMBER(3.14) 1..5
+
+
+//! test: chained
+--1
+//! expect:
+UNARY 0..3
+  OPERATOR(-) 0..1
+  UNARY 1..3
+    OPERATOR(-) 1..2
+    INTEGER(1) 2..3
+
+
+//! test: mixed
+1 - -10
+//! expect:
+BINARY 0..7
+  INTEGER(1) 0..1
+  OPERATOR(-) 2..3
+  UNARY 4..7
+    OPERATOR(-) 4..5
+    INTEGER(10) 5..7
+
+
+//! test: positive
++1
+//! expect:
+UNARY 0..2
+  OPERATOR(+) 0..1
+  INTEGER(1) 1..2
+
+// TODO waiting for boolean support
+// //! test: logical not
+// not True
+// //! expect:

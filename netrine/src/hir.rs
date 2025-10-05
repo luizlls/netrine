@@ -8,7 +8,7 @@ use crate::types::{self, Type};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
-    pub nodes: Vec<Node>,
+    pub(crate) nodes: Vec<Node>,
 }
 
 impl Display for Module {
@@ -58,10 +58,10 @@ impl PrettyPrint for Node {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
-    pub operator: Operator,
-    pub operand: Node,
-    pub span: Span,
-    pub type_: Type,
+    pub(crate) operator: Operator,
+    pub(crate) operand: Node,
+    pub(crate) span: Span,
+    pub(crate) type_: Type,
 }
 
 impl Display for Unary {
@@ -73,7 +73,7 @@ impl Display for Unary {
 impl PrettyPrint for Unary {
     fn print(&self) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("UNARY: {} {}", self.type_, self.span))
+            .label(format!("UNARY: {}", self.type_))
             .child(&self.operator)
             .child(&self.operand)
             .print()
@@ -82,11 +82,11 @@ impl PrettyPrint for Unary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
-    pub operator: Operator,
-    pub loperand: Node,
-    pub roperand: Node,
-    pub span: Span,
-    pub type_: Type,
+    pub(crate) operator: Operator,
+    pub(crate) loperand: Node,
+    pub(crate) roperand: Node,
+    pub(crate) span: Span,
+    pub(crate) type_: Type,
 }
 
 impl Display for Binary {
@@ -98,7 +98,7 @@ impl Display for Binary {
 impl PrettyPrint for Binary {
     fn print(&self) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("BINARY: {} {}", self.type_, self.span))
+            .label(format!("BINARY: {}", self.type_))
             .child(&self.loperand)
             .child(&self.operator)
             .child(&self.roperand)
@@ -108,8 +108,8 @@ impl PrettyPrint for Binary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
-    pub value: i64,
-    pub span: Span,
+    pub(crate) value: i64,
+    pub(crate) span: Span,
 }
 
 impl Display for Integer {
@@ -121,15 +121,15 @@ impl Display for Integer {
 impl PrettyPrint for Integer {
     fn print(&self) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("INTEGER({}): {} {}", self, types::INTEGER, self.span))
+            .label(format!("INTEGER({}): {}", self, types::INTEGER))
             .print()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Number {
-    pub value: f64,
-    pub span: Span,
+    pub(crate) value: f64,
+    pub(crate) span: Span,
 }
 
 impl Display for Number {
@@ -141,7 +141,7 @@ impl Display for Number {
 impl PrettyPrint for Number {
     fn print(&self) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("NUMBER({}): {} {}", self, types::NUMBER, self.span))
+            .label(format!("NUMBER({}): {}", self, types::NUMBER))
             .print()
     }
 }
@@ -158,7 +158,7 @@ pub enum Operator {
     Mul,
     Div,
     Mod,
-    Exp,
+    Pow,
     Eq,
     Ne,
     Lt,
@@ -185,7 +185,7 @@ impl Display for Operator {
             Operator::Mul => "mul",
             Operator::Div => "div",
             Operator::Mod => "mod",
-            Operator::Exp => "exp",
+            Operator::Pow => "pow",
             Operator::Eq => "eq",
             Operator::Ne => "ne",
             Operator::Lt => "lt",
@@ -231,7 +231,7 @@ impl LowerSyntax {
             syntax::OperatorKind::Mul => Operator::Mul,
             syntax::OperatorKind::Div => Operator::Div,
             syntax::OperatorKind::Mod => Operator::Mod,
-            syntax::OperatorKind::Exp => Operator::Exp,
+            syntax::OperatorKind::Pow => Operator::Pow,
             syntax::OperatorKind::Eq => Operator::Eq,
             syntax::OperatorKind::Ne => Operator::Ne,
             syntax::OperatorKind::Lt => Operator::Lt,

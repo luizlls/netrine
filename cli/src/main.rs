@@ -9,8 +9,8 @@ fn main() -> anyhow::Result<()> {
         cmd::repl()
     } else {
         match args[1].as_str() {
-            "e" => exec("<eval>".to_string(), args[2].to_string()),
-            "c" => compile("<eval>".to_string(), args[2].to_string()),
+            "eval" | "-e" => exec("<eval>".to_string(), args[2].to_string()),
+            "build" | "-b" => build("<eval>".to_string(), args[2].to_string()),
             _ => file(args[1].to_string()),
         }
     }
@@ -29,6 +29,6 @@ fn exec(file_path: String, source: String) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn compile(file_path: String, source: String) -> anyhow::Result<()> {
-    cmd::compile(file_path, &source)
+fn build(file_path: String, source: String) -> anyhow::Result<()> {
+    cmd::build(file_path, &source)
 }
