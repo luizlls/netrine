@@ -1,0 +1,52 @@
+//! test: basic arithmetic
+1 + 1
+//! expect:
+v0 := 1
+v1 := 1
+v2 := add v0 v1
+
+
+//! test: integers and floats
+3.14 * 2
+//! expect:
+v0 := 3.14
+v1 := 2
+v2 := mul v0 v1
+
+
+//! test: parenthesis
+5 * (2 + 3)
+//! expect:
+v0 := 5
+v1 := 2
+v2 := 3
+v3 := add v1 v2
+v4 := mul v0 v3
+
+
+//! test: operator precedence
+1 + 2 - 3 * 4 / 5 + 2.54
+//! expect:
+v0 := 1
+v1 := 2
+v2 := add v0 v1
+v3 := 3
+v4 := 4
+v5 := mul v3 v4
+v6 := 5
+v7 := div v5 v6
+v8 := sub v2 v7
+v9 := 2.54
+v10 := add v8 v9
+
+// TODO waiting for boolean support
+// //! test: logical
+// True or not False and True
+// //! expect:
+// 1
+
+// TODO waiting for pow support
+// //! test: unary precedence
+// -2 ^ 3
+// //! expect:
+// -8

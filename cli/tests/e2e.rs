@@ -55,15 +55,22 @@ fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
 
         let path = format!("e2e {test_name}");
 
-        let result = match pass {
-            "syntax" => cmd::dump_ast(path, &input)?,
-            "hir" => cmd::dump_hir(path, &input)?,
-            "mir" => cmd::dump_mir(path, &input)?,
-            "eval" => cmd::eval(path, &input)?,
-            _ => unreachable!(),
-        }
-        .trim()
-        .to_string();
+        let result = {
+            let result = match pass {
+                "syntax" => cmd::dump_ast(path, &input),
+                "hir" => cmd::dump_hir(path, &input),
+                "mir" => cmd::dump_mir(path, &input),
+                "eval" => cmd::eval(path, &input),
+                _ => unreachable!(),
+            };
+
+            match result {
+                Ok(value) => value,
+                Err(error) => format!("{error}"),
+            }
+        };
+
+        let result = result.trim().to_string();
 
         if result != output {
             println!("test failed: {pass}::{file_name}::{test_name}");
@@ -84,13 +91,13 @@ fn test(name: &str, path: &str) -> anyhow::Result<()> {
         test_paths.push(path.expect("Expected a valid file").path());
     }
 
-    println!("\nRunning {} {} tests\n", test_paths.len(), name);
+    println!("\nrunning {} {} test files\n", test_paths.len(), name);
 
     for path in test_paths {
         test_one(name, path)?;
     }
 
-    println!("\nAll {name} tests passed!\n");
+    println!("\nall {name} tests passed!\n");
 
     Ok(())
 }
@@ -98,6 +105,8 @@ fn test(name: &str, path: &str) -> anyhow::Result<()> {
 #[test]
 fn e2e() -> anyhow::Result<()> {
     test("syntax", "./tests/syntax")?;
+    test("hir", "./tests/hir")?;
+    test("mir", "./tests/mir")?;
     test("eval", "./tests/eval")?;
 
     Ok(())

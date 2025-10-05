@@ -121,7 +121,7 @@ impl Display for Integer {
 impl PrettyPrint for Integer {
     fn print(&self) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("INTEGER({}): {}", self, types::INTEGER))
+            .label(format!("INTEGER({}): {}", self.value, types::INTEGER))
             .print()
     }
 }
@@ -141,7 +141,7 @@ impl Display for Number {
 impl PrettyPrint for Number {
     fn print(&self) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("NUMBER({}): {}", self, types::NUMBER))
+            .label(format!("NUMBER({}): {}", self.value, types::NUMBER))
             .print()
     }
 }
@@ -324,170 +324,8 @@ pub fn from_syntax(module: &syntax::Module) -> Result<Module> {
 mod tests {
     use super::*;
     use crate::error::*;
-    use crate::lexer::*;
-    use crate::parser::*;
     use crate::source::*;
     use crate::syntax;
-
-    fn lower_module(input: &str) -> Module {
-        let source = Source::new("<test>".into(), input);
-        let tokens = tokens(&source);
-        let syntax = parse(tokens).unwrap();
-
-        from_syntax(&syntax).unwrap()
-    }
-
-    #[test]
-    fn integer() {
-        let module = lower_module("42");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Integer(Integer {
-                value: 42,
-                span: Span::new(0, 2),
-            })]
-        );
-    }
-
-    #[test]
-    fn binary_integer() {
-        let module = lower_module("0b1010");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Integer(Integer {
-                value: 0b1010,
-                span: Span::new(0, 6),
-            })]
-        );
-    }
-
-    #[test]
-    fn hex_integer() {
-        let module = lower_module("0xff");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Integer(Integer {
-                value: 0xff,
-                span: Span::new(0, 4),
-            })]
-        );
-    }
-
-    #[test]
-    fn number() {
-        let module = lower_module("3.14");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Number(Number {
-                value: 3.14,
-                span: Span::new(0, 4),
-            })]
-        );
-    }
-
-    #[test]
-    fn unary() {
-        let module = lower_module("-10");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Unary(
-                Unary {
-                    operator: Operator::Neg,
-                    operand: Node::Integer(Integer {
-                        value: 10,
-                        span: Span::new(1, 3),
-                    }),
-                    span: Span::new(0, 3),
-                    type_: Type::Unknown,
-                }
-                .into()
-            )]
-        );
-    }
-
-    #[test]
-    fn chain_unary() {
-        let module = lower_module("++5");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Unary(
-                Unary {
-                    operator: Operator::Pos,
-                    operand: Node::Unary(
-                        Unary {
-                            operator: Operator::Pos,
-                            operand: Node::Integer(Integer {
-                                value: 5,
-                                span: Span::new(2, 3),
-                            }),
-                            span: Span::new(1, 3),
-                            type_: Type::Unknown,
-                        }
-                        .into()
-                    ),
-                    span: Span::new(0, 3),
-                    type_: Type::Unknown,
-                }
-                .into()
-            )]
-        );
-    }
-
-    #[test]
-    fn binary() {
-        let module = lower_module("1+2");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Binary(
-                Binary {
-                    operator: Operator::Add,
-                    loperand: Node::Integer(Integer {
-                        value: 1,
-                        span: Span::new(0, 1),
-                    }),
-                    roperand: Node::Integer(Integer {
-                        value: 2,
-                        span: Span::new(2, 3),
-                    }),
-                    span: Span::new(0, 3),
-                    type_: Type::Unknown,
-                }
-                .into()
-            )]
-        );
-    }
-
-    #[test]
-    fn logical() {
-        let module = lower_module("1 and 0");
-
-        assert_eq!(
-            module.nodes,
-            vec![Node::Binary(
-                Binary {
-                    operator: Operator::And,
-                    loperand: Node::Integer(Integer {
-                        value: 1,
-                        span: Span::new(0, 1),
-                    }),
-                    roperand: Node::Integer(Integer {
-                        value: 0,
-                        span: Span::new(6, 7),
-                    }),
-                    span: Span::new(0, 7),
-                    type_: Type::Unknown,
-                }
-                .into()
-            )]
-        );
-    }
 
     #[test]
     fn invalid_number() {

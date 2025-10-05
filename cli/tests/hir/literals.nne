@@ -1,0 +1,22 @@
+//! test: integer
+10
+//! expect:
+INTEGER(10): integer
+
+
+//! test: number
+12.34
+//! expect:
+NUMBER(12.34): number
+
+
+//! test: binary
+0b1010
+//! expect:
+INTEGER(10): integer
+
+
+//! test: hexadecimal
+0xFF
+//! expect:
+INTEGER(255): integer

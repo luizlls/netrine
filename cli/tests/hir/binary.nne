@@ -1,0 +1,86 @@
+//! test: basic arithmetic
+1 + 1
+//! expect:
+BINARY: integer
+  INTEGER(1): integer
+  OPERATOR(add)
+  INTEGER(1): integer
+
+
+//! test: integers and floats
+3.14 * 2
+//! expect:
+BINARY: number
+  NUMBER(3.14): number
+  OPERATOR(mul)
+  INTEGER(2): integer
+
+
+//! test: parenthesis
+5 * (2 + 3)
+//! expect:
+BINARY: integer
+  INTEGER(5): integer
+  OPERATOR(mul)
+  BINARY: integer
+    INTEGER(2): integer
+    OPERATOR(add)
+    INTEGER(3): integer
+
+
+//! test: operator precedence
+1 + 2 - 3 * 4 / 5 + 2.54
+//! expect:
+BINARY: number
+  BINARY: number
+    BINARY: integer
+      INTEGER(1): integer
+      OPERATOR(add)
+      INTEGER(2): integer
+    OPERATOR(sub)
+    BINARY: number
+      BINARY: integer
+        INTEGER(3): integer
+        OPERATOR(mul)
+        INTEGER(4): integer
+      OPERATOR(div)
+      INTEGER(5): integer
+  OPERATOR(add)
+  NUMBER(2.54): number
+
+
+// TODO waiting for boolean support
+// //! test: logical
+// True or not False and True
+// //! expect:
+// 1
+
+
+//! test: unary precedence
+-2 ^ 3
+//! expect:
+BINARY: integer
+  UNARY: integer
+    OPERATOR(neg)
+    INTEGER(2): integer
+  OPERATOR(pow)
+  INTEGER(3): integer
+
+
+//! test: multiple lines
+1 + 2
+3 * 4.2
+5 / 6
+//! expect:
+BINARY: integer
+  INTEGER(1): integer
+  OPERATOR(add)
+  INTEGER(2): integer
+BINARY: number
+  INTEGER(3): integer
+  OPERATOR(mul)
+  NUMBER(4.2): number
+BINARY: number
+  INTEGER(5): integer
+  OPERATOR(div)
+  INTEGER(6): integer

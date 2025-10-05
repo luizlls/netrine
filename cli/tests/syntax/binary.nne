@@ -84,3 +84,9 @@ BINARY 12..17
   INTEGER(5) 12..13
   OPERATOR(/) 14..15
   INTEGER(6) 16..17
+
+
+//! test: incomplete expression
+(1 + 2
+//! expect:
+error: expected `)`, found `end of input`

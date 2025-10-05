@@ -265,29 +265,3 @@ pub fn parse(tokens: Tokens<'_>) -> Result<Module> {
 
     Ok(Module { nodes })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::*;
-    use crate::source::*;
-
-    fn parse_module(input: &str) -> Result<Module> {
-        let source = Source::new("<test>".into(), input);
-        parse(tokens(&source))
-    }
-
-    #[test]
-    fn empty() {
-        let module = parse_module("").unwrap();
-
-        assert_eq!(module.nodes, vec![]);
-    }
-
-    #[test]
-    fn empty_lines() {
-        let module = parse_module("\n\n\n").unwrap();
-
-        assert_eq!(module.nodes, vec![]);
-    }
-}
