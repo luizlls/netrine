@@ -7,16 +7,16 @@ fn dump(value: impl Display) -> anyhow::Result<String> {
 }
 
 pub fn dump_ast(file_path: String, source: &str) -> anyhow::Result<String> {
-    let syntax = netrine::parse(&netrine::source(file_path, source))?;
+    let syntax = compiler::parse(&compiler::source(file_path, source))?;
     dump(syntax)
 }
 
 pub fn dump_hir(file_path: String, source: &str) -> anyhow::Result<String> {
-    let hir = netrine::hir(&netrine::source(file_path, source))?;
+    let hir = compiler::hir(&compiler::source(file_path, source))?;
     dump(hir)
 }
 
 pub fn dump_mir(file_path: String, source: &str) -> anyhow::Result<String> {
-    let mir = netrine::mir(&netrine::source(file_path, source))?;
+    let mir = compiler::mir(&compiler::source(file_path, source))?;
     dump(mir)
 }

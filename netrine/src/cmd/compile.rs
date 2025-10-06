@@ -3,8 +3,8 @@ use std::process::exit;
 use anyhow::Context;
 
 pub fn compile(file_path: String, source: &str) -> anyhow::Result<Vec<u8>> {
-    let source = netrine::source(file_path, source);
-    let wasm = netrine::compile(&source);
+    let source = compiler::source(file_path, source);
+    let wasm = compiler::compile(&source);
 
     match wasm {
         Ok(wasm) => Ok(wasm),

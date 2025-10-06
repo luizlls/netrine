@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use cli::cmd;
+use netrine::cmd;
 
 fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
     let file_name = path

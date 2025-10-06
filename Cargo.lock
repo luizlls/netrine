@@ -308,16 +308,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
-name = "cli"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "clap",
- "netrine",
- "wasmer",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -331,6 +321,10 @@ name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
+
+[[package]]
+name = "compiler"
+version = "0.0.1"
 
 [[package]]
 name = "corosensei"
@@ -1147,6 +1141,12 @@ dependencies = [
 [[package]]
 name = "netrine"
 version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "compiler",
+ "wasmer",
+]
 
 [[package]]
 name = "nom"
@@ -1922,7 +1922,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 name = "wasm"
 version = "0.0.1"
 dependencies = [
- "netrine",
+ "compiler",
 ]
 
 [[package]]

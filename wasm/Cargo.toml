@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-netrine = { path = "../netrine" }
+compiler = { path = "../compiler" }
 
 [lib]
 crate-type = ["cdylib"]

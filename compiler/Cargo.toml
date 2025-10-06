@@ -1,0 +1,4 @@
+[package]
+version.workspace = true
+edition.workspace = true
+name = "compiler"

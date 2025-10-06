@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use cli::cmd;
+use netrine::cmd;
 
 fn main() -> anyhow::Result<()> {
     let args = std::env::args().collect::<Vec<String>>();
