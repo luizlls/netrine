@@ -20,3 +20,11 @@ INTEGER(0b1010) 0..6
 0xFF
 //! expect:
 INTEGER(0xFF) 0..4
+
+
+//! test: identifiers
+foo
+foo'
+//! expect:
+NAME(foo) 0..3
+NAME(foo') 4..8

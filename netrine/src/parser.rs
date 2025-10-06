@@ -1,7 +1,9 @@
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
-use crate::syntax::{Binary, Literal, Module, Node, Operator, OperatorKind, Precedence, Unary};
+use crate::syntax::{
+    Binary, Def, Literal, Module, Name, Node, Operator, OperatorKind, Precedence, Unary,
+};
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
@@ -50,7 +52,26 @@ impl<'src> Parser<'src> {
     }
 
     fn top_level(&mut self) -> Result<Node> {
-        self.expr()
+        if self.at(TokenKind::Identifier) && self.tokens.peek().is(TokenKind::Equals) {
+            self.def()
+        } else {
+            self.expr()
+        }
+    }
+
+    fn def(&mut self) -> Result<Node> {
+        let name = self.name()?;
+        self.expect(TokenKind::Equals)?;
+        let value = self.expr()?;
+
+        Ok(Node::Def(
+            Def {
+                span: Span::from(&name, &value),
+                name,
+                value,
+            }
+            .into(),
+        ))
     }
 
     fn expr(&mut self) -> Result<Node> {
@@ -60,6 +81,7 @@ impl<'src> Parser<'src> {
     fn atom(&mut self) -> Result<Node> {
         let token = self.token;
         match token.kind {
+            TokenKind::Identifier => self.ident(),
             TokenKind::Number => self.number(),
             TokenKind::Integer => self.integer(),
             TokenKind::LParen => self.parens(),
@@ -73,21 +95,29 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn literal(&mut self, kind: TokenKind, ctor: fn(Literal) -> Node) -> Result<Node> {
+    fn literal(&mut self, kind: TokenKind) -> Result<Literal> {
         let token = self.token;
         self.expect(kind)?;
         let span = token.span;
         let value = self.tokens.value(token).into();
 
-        Ok(ctor(Literal { value, span }))
+        Ok(Literal { value, span })
+    }
+
+    fn name(&mut self) -> Result<Name> {
+        self.literal(TokenKind::Identifier)
+    }
+
+    fn ident(&mut self) -> Result<Node> {
+        self.literal(TokenKind::Identifier).map(Node::Name)
     }
 
     fn number(&mut self) -> Result<Node> {
-        self.literal(TokenKind::Number, Node::Number)
+        self.literal(TokenKind::Number).map(Node::Number)
     }
 
     fn integer(&mut self) -> Result<Node> {
-        self.literal(TokenKind::Integer, Node::Integer)
+        self.literal(TokenKind::Integer).map(Node::Integer)
     }
 
     fn parens(&mut self) -> Result<Node> {
@@ -178,7 +208,7 @@ impl<'src> Parser<'src> {
     }
 
     fn endline(&mut self) -> Result<()> {
-        if self.maybe(TokenKind::EOL) || self.maybe(TokenKind::EOF) {
+        if self.maybe(TokenKind::EOL) || self.maybe(TokenKind::Semi) || self.maybe(TokenKind::EOF) {
             Ok(())
         } else {
             self.fail(self.unexpected(&[TokenKind::EOL]))

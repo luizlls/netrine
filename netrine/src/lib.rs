@@ -38,6 +38,5 @@ pub fn mir(source: &source::Source) -> error::Result<mir::Module> {
 
 pub fn compile(source: &source::Source) -> error::Result<Vec<u8>> {
     let mir = mir(source)?;
-    println!("{mir}");
     wasm::compile(&mir)
 }

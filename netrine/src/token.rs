@@ -122,6 +122,10 @@ impl Token {
           | TokenKind::Dots
         )
     }
+
+    pub fn is(self, kind: TokenKind) -> bool {
+        self.kind == kind
+    }
 }
 
 impl ToSpan for Token {

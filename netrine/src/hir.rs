@@ -214,8 +214,10 @@ impl LowerSyntax {
 
     fn node(&mut self, node: &syntax::Node) -> Result<Node> {
         match node {
-            syntax::Node::Binary(node) => self.binary(node),
-            syntax::Node::Unary(node) => self.unary(node),
+            syntax::Node::Def(def) => todo!(),
+            syntax::Node::Unary(unary) => self.unary(unary),
+            syntax::Node::Binary(binary) => self.binary(binary),
+            syntax::Node::Name(literal) => todo!(),
             syntax::Node::Number(literal) => self.number(literal),
             syntax::Node::Integer(literal) => self.integer(literal),
         }

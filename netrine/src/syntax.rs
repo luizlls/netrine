@@ -17,10 +17,12 @@ impl Display for Module {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Node {
+    Def(Box<Def>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
+    Name(Name),
     Number(Literal),
     Integer(Literal),
 }
@@ -29,9 +31,11 @@ impl ToSpan for Node {
     #[rustfmt::skip]
     fn span(&self) -> Span {
         match self {
+            Node::Def(def) => def.span,
             Node::Unary(unary) => unary.span,
             Node::Binary(binary) => binary.span,
-            Node::Number(literal)
+            Node::Name(literal)
+          | Node::Number(literal)
           | Node::Integer(literal) => literal.span,
         }
     }
@@ -46,8 +50,10 @@ impl Display for Node {
 impl PrettyPrint for Node {
     fn print(&self) -> PrettyPrintNode<'_> {
         match self {
+            Node::Def(def) => def.print(),
             Node::Unary(unary) => unary.print(),
             Node::Binary(binary) => binary.print(),
+            Node::Name(name) => name.print(),
             Node::Number(number) => {
                 PrettyPrintNode::printer()
                     .label(format!("NUMBER({}) {}", number.value, number.span))
@@ -62,7 +68,30 @@ impl PrettyPrint for Node {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
+pub struct Def {
+    pub(crate) name: Name,
+    pub(crate) value: Node,
+    pub(crate) span: Span,
+}
+
+impl Display for Def {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.pprint(f)
+    }
+}
+
+impl PrettyPrint for Def {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("DEFINE {}", self.span))
+            .child(&self.name)
+            .child(&self.value)
+            .print()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Unary {
     pub(crate) operator: Operator,
     pub(crate) expr: Node,
@@ -85,7 +114,7 @@ impl PrettyPrint for Unary {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Binary {
     pub(crate) operator: Operator,
     pub(crate) lexpr: Node,
@@ -110,10 +139,26 @@ impl PrettyPrint for Binary {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+pub type Name = Literal;
+
+impl PrettyPrint for Name {
+    fn print(&self) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("NAME({}) {}", self.value, self.span))
+            .print()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Literal {
     pub(crate) value: Box<str>,
     pub(crate) span: Span,
+}
+
+impl ToSpan for Literal {
+    fn span(&self) -> Span {
+        self.span
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
