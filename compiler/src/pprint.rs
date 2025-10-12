@@ -1,17 +1,22 @@
 use std::borrow::Cow;
 use std::fmt;
 
+use crate::state::State;
+
 pub struct PrettyPrintNode<'pp> {
-    label: Cow<'pp, str>,
+    label: Option<Cow<'pp, str>>,
     children: Vec<&'pp dyn PrettyPrint>,
 }
 
 impl<'pp> PrettyPrintNode<'pp> {
-    fn print(&self, f: &mut fmt::Formatter<'_>, depth: usize) -> fmt::Result {
-        writeln!(f, "{}{}", "  ".repeat(depth), self.label)?;
+    fn write(&self, f: &mut fmt::Formatter<'_>, state: &State, mut depth: usize) -> fmt::Result {
+        if let Some(label) = &self.label {
+            writeln!(f, "{}{}", "  ".repeat(depth), label)?;
+            depth += 1;
+        };
 
         for child in &self.children {
-            child.print().print(f, depth + 1)?;
+            child.print(state).write(f, state, depth)?;
         }
 
         Ok(())
@@ -47,26 +52,43 @@ impl<'pp> PrettyPrintNodeBuilder<'pp> {
 
     pub fn print(self) -> PrettyPrintNode<'pp> {
         PrettyPrintNode {
-            label: self.label.expect("pretty print `label` is required"),
+            label: self.label,
             children: self.children,
         }
     }
 }
 
 pub trait PrettyPrint {
-    fn print(&self) -> PrettyPrintNode<'_>;
-}
+    fn print(&self, state: &State) -> PrettyPrintNode<'_>;
 
-pub trait PrettyPrinter: PrettyPrint {
-    fn pprint(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.print().print(f, 0)
+    fn pprint<'pp>(&'pp self, state: &'pp State) -> PrettyPrintWithState<'pp>
+    where
+        Self: Sized,
+    {
+        PrettyPrintWithState::new(self, state)
     }
 }
 
-impl<T: ?Sized + PrettyPrint> PrettyPrinter for T {}
+pub struct PrettyPrintWithState<'pp> {
+    state: &'pp State,
+    printer: &'pp dyn PrettyPrint,
+}
+
+impl<'pp> PrettyPrintWithState<'pp> {
+    fn new(printer: &'pp dyn PrettyPrint, state: &'pp State) -> PrettyPrintWithState<'pp> {
+        PrettyPrintWithState { printer, state }
+    }
+}
+
+impl fmt::Display for PrettyPrintWithState<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let state = self.state;
+        self.printer.print(state).write(f, state, 0)
+    }
+}
 
 impl<T: ?Sized + AsRef<str>> PrettyPrint for T {
-    fn print(&self) -> PrettyPrintNode<'_> {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer().label(self.as_ref()).print()
     }
 }

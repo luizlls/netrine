@@ -42,7 +42,11 @@ impl<'src> Lexer<'src> {
     }
 
     fn at(&self, idx: usize) -> u8 {
-        if idx < self.bytes.len() { self.bytes[idx] } else { b'\0' }
+        if idx < self.bytes.len() {
+            self.bytes[idx]
+        } else {
+            b'\0'
+        }
     }
 
     fn slice(&self) -> &'src str {

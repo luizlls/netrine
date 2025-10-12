@@ -165,8 +165,10 @@ impl LowerHir {
 
     fn node(&mut self, node: &hir::Node) -> Result<InstructionId> {
         match node {
+            hir::Node::Define(define) => todo!(),
             hir::Node::Binary(node) => self.binary(node),
             hir::Node::Unary(node) => self.unary(node),
+            hir::Node::Name(name) => todo!(),
             hir::Node::Number(literal) => self.number(literal),
             hir::Node::Integer(literal) => self.integer(literal),
         }

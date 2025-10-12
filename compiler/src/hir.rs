@@ -1,8 +1,9 @@
 use std::fmt::{self, Display};
 
 use crate::error::{Error, Result};
-use crate::pprint::{PrettyPrint, PrettyPrintNode, PrettyPrinter};
+use crate::pprint::{PrettyPrint, PrettyPrintNode};
 use crate::source::{Span, ToSpan};
+use crate::state::State;
 use crate::syntax;
 use crate::types::{self, Type};
 
@@ -11,19 +12,22 @@ pub struct Module {
     pub(crate) nodes: Vec<Node>,
 }
 
-impl Display for Module {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl PrettyPrint for Module {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
+        let mut printer = PrettyPrintNode::printer();
         for node in &self.nodes {
-            write!(f, "{node}")?;
+            printer = printer.child(node);
         }
-        Ok(())
+        printer.print()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
+    Define(Box<Define>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
+    Name(Name),
     Number(Number),
     Integer(Integer),
 }
@@ -31,28 +35,43 @@ pub enum Node {
 impl ToSpan for Node {
     fn span(&self) -> Span {
         match self {
+            Node::Define(define) => define.span,
             Node::Unary(unary) => unary.span,
             Node::Binary(binary) => binary.span,
+            Node::Name(name) => name.span,
             Node::Number(number) => number.span,
             Node::Integer(integer) => integer.span,
         }
     }
 }
 
-impl Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pprint(f)
+impl PrettyPrint for Node {
+    fn print(&self, state: &State) -> PrettyPrintNode<'_> {
+        match self {
+            Node::Define(define) => define.print(state),
+            Node::Unary(unary) => unary.print(state),
+            Node::Binary(binary) => binary.print(state),
+            Node::Name(name) => name.print(state),
+            Node::Number(number) => number.print(state),
+            Node::Integer(integer) => integer.print(state),
+        }
     }
 }
+#[derive(Debug, Clone, PartialEq)]
+pub struct Define {
+    pub(crate) name: Name,
+    pub(crate) value: Node,
+    pub(crate) span: Span,
+    pub(crate) type_: Type,
+}
 
-impl PrettyPrint for Node {
-    fn print(&self) -> PrettyPrintNode<'_> {
-        match self {
-            Node::Unary(unary) => unary.print(),
-            Node::Binary(binary) => binary.print(),
-            Node::Number(number) => number.print(),
-            Node::Integer(integer) => integer.print(),
-        }
+impl PrettyPrint for Define {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("DEFINE: {}", self.type_))
+            .child(&self.name)
+            .child(&self.value)
+            .print()
     }
 }
 
@@ -64,14 +83,8 @@ pub struct Unary {
     pub(crate) type_: Type,
 }
 
-impl Display for Unary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pprint(f)
-    }
-}
-
 impl PrettyPrint for Unary {
-    fn print(&self) -> PrettyPrintNode<'_> {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
             .label(format!("UNARY: {}", self.type_))
             .child(&self.operator)
@@ -89,14 +102,8 @@ pub struct Binary {
     pub(crate) type_: Type,
 }
 
-impl Display for Binary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pprint(f)
-    }
-}
-
 impl PrettyPrint for Binary {
-    fn print(&self) -> PrettyPrintNode<'_> {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
             .label(format!("BINARY: {}", self.type_))
             .child(&self.loperand)
@@ -107,19 +114,27 @@ impl PrettyPrint for Binary {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Name {
+    pub(crate) value: Box<str>,
+    pub(crate) span: Span,
+}
+
+impl PrettyPrint for Name {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
+        PrettyPrintNode::printer()
+            .label(format!("NAME({})", self.value))
+            .print()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
     pub(crate) value: i64,
     pub(crate) span: Span,
 }
 
-impl Display for Integer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pprint(f)
-    }
-}
-
 impl PrettyPrint for Integer {
-    fn print(&self) -> PrettyPrintNode<'_> {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
             .label(format!("INTEGER({}): {}", self.value, types::INTEGER))
             .print()
@@ -132,14 +147,8 @@ pub struct Number {
     pub(crate) span: Span,
 }
 
-impl Display for Number {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pprint(f)
-    }
-}
-
 impl PrettyPrint for Number {
-    fn print(&self) -> PrettyPrintNode<'_> {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
             .label(format!("NUMBER({}): {}", self.value, types::NUMBER))
             .print()
@@ -168,7 +177,7 @@ pub enum Operator {
 }
 
 impl PrettyPrint for Operator {
-    fn print(&self) -> PrettyPrintNode<'_> {
+    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
             .label(format!("OPERATOR({})", self))
             .print()
@@ -214,13 +223,17 @@ impl LowerSyntax {
 
     fn node(&mut self, node: &syntax::Node) -> Result<Node> {
         match node {
-            syntax::Node::Def(def) => todo!(),
+            syntax::Node::Define(define) => self.define(define),
             syntax::Node::Unary(unary) => self.unary(unary),
             syntax::Node::Binary(binary) => self.binary(binary),
-            syntax::Node::Name(literal) => todo!(),
+            syntax::Node::Name(name) => self.name(name),
             syntax::Node::Number(literal) => self.number(literal),
             syntax::Node::Integer(literal) => self.integer(literal),
         }
+    }
+
+    fn define(&mut self, define: &syntax::Define) -> Result<Node> {
+        todo!()
     }
 
     fn binary(&mut self, binary: &syntax::Binary) -> Result<Node> {
@@ -280,6 +293,10 @@ impl LowerSyntax {
             }
             .into(),
         ))
+    }
+
+    fn name(&mut self, name: &syntax::Name) -> Result<Node> {
+        todo!()
     }
 
     fn number(&mut self, number: &syntax::Literal) -> Result<Node> {

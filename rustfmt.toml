@@ -1,5 +1,6 @@
 unstable_features=true
 use_small_heuristics="Max"
+single_line_if_else_max_width=30
 max_width=100
 array_width=60
 chain_width=60

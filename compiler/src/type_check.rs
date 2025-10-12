@@ -16,8 +16,10 @@ impl TypeCheck {
 
     fn check(&mut self, node: &mut Node) -> Result<Type> {
         match node {
+            Node::Define(define) => todo!(),
             Node::Unary(unary) => self.unary(unary.as_mut()),
             Node::Binary(binary) => self.binary(binary.as_mut()),
+            Node::Name(name) => todo!(),
             Node::Number(_) => Ok(types::NUMBER),
             Node::Integer(_) => Ok(types::INTEGER),
         }

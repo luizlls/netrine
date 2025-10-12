@@ -1,27 +1,30 @@
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
+use crate::state::State;
 use crate::syntax::{
-    Binary, Def, Literal, Module, Name, Node, Operator, OperatorKind, Precedence, Unary,
+    Binary, Define, Literal, Module, Name, Node, Operator, OperatorKind, Precedence, Unary,
 };
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
-struct Parser<'src> {
-    tokens: Tokens<'src>,
+struct Parser<'p> {
+    tokens: Tokens<'p>,
     token: Token,
+    state: &'p mut State,
 }
 
-impl<'src> Parser<'src> {
-    fn new(tokens: Tokens<'src>) -> Parser<'src> {
+impl<'p> Parser<'p> {
+    fn new(tokens: Tokens<'p>, state: &'p mut State) -> Parser<'p> {
         Parser {
             tokens,
             token: Token::default(),
+            state,
         }
         .init()
     }
 
-    fn init(mut self) -> Parser<'src> {
+    fn init(mut self) -> Parser<'p> {
         self.token = self.tokens.token();
         self
     }
@@ -53,19 +56,19 @@ impl<'src> Parser<'src> {
 
     fn top_level(&mut self) -> Result<Node> {
         if self.at(TokenKind::Identifier) && self.tokens.peek().is(TokenKind::Equals) {
-            self.def()
+            self.define()
         } else {
             self.expr()
         }
     }
 
-    fn def(&mut self) -> Result<Node> {
+    fn define(&mut self) -> Result<Node> {
         let name = self.name()?;
         self.expect(TokenKind::Equals)?;
         let value = self.expr()?;
 
-        Ok(Node::Def(
-            Def {
+        Ok(Node::Define(
+            Define {
                 span: Span::from(&name, &value),
                 name,
                 value,
@@ -105,11 +108,19 @@ impl<'src> Parser<'src> {
     }
 
     fn name(&mut self) -> Result<Name> {
-        self.literal(TokenKind::Identifier)
+        let token = self.token;
+        self.expect(TokenKind::Identifier)?;
+        let span = token.span;
+        let value = self.tokens.value(token);
+
+        Ok(Name {
+            name: self.state.add_name(value.into()),
+            span,
+        })
     }
 
     fn ident(&mut self) -> Result<Node> {
-        self.literal(TokenKind::Identifier).map(Node::Name)
+        self.name().map(Node::Name)
     }
 
     fn number(&mut self) -> Result<Node> {
@@ -281,8 +292,8 @@ impl<'src> Parser<'src> {
     }
 }
 
-pub fn parse(tokens: Tokens<'_>) -> Result<Module> {
-    let mut parser = Parser::new(tokens);
+pub fn parse<'p>(tokens: Tokens<'p>, state: &'p mut State) -> Result<Module> {
+    let mut parser = Parser::new(tokens, state);
     let mut nodes = vec![];
 
     parser.newline();
