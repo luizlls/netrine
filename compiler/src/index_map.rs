@@ -27,15 +27,15 @@ where
 
     pub fn insert(&mut self, key: K, value: V) -> I {
         match self.indices.entry(key) {
-            Entry::Occupied(entry) => {
-                let index = *entry.get();
-                self.entries[index.into()] = value;
-                index
-            }
             Entry::Vacant(entry) => {
                 let index = I::from(self.entries.len());
                 entry.insert(index);
                 self.entries.push(value);
+                index
+            }
+            Entry::Occupied(entry) => {
+                let index = *entry.get();
+                self.entries[index.into()] = value;
                 index
             }
         }
@@ -61,16 +61,6 @@ where
 
     fn index(&self, index: I) -> &Self::Output {
         &self.entries[index.into()]
-    }
-}
-
-impl<V, I> IndexMap<V, V, I>
-where
-    V: Hash + Eq + Clone,
-    I: From<usize> + Into<usize> + Copy,
-{
-    pub fn insert_value(&mut self, value: V) -> I {
-        self.insert(value.clone(), value)
     }
 }
 

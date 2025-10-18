@@ -1,76 +1,61 @@
-use std::fmt::Display;
-use std::ops::Deref;
-
-use crate::index_map::IndexMap;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct NameId(u32);
 
 impl NameId {
     #[inline(always)]
-    pub fn id(self) -> u32 {
-        self.0
-    }
-}
-
-impl From<usize> for NameId {
-    fn from(value: usize) -> NameId {
-        NameId(value as u32)
-    }
-}
-
-impl Into<usize> for NameId {
-    fn into(self) -> usize {
+    pub fn id(self) -> usize {
         self.0 as usize
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Name(Box<str>);
-
-impl Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
+#[derive(Debug)]
+pub struct Interner {
+    entries: HashMap<Box<str>, NameId>,
+    values: Vec<Box<str>>,
 }
 
-impl From<&str> for Name {
-    fn from(value: &str) -> Name {
-        Name(value.into())
+impl Interner {
+    pub fn new() -> Interner {
+        Interner {
+            entries: HashMap::new(),
+            values: Vec::new(),
+        }
     }
-}
 
-impl From<Box<str>> for Name {
-    fn from(value: Box<str>) -> Name {
-        Name(value)
+    pub fn intern(&mut self, value: impl Into<Box<str>>) -> NameId {
+        let value = value.into();
+        match self.entries.entry(value.clone()) {
+            Entry::Vacant(entry) => {
+                let index = NameId(self.values.len() as u32);
+                entry.insert(index);
+                self.values.push(value);
+                index
+            }
+            Entry::Occupied(entry) => {
+                let index = *entry.get();
+                self.values[index.id()] = value;
+                index
+            }
+        }
     }
-}
 
-impl Deref for Name {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.deref()
+    pub fn get(&self, name_id: NameId) -> Option<&str> {
+        self.values.get(name_id.id()).map(|it| it.as_ref())
     }
 }
 
 #[derive(Debug)]
 pub struct State {
-    names: IndexMap<Name, Name, NameId>,
+    pub(crate) interner: Interner,
 }
 
 impl State {
     pub fn new() -> State {
         State {
-            names: IndexMap::new(),
+            interner: Interner::new(),
         }
-    }
-
-    pub fn get_name(&self, id: NameId) -> &Name {
-        &self.names[id]
-    }
-
-    pub fn add_name(&mut self, name: Name) -> NameId {
-        self.names.insert_value(name)
     }
 }
