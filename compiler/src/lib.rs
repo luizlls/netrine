@@ -1,6 +1,5 @@
 mod compiler;
 mod error;
-mod hir;
 mod index_map;
 mod lexer;
 mod mir;

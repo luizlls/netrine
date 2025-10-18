@@ -58,7 +58,6 @@ fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
         let result = {
             let result = match pass {
                 "syntax" => cmd::dump_ast(path, &input),
-                "hir" => cmd::dump_hir(path, &input),
                 "mir" => cmd::dump_mir(path, &input),
                 "eval" => cmd::eval(path, &input),
                 _ => unreachable!(),
@@ -105,7 +104,6 @@ fn test(name: &str, path: &str) -> anyhow::Result<()> {
 #[test]
 fn e2e() -> anyhow::Result<()> {
     test("syntax", "./tests/syntax")?;
-    test("hir", "./tests/hir")?;
     test("mir", "./tests/mir")?;
     test("eval", "./tests/eval")?;
 

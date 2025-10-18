@@ -1,78 +1,107 @@
 use crate::error::{Error, Result};
-use crate::hir::{Binary, Module, Node, Operator, Unary};
 use crate::source::{Span, ToSpan};
+use crate::syntax::{Binary, Module, Node, NodeId, NodeKind, OperatorKind, Unary};
 use crate::types::{self, Type};
 
-struct TypeCheck {}
+#[derive(Debug, Clone)]
+pub struct Types {
+    types: Vec<Type>,
+}
+
+impl Types {
+    fn new() -> Types {
+        Types { types: vec![] }
+    }
+
+    fn insert(&mut self, id: NodeId, type_: Type) {
+        debug_assert!(id.index() == self.types.len());
+        self.types.push(type_)
+    }
+
+    pub fn get(&self, id: NodeId) -> Type {
+        self.types.get(id.index()).copied().unwrap_or(Type::Unknown)
+    }
+}
+
+struct TypeCheck {
+    types: Types,
+}
 
 impl TypeCheck {
     fn new() -> TypeCheck {
-        TypeCheck {}
+        TypeCheck {
+            types: Types::new(),
+        }
     }
 
     fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
         Err(Error::error(span, message.into()))
     }
 
-    fn check(&mut self, node: &mut Node) -> Result<Type> {
-        match node {
-            Node::Define(define) => todo!(),
-            Node::Unary(unary) => self.unary(unary.as_mut()),
-            Node::Binary(binary) => self.binary(binary.as_mut()),
-            Node::Name(name) => todo!(),
-            Node::Number(_) => Ok(types::NUMBER),
-            Node::Integer(_) => Ok(types::INTEGER),
-        }
-    }
-
-    fn unary(&mut self, unary: &mut Unary) -> Result<Type> {
-        let operand_type = self.check(&mut unary.operand)?;
-
-        unary.type_ = match unary.operator {
-            Operator::Not => {
-                self.expect(&unary.operand, operand_type, types::BOOLEAN)?;
-                types::BOOLEAN
-            }
-            Operator::Pos | Operator::Neg => {
-                self.expect(&unary.operand, operand_type, types::NUMBER)?;
-                operand_type
-            }
-            _ => unreachable!(),
+    fn check(&mut self, node: &Node) -> Result<Type> {
+        let node_type = match &node.kind {
+            NodeKind::Define(_) => todo!(),
+            NodeKind::Unary(unary) => self.unary(unary, node.span)?,
+            NodeKind::Binary(binary) => self.binary(binary, node.span)?,
+            NodeKind::Name(_) => todo!(),
+            NodeKind::Number(_) => types::NUMBER,
+            NodeKind::Integer(_) => types::INTEGER,
         };
 
-        Ok(unary.type_)
+        self.types.insert(node.id, node_type);
+        Ok(node_type)
     }
 
-    fn binary(&mut self, binary: &mut Binary) -> Result<Type> {
-        let loperand_type = self.check(&mut binary.loperand)?;
-        let roperand_type = self.check(&mut binary.roperand)?;
+    fn unary(&mut self, unary: &Unary, span: Span) -> Result<Type> {
+        let operand_type = self.check(&unary.expr)?;
 
-        binary.type_ = match binary.operator {
-            Operator::And | Operator::Or => {
-                self.expect(&binary.loperand, loperand_type, types::BOOLEAN)?;
-                self.expect(&binary.roperand, roperand_type, types::BOOLEAN)?;
+        let result_type = match unary.operator.kind {
+            OperatorKind::Not => {
+                self.expect(&unary.expr, operand_type, types::BOOLEAN)?;
                 types::BOOLEAN
             }
-            Operator::Eq | Operator::Ne => {
+            OperatorKind::Pos | OperatorKind::Neg => {
+                self.expect(&unary.expr, operand_type, types::NUMBER)?;
+                operand_type
+            }
+            _ => {
+                return self.fail(span, "invalid unary operator");
+            }
+        };
+
+        Ok(result_type)
+    }
+
+    fn binary(&mut self, binary: &Binary, span: Span) -> Result<Type> {
+        let loperand_type = self.check(&binary.lexpr)?;
+        let roperand_type = self.check(&binary.rexpr)?;
+
+        let result_type = match binary.operator.kind {
+            OperatorKind::And | OperatorKind::Or => {
+                self.expect(&binary.lexpr, loperand_type, types::BOOLEAN)?;
+                self.expect(&binary.rexpr, roperand_type, types::BOOLEAN)?;
+                types::BOOLEAN
+            }
+            OperatorKind::Eq | OperatorKind::Ne => {
                 match loperand_type {
-                    types::BOOLEAN => {
-                        self.expect(&binary.roperand, roperand_type, types::BOOLEAN)?
-                    }
+                    types::BOOLEAN => self.expect(&binary.rexpr, roperand_type, types::BOOLEAN)?,
                     types::INTEGER | types::NUMBER => {
-                        self.expect(&binary.roperand, roperand_type, types::NUMBER)?
+                        self.expect(&binary.rexpr, roperand_type, types::NUMBER)?
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        return self.fail(span, "invalid type for equality comparison");
+                    }
                 }
                 types::BOOLEAN
             }
-            Operator::Lt | Operator::Le | Operator::Gt | Operator::Ge => {
-                self.expect(&binary.loperand, loperand_type, types::NUMBER)?;
-                self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
+            OperatorKind::Lt | OperatorKind::Le | OperatorKind::Gt | OperatorKind::Ge => {
+                self.expect(&binary.lexpr, loperand_type, types::NUMBER)?;
+                self.expect(&binary.rexpr, roperand_type, types::NUMBER)?;
                 types::BOOLEAN
             }
-            Operator::Add | Operator::Sub | Operator::Mul | Operator::Pow => {
-                self.expect(&binary.loperand, loperand_type, types::NUMBER)?;
-                self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
+            OperatorKind::Add | OperatorKind::Sub | OperatorKind::Mul | OperatorKind::Pow => {
+                self.expect(&binary.lexpr, loperand_type, types::NUMBER)?;
+                self.expect(&binary.rexpr, roperand_type, types::NUMBER)?;
 
                 if loperand_type == types::INTEGER && roperand_type == types::INTEGER {
                     types::INTEGER
@@ -80,20 +109,22 @@ impl TypeCheck {
                     types::NUMBER
                 }
             }
-            Operator::Div => {
-                self.expect(&binary.loperand, loperand_type, types::NUMBER)?;
-                self.expect(&binary.roperand, roperand_type, types::NUMBER)?;
+            OperatorKind::Div => {
+                self.expect(&binary.lexpr, loperand_type, types::NUMBER)?;
+                self.expect(&binary.rexpr, roperand_type, types::NUMBER)?;
                 types::NUMBER
             }
-            Operator::Mod => {
-                self.expect(&binary.loperand, loperand_type, types::INTEGER)?;
-                self.expect(&binary.roperand, roperand_type, types::INTEGER)?;
+            OperatorKind::Mod => {
+                self.expect(&binary.lexpr, loperand_type, types::INTEGER)?;
+                self.expect(&binary.rexpr, roperand_type, types::INTEGER)?;
                 types::INTEGER
             }
-            _ => unreachable!(),
+            _ => {
+                return self.fail(span, "invalid binary operator");
+            }
         };
 
-        Ok(binary.type_)
+        Ok(result_type)
     }
 
     fn expect(&self, node: &Node, node_type: Type, expected: Type) -> Result<()> {
@@ -105,12 +136,12 @@ impl TypeCheck {
     }
 }
 
-pub fn check(mut module: Module) -> Result<Module> {
+pub fn check(module: &Module) -> Result<Types> {
     let mut type_checker = TypeCheck::new();
 
-    for node in &mut module.nodes {
+    for node in &module.nodes {
         type_checker.check(node)?;
     }
 
-    Ok(module)
+    Ok(type_checker.types)
 }

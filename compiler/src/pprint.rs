@@ -1,11 +1,11 @@
 use std::borrow::Cow;
-use std::fmt;
+use std::fmt::{self, Display};
 
 use crate::state::State;
 
 pub struct PrettyPrintNode<'pp> {
     label: Option<Cow<'pp, str>>,
-    children: Vec<&'pp dyn PrettyPrint>,
+    children: Vec<PrettyPrintChild<'pp>>,
 }
 
 impl<'pp> PrettyPrintNode<'pp> {
@@ -16,7 +16,10 @@ impl<'pp> PrettyPrintNode<'pp> {
         };
 
         for child in &self.children {
-            child.print(state).write(f, state, depth)?;
+            match child {
+                PrettyPrintChild::Label(s) => s.print(state).write(f, state, depth)?,
+                PrettyPrintChild::Printer(p) => p.print(state).write(f, state, depth)?,
+            }
         }
 
         Ok(())
@@ -27,9 +30,14 @@ impl<'pp> PrettyPrintNode<'pp> {
     }
 }
 
+enum PrettyPrintChild<'pp> {
+    Label(Cow<'pp, str>),
+    Printer(&'pp dyn PrettyPrint),
+}
+
 pub struct PrettyPrintNodeBuilder<'pp> {
     label: Option<Cow<'pp, str>>,
-    children: Vec<&'pp dyn PrettyPrint>,
+    children: Vec<PrettyPrintChild<'pp>>,
 }
 
 impl<'pp> PrettyPrintNodeBuilder<'pp> {
@@ -46,8 +54,16 @@ impl<'pp> PrettyPrintNodeBuilder<'pp> {
     }
 
     pub fn child(mut self, child: &'pp dyn PrettyPrint) -> PrettyPrintNodeBuilder<'pp> {
-        self.children.push(child);
+        self.add_child(child);
         self
+    }
+
+    pub fn add_child(&mut self, child: &'pp dyn PrettyPrint) {
+        self.children.push(PrettyPrintChild::Printer(child));
+    }
+
+    pub fn add_label(&mut self, child: impl Into<Cow<'pp, str>>) {
+        self.children.push(PrettyPrintChild::Label(child.into()));
     }
 
     pub fn print(self) -> PrettyPrintNode<'pp> {
@@ -80,7 +96,7 @@ impl<'pp> PrettyPrintWithState<'pp> {
     }
 }
 
-impl fmt::Display for PrettyPrintWithState<'_> {
+impl Display for PrettyPrintWithState<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let state = self.state;
         self.printer.print(state).write(f, state, 0)

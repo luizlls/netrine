@@ -3,7 +3,8 @@ use crate::lexer::Tokens;
 use crate::source::Span;
 use crate::state::State;
 use crate::syntax::{
-    Binary, Define, Literal, Module, Name, Node, Operator, OperatorKind, Precedence, Unary,
+    Binary, Define, Literal, Module, Name, Node, NodeId, NodeKind, Operator, OperatorKind,
+    Precedence, Unary,
 };
 use crate::token::{Token, TokenKind};
 
@@ -11,6 +12,7 @@ use crate::token::{Token, TokenKind};
 struct Parser<'p> {
     tokens: Tokens<'p>,
     token: Token,
+    node_id: u32,
     state: &'p mut State,
 }
 
@@ -20,6 +22,7 @@ impl<'p> Parser<'p> {
             tokens,
             token: Token::default(),
             state,
+            node_id: 0,
         }
         .init()
     }
@@ -54,6 +57,21 @@ impl<'p> Parser<'p> {
         self.tokens.done()
     }
 
+    fn node_id(&mut self) -> NodeId {
+        let node_id = NodeId(self.node_id);
+        self.node_id += 1;
+        node_id
+    }
+
+    fn node(&mut self, span: Span, kind: impl Into<NodeKind>) -> Node {
+        let kind = kind.into();
+        Node {
+            id: self.node_id(),
+            kind,
+            span,
+        }
+    }
+
     fn top_level(&mut self) -> Result<Node> {
         if self.at(TokenKind::Identifier) && self.tokens.peek().is(TokenKind::Equals) {
             self.define()
@@ -67,14 +85,7 @@ impl<'p> Parser<'p> {
         self.expect(TokenKind::Equals)?;
         let value = self.expr()?;
 
-        Ok(Node::Define(
-            Define {
-                span: Span::from(&name, &value),
-                name,
-                value,
-            }
-            .into(),
-        ))
+        Ok(self.node(Span::from(&name, &value), Define { name, value }))
     }
 
     fn expr(&mut self) -> Result<Node> {
@@ -98,15 +109,6 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn literal(&mut self, kind: TokenKind) -> Result<Literal> {
-        let token = self.token;
-        self.expect(kind)?;
-        let span = token.span;
-        let value = self.tokens.value(token).into();
-
-        Ok(Literal { value, span })
-    }
-
     fn name(&mut self) -> Result<Name> {
         let token = self.token;
         self.expect(TokenKind::Identifier)?;
@@ -120,15 +122,25 @@ impl<'p> Parser<'p> {
     }
 
     fn ident(&mut self) -> Result<Node> {
-        self.name().map(Node::Name)
+        let name = self.name()?;
+        Ok(self.node(name.span, NodeKind::Name(name)))
+    }
+
+    fn literal(&mut self, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
+        let token = self.token;
+        self.expect(kind)?;
+        let span = token.span;
+        let value = self.tokens.value(token).into();
+
+        Ok(self.node(span, ctor(Literal { value, span })))
     }
 
     fn number(&mut self) -> Result<Node> {
-        self.literal(TokenKind::Number).map(Node::Number)
+        self.literal(TokenKind::Number, NodeKind::Number)
     }
 
     fn integer(&mut self) -> Result<Node> {
-        self.literal(TokenKind::Integer).map(Node::Integer)
+        self.literal(TokenKind::Integer, NodeKind::Integer)
     }
 
     fn parens(&mut self) -> Result<Node> {
@@ -146,14 +158,7 @@ impl<'p> Parser<'p> {
 
         let expr = self.unary()?;
 
-        Ok(Node::Unary(
-            Unary {
-                span: Span::from(&operator, &expr),
-                expr,
-                operator,
-            }
-            .into(),
-        ))
+        Ok(self.node(Span::from(&operator, &expr), Unary { operator, expr }))
     }
 
     fn binary(&mut self, precedence: Precedence) -> Result<Node> {
@@ -163,14 +168,13 @@ impl<'p> Parser<'p> {
             let lexpr = expr;
             let rexpr = self.binary(operator.next_precedence())?;
 
-            expr = Node::Binary(
+            expr = self.node(
+                Span::from(&lexpr, &rexpr),
                 Binary {
-                    span: Span::from(&lexpr, &rexpr),
+                    operator,
                     lexpr,
                     rexpr,
-                    operator,
-                }
-                .into(),
+                },
             );
         }
 
