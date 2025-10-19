@@ -132,7 +132,7 @@ impl<'p> Parser<'p> {
         let span = token.span;
         let value = self.tokens.value(token).into();
 
-        Ok(self.node(span, ctor(Literal { value, span })))
+        Ok(self.node(span, ctor(Literal { value })))
     }
 
     fn number(&mut self) -> Result<Node> {

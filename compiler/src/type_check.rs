@@ -127,11 +127,11 @@ impl TypeCheck {
         Ok(result_type)
     }
 
-    fn expect(&self, node: &Node, node_type: Type, expected: Type) -> Result<()> {
-        if node_type.is(expected) {
+    fn expect(&self, node: &Node, node_type: Type, expected_type: Type) -> Result<()> {
+        if node_type.is(expected_type) {
             Ok(())
         } else {
-            self.fail(node.span(), format!("expected `{}`, found `{}`", expected, node_type))
+            self.fail(node.span(), format!("expected `{}`, found `{}`", expected_type, node_type))
         }
     }
 }
@@ -144,4 +144,361 @@ pub fn check(module: &Module) -> Result<Types> {
     }
 
     Ok(type_checker.types)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::syntax::*;
+
+    fn type_check(node: Node) -> Vec<Type> {
+        check(&Module {
+            nodes: vec![node],
+        })
+        .unwrap()
+        .types
+    }
+
+    fn type_check_err(node: Node) -> Error {
+        check(&Module {
+            nodes: vec![node],
+        })
+        .unwrap_err()
+    }
+
+    fn node(id: NodeId, kind: impl Into<NodeKind>) -> Node {
+        Node {
+            id,
+            kind: kind.into(),
+            span: Span::ZERO,
+        }
+    }
+
+    #[test]
+    fn integer() {
+        assert_eq!(
+            type_check(node(
+                NodeId(0),
+                NodeKind::Integer(Literal {
+                    value: "42".into(),
+                })
+            )),
+            vec![types::INTEGER],
+        );
+    }
+
+    #[test]
+    fn number() {
+        assert_eq!(
+            type_check(node(
+                NodeId(0),
+                NodeKind::Number(Literal {
+                    value: "3.14".into(),
+                })
+            )),
+            vec![types::NUMBER],
+        );
+    }
+
+    #[test]
+    fn unary() {
+        let unary_operators = vec![OperatorKind::Neg, OperatorKind::Pos];
+
+        for operator in unary_operators {
+            assert_eq!(
+                type_check(node(
+                    NodeId(1),
+                    Unary {
+                        operator: Operator {
+                            kind: operator,
+                            span: Span::ZERO,
+                        },
+                        expr: node(
+                            NodeId(0),
+                            NodeKind::Integer(Literal {
+                                value: "1".into(),
+                            })
+                        ),
+                    }
+                )),
+                vec![types::INTEGER, types::INTEGER]
+            );
+
+            assert_eq!(
+                type_check(node(
+                    NodeId(1),
+                    Unary {
+                        operator: Operator {
+                            kind: operator,
+                            span: Span::ZERO,
+                        },
+                        expr: node(
+                            NodeId(0),
+                            NodeKind::Number(Literal {
+                                value: "1.23".into(),
+                            })
+                        ),
+                    }
+                )),
+                vec![types::NUMBER, types::NUMBER]
+            );
+        }
+    }
+
+    #[test]
+    fn unary_not_boolean() {
+        assert_eq!(
+            type_check_err(node(
+                NodeId(1),
+                Unary {
+                    operator: Operator {
+                        kind: OperatorKind::Not,
+                        span: Span::new(0, 1),
+                    },
+                    expr: Node {
+                        id: NodeId(0),
+                        kind: NodeKind::Integer(Literal {
+                            value: "10".into(),
+                        }),
+                        span: Span::new(1, 3),
+                    }
+                }
+            )),
+            Error::error(Span::new(1, 3), "expected `boolean`, found `integer`".into())
+        );
+    }
+
+    #[test]
+    fn binary() {
+        let binary_operators = vec![
+            OperatorKind::Add,
+            OperatorKind::Sub,
+            OperatorKind::Mul,
+            OperatorKind::Pow,
+        ];
+        for operator in binary_operators {
+            assert_eq!(
+                type_check(node(
+                    NodeId(2),
+                    Binary {
+                        operator: Operator {
+                            kind: operator,
+                            span: Span::ZERO,
+                        },
+                        lexpr: node(
+                            NodeId(0),
+                            NodeKind::Integer(Literal {
+                                value: "1".into(),
+                            })
+                        ),
+                        rexpr: node(
+                            NodeId(1),
+                            NodeKind::Integer(Literal {
+                                value: "2".into(),
+                            })
+                        ),
+                    }
+                )),
+                vec![types::INTEGER, types::INTEGER, types::INTEGER],
+            );
+        }
+    }
+
+    #[test]
+    fn binary_integer_promotion() {
+        let binary_operators = vec![
+            OperatorKind::Add,
+            OperatorKind::Sub,
+            OperatorKind::Mul,
+            OperatorKind::Pow,
+        ];
+        for operator in binary_operators {
+            assert_eq!(
+                type_check(node(
+                    NodeId(2),
+                    Binary {
+                        operator: Operator {
+                            kind: operator,
+                            span: Span::ZERO,
+                        },
+                        lexpr: node(
+                            NodeId(0),
+                            NodeKind::Integer(Literal {
+                                value: "100".into(),
+                            })
+                        ),
+                        rexpr: node(
+                            NodeId(1),
+                            NodeKind::Number(Literal {
+                                value: "3.14".into(),
+                            })
+                        ),
+                    }
+                )),
+                vec![types::INTEGER, types::NUMBER, types::NUMBER],
+            );
+        }
+    }
+
+    #[test]
+    fn binary_division_promotion() {
+        assert_eq!(
+            type_check(node(
+                NodeId(2),
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Div,
+                        span: Span::ZERO,
+                    },
+                    lexpr: node(
+                        NodeId(0),
+                        NodeKind::Integer(Literal {
+                            value: "10".into(),
+                        })
+                    ),
+                    rexpr: node(
+                        NodeId(1),
+                        NodeKind::Integer(Literal {
+                            value: "2".into(),
+                        })
+                    ),
+                }
+            )),
+            vec![types::INTEGER, types::INTEGER, types::NUMBER],
+        );
+    }
+
+    #[test]
+    fn binary_modulo_integer() {
+        assert_eq!(
+            type_check(node(
+                NodeId(2),
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Mod,
+                        span: Span::ZERO,
+                    },
+                    lexpr: node(
+                        NodeId(0),
+                        NodeKind::Integer(Literal {
+                            value: "10".into(),
+                        })
+                    ),
+                    rexpr: node(
+                        NodeId(1),
+                        NodeKind::Integer(Literal {
+                            value: "5".into(),
+                        })
+                    ),
+                }
+            )),
+            vec![types::INTEGER, types::INTEGER, types::INTEGER],
+        );
+    }
+
+    #[test]
+    fn binary_modulo_number() {
+        assert_eq!(
+            type_check_err(node(
+                NodeId(2),
+                Binary {
+                    operator: Operator {
+                        kind: OperatorKind::Mod,
+                        span: Span::new(3, 4),
+                    },
+                    lexpr: Node {
+                        id: NodeId(0),
+                        kind: NodeKind::Integer(Literal {
+                            value: "10".into(),
+                        }),
+                        span: Span::new(0, 2),
+                    },
+                    rexpr: Node {
+                        id: NodeId(1),
+                        kind: NodeKind::Number(Literal {
+                            value: "1.1".into(),
+                        }),
+                        span: Span::new(4, 7),
+                    },
+                }
+            )),
+            Error::error(Span::new(4, 7), "expected `integer`, found `number`".into())
+        );
+    }
+
+    #[test]
+    fn binary_comparison_integer() {
+        let comparison_operators = vec![
+            OperatorKind::Eq,
+            OperatorKind::Ne,
+            OperatorKind::Lt,
+            OperatorKind::Le,
+            OperatorKind::Gt,
+            OperatorKind::Ge,
+        ];
+        for operator in comparison_operators {
+            assert_eq!(
+                type_check(node(
+                    NodeId(2),
+                    Binary {
+                        operator: Operator {
+                            kind: operator,
+                            span: Span::ZERO,
+                        },
+                        lexpr: node(
+                            NodeId(0),
+                            NodeKind::Integer(Literal {
+                                value: "1".into(),
+                            })
+                        ),
+                        rexpr: node(
+                            NodeId(1),
+                            NodeKind::Integer(Literal {
+                                value: "1".into(),
+                            })
+                        ),
+                    }
+                )),
+                vec![types::INTEGER, types::INTEGER, types::BOOLEAN],
+            );
+        }
+    }
+
+    #[test]
+    fn binary_comparison_mixed() {
+        let comparison_operators = vec![
+            OperatorKind::Eq,
+            OperatorKind::Ne,
+            OperatorKind::Lt,
+            OperatorKind::Le,
+            OperatorKind::Gt,
+            OperatorKind::Ge,
+        ];
+        for operator in comparison_operators {
+            assert_eq!(
+                type_check(node(
+                    NodeId(2),
+                    Binary {
+                        operator: Operator {
+                            kind: operator,
+                            span: Span::ZERO,
+                        },
+                        lexpr: node(
+                            NodeId(0),
+                            NodeKind::Number(Literal {
+                                value: "1.2".into(),
+                            })
+                        ),
+                        rexpr: node(
+                            NodeId(1),
+                            NodeKind::Integer(Literal {
+                                value: "100".into(),
+                            })
+                        ),
+                    }
+                )),
+                vec![types::NUMBER, types::INTEGER, types::BOOLEAN],
+            );
+        }
+    }
 }

@@ -151,13 +151,6 @@ impl PrettyPrint for Name {
 #[derive(Debug, Clone)]
 pub struct Literal {
     pub(crate) value: Box<str>,
-    pub(crate) span: Span,
-}
-
-impl ToSpan for Literal {
-    fn span(&self) -> Span {
-        self.span
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

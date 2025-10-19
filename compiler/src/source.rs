@@ -27,7 +27,9 @@ pub trait ToSpan {
 }
 
 impl Span {
-    pub fn new(start: u32, end: u32) -> Span {
+    pub const ZERO: Span = Span::new(0, 0);
+
+    pub const fn new(start: u32, end: u32) -> Span {
         Span { start, end }
     }
 
