@@ -130,7 +130,7 @@ impl From<Binary> for NodeKind {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Name {
-    pub(crate) name: NameId,
+    pub(crate) id: NameId,
     pub(crate) span: Span,
 }
 
@@ -143,7 +143,7 @@ impl ToSpan for Name {
 impl PrettyPrint for Name {
     fn print(&self, state: &State) -> PrettyPrintNode<'_> {
         PrettyPrintNode::printer()
-            .label(format!("NAME({}) {}", state.interner.get(self.name).unwrap(), self.span))
+            .label(format!("NAME({}) {}", state.interner.get(self.id).unwrap(), self.span))
             .print()
     }
 }

@@ -3,6 +3,7 @@ use crate::lexer;
 use crate::mir;
 use crate::parser;
 use crate::pprint::PrettyPrint;
+use crate::resolver;
 use crate::source;
 use crate::state;
 use crate::syntax;
@@ -33,14 +34,19 @@ impl<'c> Compiler<'c> {
         parser::parse(tokens, &mut self.state)
     }
 
-    fn check(&self, syntax: &syntax::Module) -> Result<type_check::Types> {
-        type_check::check(&syntax)
+    fn resolve(&mut self, syntax: &syntax::Module) -> Result<()> {
+        resolver::resolve(syntax, &mut self.state)
+    }
+
+    fn check(&mut self, syntax: &syntax::Module) -> Result<()> {
+        type_check::check(syntax, &mut self.state)
     }
 
     fn mir(&mut self) -> Result<mir::Module> {
         let syntax = self.parse()?;
-        let types = self.check(&syntax)?;
-        mir::from_syntax(&syntax, &types)
+        self.resolve(&syntax)?;
+        self.check(&syntax)?;
+        mir::from_syntax(&syntax, &self.state)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {

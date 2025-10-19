@@ -5,6 +5,7 @@ mod lexer;
 mod mir;
 mod parser;
 mod pprint;
+mod resolver;
 mod source;
 mod state;
 mod syntax;

@@ -116,7 +116,7 @@ impl<'p> Parser<'p> {
         let value = self.tokens.value(token);
 
         Ok(Name {
-            name: self.state.interner.intern(value),
+            id: self.state.interner.intern(value),
             span,
         })
     }

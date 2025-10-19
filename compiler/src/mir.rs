@@ -1,11 +1,11 @@
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 
 use crate::error::{Error, Result};
 use crate::pprint::{PrettyPrint, PrettyPrintNode};
 use crate::source::Span;
-use crate::state::State;
+use crate::state::{NameId, State};
 use crate::syntax::{self, NodeKind};
-use crate::type_check::Types;
 use crate::types::{self, Type};
 
 #[derive(Debug, Clone)]
@@ -51,7 +51,6 @@ pub struct BlockId(pub(crate) u32);
 pub struct Instruction {
     pub(crate) kind: InstructionKind,
     pub(crate) type_: Type,
-    pub(crate) block: BlockId,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -182,18 +181,19 @@ impl Display for Number {
     }
 }
 
-struct LowerSyntax<'a> {
+#[derive(Debug)]
+struct LowerSyntax<'mir> {
     instructions: Vec<Instruction>,
-    block: BlockId,
-    types: &'a Types,
+    state: &'mir State,
+    environment: HashMap<NameId, InstructionId>,
 }
 
-impl<'a> LowerSyntax<'a> {
-    fn new(types: &'a Types) -> LowerSyntax<'a> {
+impl<'mir> LowerSyntax<'mir> {
+    fn new(state: &'mir State) -> LowerSyntax<'mir> {
         LowerSyntax {
-            instructions: vec![],
-            types,
-            block: BlockId(0),
+            instructions: Vec::new(),
+            state,
+            environment: HashMap::new(),
         }
     }
 
@@ -203,25 +203,26 @@ impl<'a> LowerSyntax<'a> {
 
     fn emit(&mut self, kind: InstructionKind, type_: Type) -> InstructionId {
         let instruction_id = InstructionId(self.instructions.len() as u32);
-
-        self.instructions.push(Instruction {
-            kind,
-            type_,
-            block: self.block,
-        });
-
+        self.instructions.push(Instruction { kind, type_ });
         instruction_id
     }
 
+    #[rustfmt::skip]
     fn node(&mut self, node: &syntax::Node) -> Result<InstructionId> {
         match &node.kind {
-            NodeKind::Define(_) => todo!(),
+            NodeKind::Define(define) => self.define(node, define),
             NodeKind::Binary(binary) => self.binary(node, binary),
             NodeKind::Unary(unary) => self.unary(node, unary),
-            NodeKind::Name(_) => todo!(),
+            NodeKind::Name(name) => self.name(node, name),
             NodeKind::Number(literal) => self.number(node, literal),
             NodeKind::Integer(literal) => self.integer(node, literal),
         }
+    }
+
+    fn define(&mut self, _node: &syntax::Node, define: &syntax::Define) -> Result<InstructionId> {
+        let instruction = self.node(&define.value)?;
+        self.environment.insert(define.name.id, instruction);
+        Ok(instruction)
     }
 
     fn binary(&mut self, node: &syntax::Node, binary: &syntax::Binary) -> Result<InstructionId> {
@@ -254,7 +255,7 @@ impl<'a> LowerSyntax<'a> {
                 loperand,
                 roperand,
             }),
-            self.types.get(node.id),
+            self.state.types.get(node.id),
         ))
     }
 
@@ -275,8 +276,19 @@ impl<'a> LowerSyntax<'a> {
                 operator,
                 operand,
             }),
-            self.types.get(node.id),
+            self.state.types.get(node.id),
         ))
+    }
+
+    fn name(&mut self, _node: &syntax::Node, name: &syntax::Name) -> Result<InstructionId> {
+        let Some(&instruction) = self.environment.get(&name.id) else {
+            return self.fail(
+                name.span,
+                format!("variable `{}` not defined", self.state.interner.get(name.id).unwrap()),
+            );
+        };
+
+        Ok(instruction)
     }
 
     fn number(&mut self, node: &syntax::Node, literal: &syntax::Literal) -> Result<InstructionId> {
@@ -302,8 +314,8 @@ impl<'a> LowerSyntax<'a> {
     }
 }
 
-pub fn from_syntax(module: &syntax::Module, types: &Types) -> Result<Module> {
-    let mut lower = LowerSyntax::new(types);
+pub fn from_syntax(module: &syntax::Module, state: &State) -> Result<Module> {
+    let mut lower = LowerSyntax::new(state);
 
     for node in &module.nodes {
         lower.node(node)?;
