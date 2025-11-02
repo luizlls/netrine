@@ -1,13 +1,11 @@
 use crate::error;
+use crate::hir;
 use crate::lexer;
 use crate::mir;
 use crate::parser;
-use crate::pprint::PrettyPrint;
-use crate::resolver;
 use crate::source;
 use crate::state;
 use crate::syntax;
-use crate::type_check;
 use crate::wasm;
 
 use error::Result;
@@ -31,22 +29,17 @@ impl<'c> Compiler<'c> {
 
     fn parse(&mut self) -> Result<syntax::Module> {
         let tokens = lexer::tokens(&self.source);
-        parser::parse(tokens, &mut self.state)
+        parser::parse(tokens)
     }
 
-    fn resolve(&mut self, syntax: &syntax::Module) -> Result<()> {
-        resolver::resolve(syntax, &mut self.state)
-    }
-
-    fn check(&mut self, syntax: &syntax::Module) -> Result<()> {
-        type_check::check(syntax, &mut self.state)
+    fn hir(&mut self) -> Result<hir::Module> {
+        let syntax = self.parse()?;
+        hir::from_syntax(&syntax, &mut self.state)
     }
 
     fn mir(&mut self) -> Result<mir::Module> {
-        let syntax = self.parse()?;
-        self.resolve(&syntax)?;
-        self.check(&syntax)?;
-        mir::from_syntax(&syntax, &self.state)
+        let hir = self.hir()?;
+        mir::from_hir(&hir, &self.state)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {
@@ -56,11 +49,16 @@ impl<'c> Compiler<'c> {
 
     pub fn dump_ast(mut self) -> Result<String> {
         let ast = self.parse()?;
-        Ok(format!("{}", ast.pprint(&self.state)))
+        Ok(format!("{ast}"))
+    }
+
+    pub fn dump_hir(mut self) -> Result<String> {
+        let hir = self.hir()?;
+        Ok(format!("{hir}"))
     }
 
     pub fn dump_mir(mut self) -> Result<String> {
         let mir = self.mir()?;
-        Ok(format!("{}", mir.pprint(&self.state)))
+        Ok(format!("{mir}"))
     }
 }

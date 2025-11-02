@@ -104,6 +104,7 @@ fn test(name: &str, path: &str) -> anyhow::Result<()> {
 #[test]
 fn e2e() -> anyhow::Result<()> {
     test("syntax", "./tests/syntax")?;
+    test("hir", "./tests/hir")?;
     test("mir", "./tests/mir")?;
     test("eval", "./tests/eval")?;
 

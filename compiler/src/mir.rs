@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 
 use crate::error::{Error, Result};
-use crate::pprint::{PrettyPrint, PrettyPrintNode};
+use crate::hir;
 use crate::source::Span;
-use crate::state::{NameId, State};
-use crate::syntax::{self, NodeKind};
+use crate::state::{State, SymbolId};
 use crate::types::{self, Type};
 
 #[derive(Debug, Clone)]
@@ -14,26 +13,23 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn get_type(&self, instruction_id: &InstructionId) -> Type {
+    pub fn get_type(&self, instruction_id: &Variable) -> Type {
         self.instructions[instruction_id.id() as usize].type_
     }
 }
 
-impl PrettyPrint for Module {
-    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
-        let mut printer = PrettyPrintNode::printer();
-
+impl Display for Module {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (idx, instruction) in self.instructions.iter().enumerate() {
-            printer.add_label(format!("v{}: {} = {}", idx, instruction.type_, instruction.kind));
+            writeln!(f, "v{}: {} = {}", idx, instruction.type_, instruction.kind)?;
         }
-
-        printer.print()
+        Ok(())
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Block {
-    pub(crate) instructions: Vec<InstructionId>,
+    pub(crate) instructions: Vec<Variable>,
 }
 
 impl Block {
@@ -54,18 +50,29 @@ pub struct Instruction {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct InstructionId(pub(crate) u32);
+pub struct Variable {
+    id: u32,
+    v: u32,
+}
 
-impl InstructionId {
+impl Variable {
     #[inline(always)]
     pub fn id(self) -> u32 {
-        self.0
+        self.id
+    }
+
+    fn new(id: u32) -> Variable {
+        Variable { id, v: 0 }
+    }
+
+    fn next(self) -> Variable {
+        Variable::new(self.id + 1)
     }
 }
 
-impl Display for InstructionId {
+impl Display for Variable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "v{}", self.0)
+        write!(f, "v{}", self.id)
     }
 }
 
@@ -88,56 +95,19 @@ impl Display for InstructionKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Operator {
-    And,
-    Or,
-    Not,
-    Pos,
-    Neg,
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Pow,
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-}
-
-impl Display for Operator {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = match self {
-            Operator::Pos => "pos",
-            Operator::Neg => "neg",
-            Operator::Add => "add",
-            Operator::Sub => "sub",
-            Operator::Mul => "mul",
-            Operator::Div => "div",
-            Operator::Mod => "mod",
-            Operator::Pow => "pow",
-            Operator::Eq => "eq",
-            Operator::Ne => "ne",
-            Operator::Lt => "lt",
-            Operator::Le => "le",
-            Operator::Gt => "gt",
-            Operator::Ge => "ge",
-            Operator::And => "and",
-            Operator::Or => "or",
-            Operator::Not => "not",
-        };
-        write!(f, "{}", s)
-    }
-}
+pub type Operator = hir::Operator;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
+    pub(crate) target: Variable,
     pub(crate) operator: Operator,
-    pub(crate) operand: InstructionId,
+    pub(crate) operand: Variable,
+}
+
+impl From<Unary> for InstructionKind {
+    fn from(unary: Unary) -> InstructionKind {
+        InstructionKind::Unary(unary)
+    }
 }
 
 impl Display for Unary {
@@ -148,9 +118,16 @@ impl Display for Unary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
+    pub(crate) target: Variable,
     pub(crate) operator: Operator,
-    pub(crate) loperand: InstructionId,
-    pub(crate) roperand: InstructionId,
+    pub(crate) loperand: Variable,
+    pub(crate) roperand: Variable,
+}
+
+impl From<Binary> for InstructionKind {
+    fn from(binary: Binary) -> InstructionKind {
+        InstructionKind::Binary(binary)
+    }
 }
 
 impl Display for Binary {
@@ -161,7 +138,14 @@ impl Display for Binary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
+    pub(crate) target: Variable,
     pub(crate) value: i64,
+}
+
+impl From<Integer> for InstructionKind {
+    fn from(integer: Integer) -> InstructionKind {
+        InstructionKind::Integer(integer)
+    }
 }
 
 impl Display for Integer {
@@ -172,7 +156,14 @@ impl Display for Integer {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Number {
+    pub(crate) target: Variable,
     pub(crate) value: f64,
+}
+
+impl From<Number> for InstructionKind {
+    fn from(number: Number) -> InstructionKind {
+        InstructionKind::Number(number)
+    }
 }
 
 impl Display for Number {
@@ -182,143 +173,136 @@ impl Display for Number {
 }
 
 #[derive(Debug)]
-struct LowerSyntax<'mir> {
+struct LowerHir<'mir> {
     instructions: Vec<Instruction>,
     state: &'mir State,
-    environment: HashMap<NameId, InstructionId>,
+    variable: Variable,
 }
 
-impl<'mir> LowerSyntax<'mir> {
-    fn new(state: &'mir State) -> LowerSyntax<'mir> {
-        LowerSyntax {
+impl<'mir> LowerHir<'mir> {
+    fn new(state: &'mir State) -> LowerHir<'mir> {
+        LowerHir {
             instructions: Vec::new(),
             state,
-            environment: HashMap::new(),
+            variable: Variable::new(0),
         }
+    }
+
+    fn emit(&mut self, kind: impl Into<InstructionKind>, type_: Type) {
+        let kind = kind.into();
+        self.instructions.push(Instruction { kind, type_ });
+    }
+
+    fn variable(&mut self) -> Variable {
+        let variable = self.variable;
+        self.variable = self.variable.next();
+        variable
+    }
+
+    #[rustfmt::skip]
+    fn lower(&mut self, node: &hir::Node) -> Result<Variable> {
+        match &node.kind {
+            hir::NodeKind::Define(define) => self.define(node, define),
+            hir::NodeKind::Local(local) => self.local(node, local),
+            hir::NodeKind::Binary(binary) => self.binary(node, binary),
+            hir::NodeKind::Unary(unary) => self.unary(node, unary),
+            hir::NodeKind::Number(literal) => self.number(node, literal),
+            hir::NodeKind::Integer(literal) => self.integer(node, literal),
+        }
+    }
+
+    fn define(&mut self, _node: &hir::Node, define: &hir::Define) -> Result<Variable> {
+        let variable_id = self.lower(&define.value)?;
+        // self.environment.insert(define.symbol, variable_id);
+        Ok(variable_id)
+    }
+
+    fn local(&mut self, node: &hir::Node, local: &hir::Local) -> Result<Variable> {
+        // let Some(&instruction_id) = self.environment.get(&local.symbol_id) else {
+        //     let symbol = self
+        //         .state
+        //         .symbol_by_id(local.symbol_id)
+        //         .expect("invalid symbol id");
+
+        //     return self.fail(node.span, format!("variable `{}` not defined", symbol.name));
+        // };
+
+        // Ok(instruction_id)
+        todo!()
+    }
+
+    fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<Variable> {
+        let loperand = self.lower(&binary.loperand)?;
+        let roperand = self.lower(&binary.roperand)?;
+        let target = self.variable();
+
+        self.emit(
+            Binary {
+                target,
+                operator: binary.operator,
+                loperand,
+                roperand,
+            },
+            node.type_,
+        );
+
+        Ok(target)
+    }
+
+    fn unary(&mut self, node: &hir::Node, unary: &hir::Unary) -> Result<Variable> {
+        let operand = self.lower(&unary.operand)?;
+        let target = self.variable();
+
+        self.emit(
+            Unary {
+                target,
+                operator: unary.operator,
+                operand,
+            },
+            node.type_,
+        );
+
+        Ok(target)
+    }
+
+    fn number(&mut self, _node: &hir::Node, number: &hir::Number) -> Result<Variable> {
+        let target = self.variable();
+
+        self.emit(
+            Number {
+                target,
+                value: number.value,
+            },
+            types::NUMBER,
+        );
+
+        Ok(target)
+    }
+
+    fn integer(&mut self, _node: &hir::Node, integer: &hir::Integer) -> Result<Variable> {
+        let target = self.variable();
+
+        self.emit(
+            Integer {
+                target,
+                value: integer.value,
+            },
+            types::INTEGER,
+        );
+
+        Ok(target)
     }
 
     fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
         Err(Error::error(span, message.into()))
     }
-
-    fn emit(&mut self, kind: InstructionKind, type_: Type) -> InstructionId {
-        let instruction_id = InstructionId(self.instructions.len() as u32);
-        self.instructions.push(Instruction { kind, type_ });
-        instruction_id
-    }
-
-    #[rustfmt::skip]
-    fn node(&mut self, node: &syntax::Node) -> Result<InstructionId> {
-        match &node.kind {
-            NodeKind::Define(define) => self.define(node, define),
-            NodeKind::Binary(binary) => self.binary(node, binary),
-            NodeKind::Unary(unary) => self.unary(node, unary),
-            NodeKind::Name(name) => self.name(node, name),
-            NodeKind::Number(literal) => self.number(node, literal),
-            NodeKind::Integer(literal) => self.integer(node, literal),
-        }
-    }
-
-    fn define(&mut self, _node: &syntax::Node, define: &syntax::Define) -> Result<InstructionId> {
-        let instruction = self.node(&define.value)?;
-        self.environment.insert(define.name.id, instruction);
-        Ok(instruction)
-    }
-
-    fn binary(&mut self, node: &syntax::Node, binary: &syntax::Binary) -> Result<InstructionId> {
-        let loperand = self.node(&binary.lexpr)?;
-        let roperand = self.node(&binary.rexpr)?;
-
-        let operator = match binary.operator.kind {
-            syntax::OperatorKind::Add => Operator::Add,
-            syntax::OperatorKind::Sub => Operator::Sub,
-            syntax::OperatorKind::Mul => Operator::Mul,
-            syntax::OperatorKind::Div => Operator::Div,
-            syntax::OperatorKind::Mod => Operator::Mod,
-            syntax::OperatorKind::Pow => Operator::Pow,
-            syntax::OperatorKind::Eq => Operator::Eq,
-            syntax::OperatorKind::Ne => Operator::Ne,
-            syntax::OperatorKind::Lt => Operator::Lt,
-            syntax::OperatorKind::Le => Operator::Le,
-            syntax::OperatorKind::Gt => Operator::Gt,
-            syntax::OperatorKind::Ge => Operator::Ge,
-            syntax::OperatorKind::And => Operator::And,
-            syntax::OperatorKind::Or => Operator::Or,
-            _ => {
-                return self.fail(binary.operator.span, "unsupported binary operator");
-            }
-        };
-
-        Ok(self.emit(
-            InstructionKind::Binary(Binary {
-                operator,
-                loperand,
-                roperand,
-            }),
-            self.state.types.get(node.id),
-        ))
-    }
-
-    fn unary(&mut self, node: &syntax::Node, unary: &syntax::Unary) -> Result<InstructionId> {
-        let operand = self.node(&unary.expr)?;
-
-        let operator = match unary.operator.kind {
-            syntax::OperatorKind::Pos => Operator::Pos,
-            syntax::OperatorKind::Neg => Operator::Neg,
-            syntax::OperatorKind::Not => Operator::Not,
-            _ => {
-                return self.fail(unary.operator.span, "unsupported unary operator");
-            }
-        };
-
-        Ok(self.emit(
-            InstructionKind::Unary(Unary {
-                operator,
-                operand,
-            }),
-            self.state.types.get(node.id),
-        ))
-    }
-
-    fn name(&mut self, _node: &syntax::Node, name: &syntax::Name) -> Result<InstructionId> {
-        let Some(&instruction) = self.environment.get(&name.id) else {
-            return self.fail(
-                name.span,
-                format!("variable `{}` not defined", self.state.interner.get(name.id).unwrap()),
-            );
-        };
-
-        Ok(instruction)
-    }
-
-    fn number(&mut self, node: &syntax::Node, literal: &syntax::Literal) -> Result<InstructionId> {
-        let Ok(value) = str::parse(&literal.value) else {
-            return self.fail(node.span, "value is not supported as a number");
-        };
-
-        Ok(self.emit(InstructionKind::Number(Number { value }), types::NUMBER))
-    }
-
-    fn integer(&mut self, node: &syntax::Node, literal: &syntax::Literal) -> Result<InstructionId> {
-        let value = match literal.value.get(0..2) {
-            Some("0b") => i64::from_str_radix(&literal.value[2..], 2),
-            Some("0x") => i64::from_str_radix(&literal.value[2..], 16),
-            _ => str::parse(&literal.value),
-        };
-
-        let Ok(value) = value else {
-            return self.fail(node.span, "value is not supported as an integer");
-        };
-
-        Ok(self.emit(InstructionKind::Integer(Integer { value }), types::INTEGER))
-    }
 }
 
-pub fn from_syntax(module: &syntax::Module, state: &State) -> Result<Module> {
-    let mut lower = LowerSyntax::new(state);
+pub fn from_hir(module: &hir::Module, state: &State) -> Result<Module> {
+    let mut lower = LowerHir::new(state);
 
     for node in &module.nodes {
-        lower.node(node)?;
+        lower.lower(node)?;
     }
 
     Ok(Module {

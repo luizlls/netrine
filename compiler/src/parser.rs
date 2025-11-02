@@ -1,10 +1,9 @@
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
-use crate::state::State;
 use crate::syntax::{
-    Binary, Define, Literal, Module, Name, Node, NodeId, NodeKind, Operator, OperatorKind,
-    Precedence, Unary,
+    Binary, Define, Literal, Module, Name, Node, NodeKind, Operator, OperatorKind, Precedence,
+    Unary,
 };
 use crate::token::{Token, TokenKind};
 
@@ -12,17 +11,13 @@ use crate::token::{Token, TokenKind};
 struct Parser<'p> {
     tokens: Tokens<'p>,
     token: Token,
-    node_id: u32,
-    state: &'p mut State,
 }
 
 impl<'p> Parser<'p> {
-    fn new(tokens: Tokens<'p>, state: &'p mut State) -> Parser<'p> {
+    fn new(tokens: Tokens<'p>) -> Parser<'p> {
         Parser {
             tokens,
             token: Token::default(),
-            state,
-            node_id: 0,
         }
         .init()
     }
@@ -57,17 +52,9 @@ impl<'p> Parser<'p> {
         self.tokens.done()
     }
 
-    fn node_id(&mut self) -> NodeId {
-        let node_id = NodeId(self.node_id);
-        self.node_id += 1;
-        node_id
-    }
-
     fn node(&mut self, span: Span, kind: impl Into<NodeKind>) -> Node {
-        let kind = kind.into();
         Node {
-            id: self.node_id(),
-            kind,
+            kind: kind.into(),
             span,
         }
     }
@@ -113,12 +100,9 @@ impl<'p> Parser<'p> {
         let token = self.token;
         self.expect(TokenKind::Identifier)?;
         let span = token.span;
-        let value = self.tokens.value(token);
+        let value = self.tokens.value(token).into();
 
-        Ok(Name {
-            id: self.state.interner.intern(value),
-            span,
-        })
+        Ok(Name { value, span })
     }
 
     fn ident(&mut self) -> Result<Node> {
@@ -296,8 +280,8 @@ impl<'p> Parser<'p> {
     }
 }
 
-pub fn parse<'p>(tokens: Tokens<'p>, state: &'p mut State) -> Result<Module> {
-    let mut parser = Parser::new(tokens, state);
+pub fn parse<'p>(tokens: Tokens<'p>) -> Result<Module> {
+    let mut parser = Parser::new(tokens);
     let mut nodes = vec![];
 
     parser.newline();

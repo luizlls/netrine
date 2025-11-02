@@ -1,36 +1,23 @@
 use std::fmt::{self, Display};
 
-use crate::pprint::{PrettyPrint, PrettyPrintNode};
 use crate::source::{Span, ToSpan};
-use crate::state::{NameId, State};
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct NodeId(pub(crate) u32);
-
-impl NodeId {
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub(crate) nodes: Vec<Node>,
+    pub nodes: Vec<Node>,
 }
 
-impl PrettyPrint for Module {
-    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
-        let mut printer = PrettyPrintNode::printer();
+impl Display for Module {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for node in &self.nodes {
-            printer.add_child(node);
+            writeln!(f, "{node}")?;
         }
-        printer.print()
+        Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    pub(crate) id: NodeId,
     pub(crate) kind: NodeKind,
     pub(crate) span: Span,
 }
@@ -41,42 +28,16 @@ impl ToSpan for Node {
     }
 }
 
-impl PrettyPrint for Node {
-    fn print(&self, state: &State) -> PrettyPrintNode<'_> {
+impl Display for Node {
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            NodeKind::Define(define) => {
-                PrettyPrintNode::printer()
-                    .label(format!("DEFINE {}", self.span))
-                    .child(&define.name)
-                    .child(&define.value)
-                    .print()
-            }
-            NodeKind::Unary(unary) => {
-                PrettyPrintNode::printer()
-                    .label(format!("UNARY {}", self.span))
-                    .child(&unary.operator)
-                    .child(&unary.expr)
-                    .print()
-            }
-            NodeKind::Binary(binary) => {
-                PrettyPrintNode::printer()
-                    .label(format!("BINARY {}", self.span))
-                    .child(&binary.lexpr)
-                    .child(&binary.operator)
-                    .child(&binary.rexpr)
-                    .print()
-            }
-            NodeKind::Name(name) => name.print(state),
-            NodeKind::Number(number) => {
-                PrettyPrintNode::printer()
-                    .label(format!("NUMBER({}) {}", number.value, self.span))
-                    .print()
-            }
-            NodeKind::Integer(integer) => {
-                PrettyPrintNode::printer()
-                    .label(format!("INTEGER({}) {}", integer.value, self.span))
-                    .print()
-            }
+            NodeKind::Define(define) => write!(f, "{define}"),
+            NodeKind::Unary(unary) => write!(f, "{unary}"),
+            NodeKind::Binary(binary) => write!(f, "{binary}"),
+            NodeKind::Name(name) => write!(f, "{name}"),
+            NodeKind::Number(literal)
+          | NodeKind::Integer(literal) => write!(f, "{literal}"),
         }
     }
 }
@@ -103,6 +64,12 @@ impl From<Define> for NodeKind {
     }
 }
 
+impl Display for Define {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(let {} {})", self.name, self.value)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Unary {
     pub(crate) operator: Operator,
@@ -112,6 +79,12 @@ pub struct Unary {
 impl From<Unary> for NodeKind {
     fn from(unary: Unary) -> NodeKind {
         NodeKind::Unary(Box::new(unary))
+    }
+}
+
+impl Display for Unary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({} {})", self.operator, self.expr)
     }
 }
 
@@ -128,9 +101,15 @@ impl From<Binary> for NodeKind {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+impl Display for Binary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({} {} {})", self.operator, self.lexpr, self.rexpr)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Name {
-    pub(crate) id: NameId,
+    pub(crate) value: String,
     pub(crate) span: Span,
 }
 
@@ -140,31 +119,27 @@ impl ToSpan for Name {
     }
 }
 
-impl PrettyPrint for Name {
-    fn print(&self, state: &State) -> PrettyPrintNode<'_> {
-        PrettyPrintNode::printer()
-            .label(format!("NAME({}) {}", state.interner.get(self.id).unwrap(), self.span))
-            .print()
+impl Display for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Literal {
-    pub(crate) value: Box<str>,
+    pub(crate) value: String,
+}
+
+impl Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Operator {
     pub(crate) kind: OperatorKind,
     pub(crate) span: Span,
-}
-
-impl PrettyPrint for Operator {
-    fn print(&self, _state: &State) -> PrettyPrintNode<'_> {
-        PrettyPrintNode::printer()
-            .label(format!("OPERATOR({}) {}", self, self.span))
-            .print()
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

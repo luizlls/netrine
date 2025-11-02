@@ -1,7 +1,7 @@
 #!/bin/bash
 
 build() {
-  cargo build -p wasm --target wasm32-unknown-unknown --release
+  cargo build -p wasm --profile wasm --target wasm32-unknown-unknown --release
 }
 
 move() {

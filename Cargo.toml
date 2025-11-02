@@ -10,7 +10,14 @@ rust-version = "1.88"
 [profile.test]
 debug = true
 
-[profile.release]
-strip = true
-lto = true
+[profile.wasm]
+inherits = "release"
 opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+
+[profile.release]
+lto = true
+strip = false
+opt-level = 3

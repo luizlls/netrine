@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::mir::{
-    Binary, Instruction, InstructionId, InstructionKind, Integer, Module, Number, Operator, Unary,
+    Binary, Instruction, InstructionKind, Integer, Module, Number, Operator, Unary, Variable,
 };
 use crate::types::{self, Type};
 
@@ -186,8 +186,8 @@ impl<'w> Wasm<'w> {
         let mut output = Vec::new();
         self.emit_locals(&mut output, &module.instructions);
 
-        for (local_index, instruction) in module.instructions.iter().enumerate() {
-            self.emit_instruction(&mut output, instruction, local_index as u32);
+        for instruction in &module.instructions {
+            self.emit_instruction(&mut output, instruction);
         }
 
         // TODO: Implement RETURN instruction in MIR
@@ -222,39 +222,32 @@ impl<'w> Wasm<'w> {
         }
     }
 
-    fn emit_instruction(&self, output: &mut Vec<u8>, instruction: &Instruction, local_index: u32) {
+    fn emit_instruction(&self, output: &mut Vec<u8>, instruction: &Instruction) {
         match &instruction.kind {
-            InstructionKind::Number(number) => self.emit_number(output, number, local_index),
-            InstructionKind::Integer(integer) => self.emit_integer(output, integer, local_index),
-            InstructionKind::Unary(unary) => self.emit_unary(output, unary, local_index),
-            InstructionKind::Binary(binary) => {
-                self.emit_binary(output, binary, local_index, instruction.type_)
-            }
+            InstructionKind::Number(number) => self.emit_number(output, number),
+            InstructionKind::Integer(integer) => self.emit_integer(output, integer),
+            InstructionKind::Unary(unary) => self.emit_unary(output, unary),
+            InstructionKind::Binary(binary) => self.emit_binary(output, binary, instruction.type_),
         }
     }
 
-    fn emit_number(&self, output: &mut Vec<u8>, number: &Number, local_index: u32) {
+    fn emit_number(&self, output: &mut Vec<u8>, number: &Number) {
         emit_u8(output, F64_CONST);
         emit_f64(output, number.value);
         emit_u8(output, LOCAL_SET);
-        emit_u32(output, local_index);
+        emit_u32(output, number.target.id());
     }
 
-    fn emit_integer(&self, output: &mut Vec<u8>, integer: &Integer, local_index: u32) {
+    fn emit_integer(&self, output: &mut Vec<u8>, integer: &Integer) {
         emit_u8(output, I64_CONST);
         emit_i64(output, integer.value);
         emit_u8(output, LOCAL_SET);
-        emit_u32(output, local_index);
+        emit_u32(output, integer.target.id());
     }
 
     // TODO: Implement coercion in MIR
-    fn coerced_type(
-        &self,
-        output: &mut Vec<u8>,
-        result_type: Type,
-        instruction_id: InstructionId,
-    ) -> Type {
-        let operand_type = self.module.get_type(&instruction_id);
+    fn coerced_type(&self, output: &mut Vec<u8>, result_type: Type, variable: Variable) -> Type {
+        let operand_type = self.module.get_type(&variable);
 
         if operand_type == types::INTEGER && result_type == types::NUMBER {
             emit_u8(output, F64_CONVERT_S_I64);
@@ -264,13 +257,7 @@ impl<'w> Wasm<'w> {
         }
     }
 
-    fn emit_binary(
-        &self,
-        output: &mut Vec<u8>,
-        binary: &Binary,
-        local_index: u32,
-        result_type: Type,
-    ) {
+    fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary, result_type: Type) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.loperand.id());
 
@@ -321,10 +308,10 @@ impl<'w> Wasm<'w> {
         emit_u8(output, operation);
 
         emit_u8(output, LOCAL_SET);
-        emit_u32(output, local_index);
+        emit_u32(output, binary.target.id());
     }
 
-    fn emit_unary(&self, output: &mut Vec<u8>, unary: &Unary, local_index: u32) {
+    fn emit_unary(&self, output: &mut Vec<u8>, unary: &Unary) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, unary.operand.id());
 
@@ -347,7 +334,7 @@ impl<'w> Wasm<'w> {
         emit_u8(output, operation);
 
         emit_u8(output, LOCAL_SET);
-        emit_u32(output, local_index);
+        emit_u32(output, unary.target.id());
     }
 }
 
