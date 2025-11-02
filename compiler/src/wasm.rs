@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::mir::{
-    Binary, Instruction, InstructionKind, Integer, Module, Number, Operator, Unary, Variable,
+    Binary, Instruction, InstructionKind, Integer, Module, Number, Operator, ToNumber, Unary,
+    Variable,
 };
 use crate::types::{self, Type};
 
@@ -227,7 +228,8 @@ impl<'w> Wasm<'w> {
             InstructionKind::Number(number) => self.emit_number(output, number),
             InstructionKind::Integer(integer) => self.emit_integer(output, integer),
             InstructionKind::Unary(unary) => self.emit_unary(output, unary),
-            InstructionKind::Binary(binary) => self.emit_binary(output, binary, instruction.type_),
+            InstructionKind::Binary(binary) => self.emit_binary(output, binary),
+            InstructionKind::ToNumber(to_number) => self.emit_convert(output, to_number),
         }
     }
 
@@ -245,35 +247,21 @@ impl<'w> Wasm<'w> {
         emit_u32(output, integer.target.id());
     }
 
-    // TODO: Implement coercion in MIR
-    fn coerced_type(&self, output: &mut Vec<u8>, result_type: Type, variable: Variable) -> Type {
-        let operand_type = self.module.get_type(&variable);
-
-        if operand_type == types::INTEGER && result_type == types::NUMBER {
-            emit_u8(output, F64_CONVERT_S_I64);
-            result_type
-        } else {
-            operand_type
-        }
+    fn emit_convert(&self, output: &mut Vec<u8>, to_number: &ToNumber) {
+        emit_u8(output, LOCAL_GET);
+        emit_u32(output, to_number.source.id());
+        emit_u8(output, F64_CONVERT_S_I64);
+        emit_u8(output, LOCAL_SET);
+        emit_u32(output, to_number.target.id());
     }
 
-    fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary, result_type: Type) {
+    fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.loperand.id());
-
-        let loperand_type = self.coerced_type(output, result_type, binary.loperand);
-
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.roperand.id());
 
-        let roperand_type = self.coerced_type(output, result_type, binary.roperand);
-
-        let operation_type = match (loperand_type, roperand_type) {
-            (types::BOOLEAN, types::BOOLEAN) => types::BOOLEAN,
-            (types::INTEGER, types::INTEGER) => types::INTEGER,
-            (types::NUMBER, _) | (_, types::NUMBER) => types::NUMBER,
-            _ => unreachable!(),
-        };
+        let operation_type = self.module.get_type(binary.target);
 
         let operation = match (operation_type, binary.operator) {
             (types::NUMBER, Operator::Add) => F64_ADD,
@@ -319,7 +307,7 @@ impl<'w> Wasm<'w> {
             Operator::Not => I32_EQZ,
             Operator::Pos => NOOP,
             Operator::Neg => {
-                match self.module.get_type(&unary.operand) {
+                match self.module.get_type(unary.operand) {
                     types::NUMBER => F64_NEG,
                     types::INTEGER => {
                         emit_u8(output, I64_CONST);

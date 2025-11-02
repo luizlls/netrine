@@ -13,17 +13,40 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn get_type(&self, instruction_id: &Variable) -> Type {
+    pub fn get_type(&self, instruction_id: Variable) -> Type {
         self.instructions[instruction_id.id() as usize].type_
     }
 }
 
 impl Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (idx, instruction) in self.instructions.iter().enumerate() {
-            writeln!(f, "v{}: {} = {}", idx, instruction.type_, instruction.kind)?;
+        for instruction in &self.instructions {
+            if let Some(target) = instruction.target() {
+                write!(f, "{target} := ")?;
+            }
+            writeln!(f, "{}", instruction.kind)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct Variable(u32);
+
+impl Variable {
+    #[inline(always)]
+    pub fn id(self) -> u32 {
+        self.0
+    }
+
+    fn next(self) -> Variable {
+        Variable(self.0 + 1)
+    }
+}
+
+impl Display for Variable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "v{}", self.0)
     }
 }
 
@@ -49,30 +72,16 @@ pub struct Instruction {
     pub(crate) type_: Type,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct Variable {
-    id: u32,
-    v: u32,
-}
-
-impl Variable {
-    #[inline(always)]
-    pub fn id(self) -> u32 {
-        self.id
-    }
-
-    fn new(id: u32) -> Variable {
-        Variable { id, v: 0 }
-    }
-
-    fn next(self) -> Variable {
-        Variable::new(self.id + 1)
-    }
-}
-
-impl Display for Variable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "v{}", self.id)
+impl Instruction {
+    fn target(&self) -> Option<Variable> {
+        let target = match &self.kind {
+            InstructionKind::Unary(unary) => unary.target,
+            InstructionKind::Binary(binary) => binary.target,
+            InstructionKind::Number(number) => number.target,
+            InstructionKind::Integer(integer) => integer.target,
+            InstructionKind::ToNumber(to) => to.target,
+        };
+        Some(target)
     }
 }
 
@@ -82,6 +91,7 @@ pub enum InstructionKind {
     Binary(Binary),
     Number(Number),
     Integer(Integer),
+    ToNumber(ToNumber),
 }
 
 impl Display for InstructionKind {
@@ -91,6 +101,7 @@ impl Display for InstructionKind {
             InstructionKind::Binary(binary) => write!(f, "{binary}"),
             InstructionKind::Number(number) => write!(f, "{number}"),
             InstructionKind::Integer(integer) => write!(f, "{integer}"),
+            InstructionKind::ToNumber(to) => write!(f, "{to}"),
         }
     }
 }
@@ -172,19 +183,39 @@ impl Display for Number {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToNumber {
+    pub(crate) source: Variable,
+    pub(crate) target: Variable,
+}
+
+impl From<ToNumber> for InstructionKind {
+    fn from(to_number: ToNumber) -> InstructionKind {
+        InstructionKind::ToNumber(to_number)
+    }
+}
+
+impl Display for ToNumber {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "to.number {}", self.source)
+    }
+}
+
 #[derive(Debug)]
 struct LowerHir<'mir> {
     instructions: Vec<Instruction>,
-    state: &'mir State,
     variable: Variable,
+    variables: HashMap<SymbolId, Variable>,
+    state: &'mir State,
 }
 
 impl<'mir> LowerHir<'mir> {
     fn new(state: &'mir State) -> LowerHir<'mir> {
         LowerHir {
             instructions: Vec::new(),
+            variable: Variable(0),
+            variables: HashMap::new(),
             state,
-            variable: Variable::new(0),
         }
     }
 
@@ -213,27 +244,40 @@ impl<'mir> LowerHir<'mir> {
 
     fn define(&mut self, _node: &hir::Node, define: &hir::Define) -> Result<Variable> {
         let variable_id = self.lower(&define.value)?;
-        // self.environment.insert(define.symbol, variable_id);
+        self.variables.insert(define.symbol, variable_id);
+
         Ok(variable_id)
     }
 
     fn local(&mut self, node: &hir::Node, local: &hir::Local) -> Result<Variable> {
-        // let Some(&instruction_id) = self.environment.get(&local.symbol_id) else {
-        //     let symbol = self
-        //         .state
-        //         .symbol_by_id(local.symbol_id)
-        //         .expect("invalid symbol id");
+        let Some(&instruction_id) = self.variables.get(&local.symbol_id) else {
+            let symbol = self
+                .state
+                .symbol_by_id(local.symbol_id)
+                .expect("invalid symbol id");
 
-        //     return self.fail(node.span, format!("variable `{}` not defined", symbol.name));
-        // };
+            return self.fail(node.span, format!("variable `{}` not defined", symbol.name));
+        };
 
-        // Ok(instruction_id)
-        todo!()
+        Ok(instruction_id)
+    }
+
+    fn convert(&mut self, source: Variable, source_type: Type, result_type: Type) -> Variable {
+        if source_type == types::INTEGER && result_type == types::NUMBER {
+            let target = self.variable();
+            self.emit(ToNumber { source, target }, result_type);
+            target
+        } else {
+            source
+        }
     }
 
     fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<Variable> {
         let loperand = self.lower(&binary.loperand)?;
+        let loperand = self.convert(loperand, binary.loperand.type_, node.type_);
         let roperand = self.lower(&binary.roperand)?;
+        let roperand = self.convert(roperand, binary.roperand.type_, node.type_);
+
         let target = self.variable();
 
         self.emit(
