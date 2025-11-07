@@ -1,4 +1,5 @@
 use crate::error;
+use crate::eval;
 use crate::hir;
 use crate::lexer;
 use crate::mir;
@@ -60,5 +61,10 @@ impl<'c> Compiler<'c> {
     pub fn dump_mir(mut self) -> Result<String> {
         let mir = self.mir()?;
         Ok(format!("{mir}"))
+    }
+
+    pub fn eval(mut self) -> Result<String> {
+        let mir = self.mir()?;
+        Ok(eval::eval(&mir))
     }
 }

@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::mir::{
-    Binary, Instruction, InstructionKind, Integer, Module, Number, Operator, ToNumber, Unary,
-    Variable,
+    Binary, Instruction, InstructionKind, Integer, Module, Number, Operator, Return, ToNumber,
+    Unary, Variable,
 };
 use crate::types::{self, Type};
 
@@ -191,11 +191,6 @@ impl<'w> Wasm<'w> {
             self.emit_instruction(&mut output, instruction);
         }
 
-        // TODO: Implement RETURN instruction in MIR
-        emit_u8(&mut output, LOCAL_GET);
-        emit_u32(&mut output, (module.instructions.len() - 1) as u32);
-        emit_u8(&mut output, RETURN);
-
         emit_u8(&mut output, END);
 
         // one local per instruction
@@ -225,11 +220,12 @@ impl<'w> Wasm<'w> {
 
     fn emit_instruction(&self, output: &mut Vec<u8>, instruction: &Instruction) {
         match &instruction.kind {
-            InstructionKind::Number(number) => self.emit_number(output, number),
             InstructionKind::Integer(integer) => self.emit_integer(output, integer),
+            InstructionKind::Number(number) => self.emit_number(output, number),
+            InstructionKind::ToNumber(to_number) => self.emit_convert(output, to_number),
             InstructionKind::Unary(unary) => self.emit_unary(output, unary),
             InstructionKind::Binary(binary) => self.emit_binary(output, binary),
-            InstructionKind::ToNumber(to_number) => self.emit_convert(output, to_number),
+            InstructionKind::Return(ret) => self.emit_return(output, ret),
         }
     }
 
@@ -253,6 +249,32 @@ impl<'w> Wasm<'w> {
         emit_u8(output, F64_CONVERT_S_I64);
         emit_u8(output, LOCAL_SET);
         emit_u32(output, to_number.target.id());
+    }
+
+    fn emit_unary(&self, output: &mut Vec<u8>, unary: &Unary) {
+        emit_u8(output, LOCAL_GET);
+        emit_u32(output, unary.operand.id());
+
+        let operation = match unary.operator {
+            Operator::Not => I32_EQZ,
+            Operator::Pos => NOOP,
+            Operator::Neg => {
+                match self.module.get_type(unary.operand) {
+                    types::NUMBER => F64_NEG,
+                    types::INTEGER => {
+                        emit_u8(output, I64_CONST);
+                        emit_i64(output, -1);
+                        I64_MUL
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            _ => unreachable!(),
+        };
+        emit_u8(output, operation);
+
+        emit_u8(output, LOCAL_SET);
+        emit_u32(output, unary.target.id());
     }
 
     fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary) {
@@ -299,30 +321,12 @@ impl<'w> Wasm<'w> {
         emit_u32(output, binary.target.id());
     }
 
-    fn emit_unary(&self, output: &mut Vec<u8>, unary: &Unary) {
-        emit_u8(output, LOCAL_GET);
-        emit_u32(output, unary.operand.id());
-
-        let operation = match unary.operator {
-            Operator::Not => I32_EQZ,
-            Operator::Pos => NOOP,
-            Operator::Neg => {
-                match self.module.get_type(unary.operand) {
-                    types::NUMBER => F64_NEG,
-                    types::INTEGER => {
-                        emit_u8(output, I64_CONST);
-                        emit_i64(output, -1);
-                        I64_MUL
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            _ => unreachable!(),
-        };
-        emit_u8(output, operation);
-
-        emit_u8(output, LOCAL_SET);
-        emit_u32(output, unary.target.id());
+    fn emit_return(&self, output: &mut Vec<u8>, return_: &Return) {
+        if let Some(variable) = return_.source {
+            emit_u8(output, LOCAL_GET);
+            emit_u32(output, variable.id());
+        }
+        emit_u8(output, RETURN);
     }
 }
 

@@ -34,9 +34,18 @@ impl Display for Module {
 pub struct Variable(u32);
 
 impl Variable {
+    pub fn new(id: u32) -> Variable {
+        Variable(id)
+    }
+
     #[inline(always)]
     pub fn id(self) -> u32 {
         self.0
+    }
+
+    #[inline(always)]
+    pub fn index(self) -> usize {
+        self.0 as usize
     }
 
     fn next(self) -> Variable {
@@ -75,11 +84,12 @@ pub struct Instruction {
 impl Instruction {
     fn target(&self) -> Option<Variable> {
         let target = match &self.kind {
+            InstructionKind::Integer(integer) => integer.target,
+            InstructionKind::Number(number) => number.target,
+            InstructionKind::ToNumber(to_number) => to_number.target,
             InstructionKind::Unary(unary) => unary.target,
             InstructionKind::Binary(binary) => binary.target,
-            InstructionKind::Number(number) => number.target,
-            InstructionKind::Integer(integer) => integer.target,
-            InstructionKind::ToNumber(to) => to.target,
+            InstructionKind::Return(_) => return None,
         };
         Some(target)
     }
@@ -87,21 +97,23 @@ impl Instruction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstructionKind {
+    Integer(Integer),
+    Number(Number),
+    ToNumber(ToNumber),
     Unary(Unary),
     Binary(Binary),
-    Number(Number),
-    Integer(Integer),
-    ToNumber(ToNumber),
+    Return(Return),
 }
 
 impl Display for InstructionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
+            InstructionKind::Integer(integer) => write!(f, "{integer}"),
+            InstructionKind::Number(number) => write!(f, "{number}"),
+            InstructionKind::ToNumber(to_number) => write!(f, "{to_number}"),
             InstructionKind::Unary(unary) => write!(f, "{unary}"),
             InstructionKind::Binary(binary) => write!(f, "{binary}"),
-            InstructionKind::Number(number) => write!(f, "{number}"),
-            InstructionKind::Integer(integer) => write!(f, "{integer}"),
-            InstructionKind::ToNumber(to) => write!(f, "{to}"),
+            InstructionKind::Return(return_) => write!(f, "{return_}"),
         }
     }
 }
@@ -161,7 +173,7 @@ impl From<Integer> for InstructionKind {
 
 impl Display for Integer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
+        write!(f, "integer {}", self.value)
     }
 }
 
@@ -179,7 +191,7 @@ impl From<Number> for InstructionKind {
 
 impl Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
+        write!(f, "number {}", self.value)
     }
 }
 
@@ -201,6 +213,27 @@ impl Display for ToNumber {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Return {
+    pub(crate) source: Option<Variable>,
+}
+
+impl From<Return> for InstructionKind {
+    fn from(return_: Return) -> InstructionKind {
+        InstructionKind::Return(return_)
+    }
+}
+
+impl Display for Return {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(source) = self.source {
+            write!(f, "return {source}")
+        } else {
+            write!(f, "return")
+        }
+    }
+}
+
 #[derive(Debug)]
 struct LowerHir<'mir> {
     instructions: Vec<Instruction>,
@@ -213,7 +246,7 @@ impl<'mir> LowerHir<'mir> {
     fn new(state: &'mir State) -> LowerHir<'mir> {
         LowerHir {
             instructions: Vec::new(),
-            variable: Variable(0),
+            variable: Variable::new(0),
             variables: HashMap::new(),
             state,
         }
@@ -235,10 +268,10 @@ impl<'mir> LowerHir<'mir> {
         match &node.kind {
             hir::NodeKind::Define(define) => self.define(node, define),
             hir::NodeKind::Local(local) => self.local(node, local),
-            hir::NodeKind::Binary(binary) => self.binary(node, binary),
-            hir::NodeKind::Unary(unary) => self.unary(node, unary),
-            hir::NodeKind::Number(literal) => self.number(node, literal),
             hir::NodeKind::Integer(literal) => self.integer(node, literal),
+            hir::NodeKind::Number(literal) => self.number(node, literal),
+            hir::NodeKind::Unary(unary) => self.unary(node, unary),
+            hir::NodeKind::Binary(binary) => self.binary(node, binary),
         }
     }
 
@@ -262,48 +295,15 @@ impl<'mir> LowerHir<'mir> {
         Ok(instruction_id)
     }
 
-    fn convert(&mut self, source: Variable, source_type: Type, result_type: Type) -> Variable {
-        if source_type == types::INTEGER && result_type == types::NUMBER {
-            let target = self.variable();
-            self.emit(ToNumber { source, target }, result_type);
-            target
-        } else {
-            source
-        }
-    }
-
-    fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<Variable> {
-        let loperand = self.lower(&binary.loperand)?;
-        let loperand = self.convert(loperand, binary.loperand.type_, node.type_);
-        let roperand = self.lower(&binary.roperand)?;
-        let roperand = self.convert(roperand, binary.roperand.type_, node.type_);
-
+    fn integer(&mut self, _node: &hir::Node, integer: &hir::Integer) -> Result<Variable> {
         let target = self.variable();
 
         self.emit(
-            Binary {
+            Integer {
                 target,
-                operator: binary.operator,
-                loperand,
-                roperand,
+                value: integer.value,
             },
-            node.type_,
-        );
-
-        Ok(target)
-    }
-
-    fn unary(&mut self, node: &hir::Node, unary: &hir::Unary) -> Result<Variable> {
-        let operand = self.lower(&unary.operand)?;
-        let target = self.variable();
-
-        self.emit(
-            Unary {
-                target,
-                operator: unary.operator,
-                operand,
-            },
-            node.type_,
+            types::INTEGER,
         );
 
         Ok(target)
@@ -323,18 +323,65 @@ impl<'mir> LowerHir<'mir> {
         Ok(target)
     }
 
-    fn integer(&mut self, _node: &hir::Node, integer: &hir::Integer) -> Result<Variable> {
+    fn convert(&mut self, source: Variable, node_type: Type, other_type: Type) -> Variable {
+        if node_type == types::INTEGER && other_type == types::NUMBER {
+            let target = self.variable();
+            self.emit(ToNumber { source, target }, types::NUMBER);
+            target
+        } else {
+            source
+        }
+    }
+
+    fn unary(&mut self, node: &hir::Node, unary: &hir::Unary) -> Result<Variable> {
+        let operand = self.lower(&unary.operand)?;
         let target = self.variable();
 
         self.emit(
-            Integer {
+            Unary {
                 target,
-                value: integer.value,
+                operator: unary.operator,
+                operand,
             },
-            types::INTEGER,
+            node.type_,
         );
 
         Ok(target)
+    }
+
+    fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<Variable> {
+        let loperand = self.lower(&binary.loperand)?;
+        let roperand = self.lower(&binary.roperand)?;
+        let loperand = self.convert(loperand, binary.loperand.type_, binary.roperand.type_);
+        let roperand = self.convert(roperand, binary.roperand.type_, binary.loperand.type_);
+
+        let target = self.variable();
+
+        self.emit(
+            Binary {
+                target,
+                operator: binary.operator,
+                loperand,
+                roperand,
+            },
+            node.type_,
+        );
+
+        Ok(target)
+    }
+
+    fn finish(&mut self) -> Result<()> {
+        if let Some(instruction) = self.instructions.last() {
+            self.emit(
+                Return {
+                    source: instruction.target(),
+                },
+                instruction.type_,
+            );
+        } else {
+            self.emit(Return { source: None }, types::NOTHING);
+        }
+        Ok(())
     }
 
     fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
@@ -348,6 +395,8 @@ pub fn from_hir(module: &hir::Module, state: &State) -> Result<Module> {
     for node in &module.nodes {
         lower.lower(node)?;
     }
+
+    lower.finish()?;
 
     Ok(Module {
         instructions: lower.instructions,

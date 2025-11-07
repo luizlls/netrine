@@ -1,5 +1,6 @@
-use crate::cmd;
+use compiler::Compiler;
 
 pub fn eval(file_path: String, source: &str) -> anyhow::Result<String> {
-    cmd::dump_mir(file_path, source)
+    let compiler = Compiler::from_source(file_path, source);
+    Ok(compiler.eval()?)
 }

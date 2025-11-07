@@ -1,5 +1,6 @@
 mod compiler;
 mod error;
+mod eval;
 mod hir;
 mod lexer;
 mod mir;
@@ -12,3 +13,4 @@ mod types;
 mod wasm;
 
 pub use compiler::Compiler;
+pub use eval::eval;
