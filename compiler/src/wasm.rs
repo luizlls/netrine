@@ -1,9 +1,6 @@
 use crate::error::Result;
-use crate::mir::{
-    Binary, Instruction, InstructionKind, Integer, Module, Number, Operator, Return, ToNumber,
-    Unary, Variable,
-};
-use crate::types::{self, Type};
+use crate::mir;
+use crate::types;
 
 const WASM_MAGIC: [u8; 4] = [0x00, 0x61, 0x73, 0x6D];
 const WASM_VERSION: [u8; 4] = [0x01, 0x00, 0x00, 0x00];
@@ -100,19 +97,19 @@ const RETURN: u8 = 0x0F;
 const END: u8 = 0x0B;
 
 struct Wasm<'w> {
-    module: &'w Module,
+    module: &'w mir::Module,
     output: Vec<u8>,
 }
 
 impl<'w> Wasm<'w> {
-    fn new(module: &'w Module) -> Wasm<'w> {
+    fn new(module: &'w mir::Module) -> Wasm<'w> {
         Wasm {
             module,
             output: Vec::new(),
         }
     }
 
-    fn compile(mut self, module: &Module) -> Vec<u8> {
+    fn compile(mut self, module: &mir::Module) -> Vec<u8> {
         self.emit_header();
         self.emit_type_section();
         self.emit_function_section();
@@ -178,7 +175,7 @@ impl<'w> Wasm<'w> {
         self.emit_section(&section, EXPORT_SECTION);
     }
 
-    fn emit_code_section(&mut self, module: &Module) {
+    fn emit_code_section(&mut self, module: &mir::Module) {
         let mut section = Vec::new();
 
         // code for only one function (main)
@@ -200,7 +197,7 @@ impl<'w> Wasm<'w> {
         self.emit_section(&section, CODE_SECTION);
     }
 
-    fn emit_locals(&self, output: &mut Vec<u8>, instructions: &Vec<Instruction>) {
+    fn emit_locals(&self, output: &mut Vec<u8>, instructions: &Vec<mir::Instruction>) {
         emit_u32(output, instructions.len() as u32);
 
         for instruction in instructions {
@@ -209,7 +206,7 @@ impl<'w> Wasm<'w> {
         }
     }
 
-    fn instruction_type(&self, instruction: &Instruction) -> u8 {
+    fn instruction_type(&self, instruction: &mir::Instruction) -> u8 {
         match instruction.type_ {
             types::NUMBER => F64_TYPE,
             types::INTEGER => I64_TYPE,
@@ -218,32 +215,40 @@ impl<'w> Wasm<'w> {
         }
     }
 
-    fn emit_instruction(&self, output: &mut Vec<u8>, instruction: &Instruction) {
+    fn emit_instruction(&self, output: &mut Vec<u8>, instruction: &mir::Instruction) {
         match &instruction.kind {
-            InstructionKind::Integer(integer) => self.emit_integer(output, integer),
-            InstructionKind::Number(number) => self.emit_number(output, number),
-            InstructionKind::ToNumber(to_number) => self.emit_convert(output, to_number),
-            InstructionKind::Unary(unary) => self.emit_unary(output, unary),
-            InstructionKind::Binary(binary) => self.emit_binary(output, binary),
-            InstructionKind::Return(ret) => self.emit_return(output, ret),
+            mir::InstructionKind::Unary(unary) => self.emit_unary(output, unary),
+            mir::InstructionKind::Binary(binary) => self.emit_binary(output, binary),
+            mir::InstructionKind::Integer(integer) => self.emit_integer(output, integer),
+            mir::InstructionKind::Number(number) => self.emit_number(output, number),
+            mir::InstructionKind::Boolean(boolean) => self.emit_boolean(output, boolean),
+            mir::InstructionKind::ToNumber(to_number) => self.emit_convert(output, to_number),
+            mir::InstructionKind::Return(ret) => self.emit_return(output, ret),
         }
     }
 
-    fn emit_number(&self, output: &mut Vec<u8>, number: &Number) {
-        emit_u8(output, F64_CONST);
-        emit_f64(output, number.value);
-        emit_u8(output, LOCAL_SET);
-        emit_u32(output, number.target.id());
-    }
-
-    fn emit_integer(&self, output: &mut Vec<u8>, integer: &Integer) {
+    fn emit_integer(&self, output: &mut Vec<u8>, integer: &mir::Integer) {
         emit_u8(output, I64_CONST);
         emit_i64(output, integer.value);
         emit_u8(output, LOCAL_SET);
         emit_u32(output, integer.target.id());
     }
 
-    fn emit_convert(&self, output: &mut Vec<u8>, to_number: &ToNumber) {
+    fn emit_number(&self, output: &mut Vec<u8>, number: &mir::Number) {
+        emit_u8(output, F64_CONST);
+        emit_f64(output, number.value);
+        emit_u8(output, LOCAL_SET);
+        emit_u32(output, number.target.id());
+    }
+
+    fn emit_boolean(&self, output: &mut Vec<u8>, boolean: &mir::Boolean) {
+        emit_u8(output, I32_CONST);
+        emit_i32(output, boolean.value as i32);
+        emit_u8(output, LOCAL_SET);
+        emit_u32(output, boolean.target.id());
+    }
+
+    fn emit_convert(&self, output: &mut Vec<u8>, to_number: &mir::ToNumber) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, to_number.source.id());
         emit_u8(output, F64_CONVERT_S_I64);
@@ -251,14 +256,14 @@ impl<'w> Wasm<'w> {
         emit_u32(output, to_number.target.id());
     }
 
-    fn emit_unary(&self, output: &mut Vec<u8>, unary: &Unary) {
+    fn emit_unary(&self, output: &mut Vec<u8>, unary: &mir::Unary) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, unary.operand.id());
 
         let operation = match unary.operator {
-            Operator::Not => I32_EQZ,
-            Operator::Pos => NOOP,
-            Operator::Neg => {
+            mir::Operator::Not => I32_EQZ,
+            mir::Operator::Pos => NOOP,
+            mir::Operator::Neg => {
                 match self.module.get_type(unary.operand) {
                     types::NUMBER => F64_NEG,
                     types::INTEGER => {
@@ -277,7 +282,7 @@ impl<'w> Wasm<'w> {
         emit_u32(output, unary.target.id());
     }
 
-    fn emit_binary(&self, output: &mut Vec<u8>, binary: &Binary) {
+    fn emit_binary(&self, output: &mut Vec<u8>, binary: &mir::Binary) {
         emit_u8(output, LOCAL_GET);
         emit_u32(output, binary.loperand.id());
         emit_u8(output, LOCAL_GET);
@@ -286,31 +291,31 @@ impl<'w> Wasm<'w> {
         let operation_type = self.module.get_type(binary.target);
 
         let operation = match (operation_type, binary.operator) {
-            (types::NUMBER, Operator::Add) => F64_ADD,
-            (types::NUMBER, Operator::Sub) => F64_SUB,
-            (types::NUMBER, Operator::Mul) => F64_MUL,
-            (types::NUMBER, Operator::Div) => F64_DIV,
-            (types::NUMBER, Operator::Eq) => F64_EQ,
-            (types::NUMBER, Operator::Ne) => F64_NE,
-            (types::NUMBER, Operator::Lt) => F64_LT,
-            (types::NUMBER, Operator::Le) => F64_LE,
-            (types::NUMBER, Operator::Gt) => F64_GT,
-            (types::NUMBER, Operator::Ge) => F64_GE,
+            (types::NUMBER, mir::Operator::Add) => F64_ADD,
+            (types::NUMBER, mir::Operator::Sub) => F64_SUB,
+            (types::NUMBER, mir::Operator::Mul) => F64_MUL,
+            (types::NUMBER, mir::Operator::Div) => F64_DIV,
+            (types::NUMBER, mir::Operator::Eq) => F64_EQ,
+            (types::NUMBER, mir::Operator::Ne) => F64_NE,
+            (types::NUMBER, mir::Operator::Lt) => F64_LT,
+            (types::NUMBER, mir::Operator::Le) => F64_LE,
+            (types::NUMBER, mir::Operator::Gt) => F64_GT,
+            (types::NUMBER, mir::Operator::Ge) => F64_GE,
 
-            (types::INTEGER, Operator::Add) => I64_ADD,
-            (types::INTEGER, Operator::Sub) => I64_SUB,
-            (types::INTEGER, Operator::Mul) => I64_MUL,
-            (types::INTEGER, Operator::Eq) => I64_EQ,
-            (types::INTEGER, Operator::Ne) => I64_NE,
-            (types::INTEGER, Operator::Lt) => I64_LT_S,
-            (types::INTEGER, Operator::Le) => I64_LE_S,
-            (types::INTEGER, Operator::Gt) => I64_GT_S,
-            (types::INTEGER, Operator::Ge) => I64_GE_S,
+            (types::INTEGER, mir::Operator::Add) => I64_ADD,
+            (types::INTEGER, mir::Operator::Sub) => I64_SUB,
+            (types::INTEGER, mir::Operator::Mul) => I64_MUL,
+            (types::INTEGER, mir::Operator::Eq) => I64_EQ,
+            (types::INTEGER, mir::Operator::Ne) => I64_NE,
+            (types::INTEGER, mir::Operator::Lt) => I64_LT_S,
+            (types::INTEGER, mir::Operator::Le) => I64_LE_S,
+            (types::INTEGER, mir::Operator::Gt) => I64_GT_S,
+            (types::INTEGER, mir::Operator::Ge) => I64_GE_S,
 
-            (types::BOOLEAN, Operator::Eq) => I32_EQ,
-            (types::BOOLEAN, Operator::Ne) => I32_NE,
-            (types::BOOLEAN, Operator::And) => I32_AND,
-            (types::BOOLEAN, Operator::Or) => I32_OR,
+            (types::BOOLEAN, mir::Operator::Eq) => I32_EQ,
+            (types::BOOLEAN, mir::Operator::Ne) => I32_NE,
+            (types::BOOLEAN, mir::Operator::And) => I32_AND,
+            (types::BOOLEAN, mir::Operator::Or) => I32_OR,
 
             (type_, operator) => unreachable!("unsupported operator {operator} for {type_} type"),
         };
@@ -321,7 +326,7 @@ impl<'w> Wasm<'w> {
         emit_u32(output, binary.target.id());
     }
 
-    fn emit_return(&self, output: &mut Vec<u8>, return_: &Return) {
+    fn emit_return(&self, output: &mut Vec<u8>, return_: &mir::Return) {
         if let Some(variable) = return_.source {
             emit_u8(output, LOCAL_GET);
             emit_u32(output, variable.id());
@@ -339,7 +344,7 @@ pub fn emit_u32(output: &mut Vec<u8>, value: u32) {
 }
 
 fn emit_i32(output: &mut Vec<u8>, value: i32) {
-    emit_sleb128(output, value as i64);
+    emit_uleb128(output, value as u32);
 }
 
 fn emit_f64(output: &mut Vec<u8>, value: f64) {
@@ -380,6 +385,6 @@ fn emit_sleb128(output: &mut Vec<u8>, mut value: i64) {
     }
 }
 
-pub fn compile(module: &Module) -> Result<Vec<u8>> {
+pub fn compile(module: &mir::Module) -> Result<Vec<u8>> {
     Ok(Wasm::new(module).compile(module))
 }

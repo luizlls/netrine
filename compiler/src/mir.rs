@@ -84,11 +84,12 @@ pub struct Instruction {
 impl Instruction {
     fn target(&self) -> Option<Variable> {
         let target = match &self.kind {
-            InstructionKind::Integer(integer) => integer.target,
-            InstructionKind::Number(number) => number.target,
-            InstructionKind::ToNumber(to_number) => to_number.target,
             InstructionKind::Unary(unary) => unary.target,
             InstructionKind::Binary(binary) => binary.target,
+            InstructionKind::Integer(integer) => integer.target,
+            InstructionKind::Number(number) => number.target,
+            InstructionKind::Boolean(boolean) => boolean.target,
+            InstructionKind::ToNumber(to_number) => to_number.target,
             InstructionKind::Return(_) => return None,
         };
         Some(target)
@@ -97,22 +98,24 @@ impl Instruction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstructionKind {
-    Integer(Integer),
-    Number(Number),
-    ToNumber(ToNumber),
     Unary(Unary),
     Binary(Binary),
+    Integer(Integer),
+    Number(Number),
+    Boolean(Boolean),
+    ToNumber(ToNumber),
     Return(Return),
 }
 
 impl Display for InstructionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            InstructionKind::Integer(integer) => write!(f, "{integer}"),
-            InstructionKind::Number(number) => write!(f, "{number}"),
-            InstructionKind::ToNumber(to_number) => write!(f, "{to_number}"),
             InstructionKind::Unary(unary) => write!(f, "{unary}"),
             InstructionKind::Binary(binary) => write!(f, "{binary}"),
+            InstructionKind::Integer(integer) => write!(f, "{integer}"),
+            InstructionKind::Number(number) => write!(f, "{number}"),
+            InstructionKind::Boolean(boolean) => write!(f, "{boolean}"),
+            InstructionKind::ToNumber(to_number) => write!(f, "{to_number}"),
             InstructionKind::Return(return_) => write!(f, "{return_}"),
         }
     }
@@ -196,6 +199,24 @@ impl Display for Number {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Boolean {
+    pub(crate) target: Variable,
+    pub(crate) value: bool,
+}
+
+impl From<Boolean> for InstructionKind {
+    fn from(boolean: Boolean) -> InstructionKind {
+        InstructionKind::Boolean(boolean)
+    }
+}
+
+impl Display for Boolean {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ToNumber {
     pub(crate) source: Variable,
     pub(crate) target: Variable,
@@ -268,10 +289,11 @@ impl<'mir> LowerHir<'mir> {
         match &node.kind {
             hir::NodeKind::Define(define) => self.define(node, define),
             hir::NodeKind::Local(local) => self.local(node, local),
-            hir::NodeKind::Integer(literal) => self.integer(node, literal),
-            hir::NodeKind::Number(literal) => self.number(node, literal),
             hir::NodeKind::Unary(unary) => self.unary(node, unary),
             hir::NodeKind::Binary(binary) => self.binary(node, binary),
+            hir::NodeKind::Integer(literal) => self.integer(node, literal),
+            hir::NodeKind::Number(literal) => self.number(node, literal),
+            hir::NodeKind::Boolean(boolean) => self.boolean(node, boolean),
         }
     }
 
@@ -318,6 +340,20 @@ impl<'mir> LowerHir<'mir> {
                 value: number.value,
             },
             types::NUMBER,
+        );
+
+        Ok(target)
+    }
+
+    fn boolean(&mut self, _node: &hir::Node, boolean: &hir::Boolean) -> Result<Variable> {
+        let target = self.variable();
+
+        self.emit(
+            Boolean {
+                target,
+                value: boolean.value,
+            },
+            types::BOOLEAN,
         );
 
         Ok(target)

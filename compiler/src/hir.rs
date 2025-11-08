@@ -40,8 +40,9 @@ impl Display for Node {
             NodeKind::Unary(unary) => write!(f, "{unary}"),
             NodeKind::Binary(binary) => write!(f, "{binary}"),
             NodeKind::Local(local) => write!(f, "{local}"),
-            NodeKind::Number(number) => write!(f, "{number}"),
             NodeKind::Integer(integer) => write!(f, "{integer}"),
+            NodeKind::Number(number) => write!(f, "{number}"),
+            NodeKind::Boolean(boolean) => write!(f, "{boolean}"),
         }
     }
 }
@@ -52,8 +53,9 @@ pub enum NodeKind {
     Unary(Box<Unary>),
     Binary(Box<Binary>),
     Local(Local),
-    Number(Number),
     Integer(Integer),
+    Number(Number),
+    Boolean(Boolean),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -162,6 +164,23 @@ impl Display for Number {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Boolean {
+    pub(crate) value: bool,
+}
+
+impl From<Boolean> for NodeKind {
+    fn from(boolean: Boolean) -> NodeKind {
+        NodeKind::Boolean(boolean)
+    }
+}
+
+impl Display for Boolean {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
     And,
@@ -218,7 +237,7 @@ impl<'hir> LowerSyntax<'hir> {
         LowerSyntax { state }
     }
 
-    fn node(&mut self, kind: impl Into<NodeKind>, span: Span, type_: Type) -> Node {
+    fn node(&mut self, span: Span, type_: Type, kind: impl Into<NodeKind>) -> Node {
         Node {
             kind: kind.into(),
             span,
@@ -234,6 +253,7 @@ impl<'hir> LowerSyntax<'hir> {
             syntax::NodeKind::Name(name) => self.name(node, name),
             syntax::NodeKind::Number(literal) => self.number(node, literal),
             syntax::NodeKind::Integer(literal) => self.integer(node, literal),
+            syntax::NodeKind::Boolean(boolean) => self.boolean(node, boolean),
         }
     }
 
@@ -242,7 +262,7 @@ impl<'hir> LowerSyntax<'hir> {
         let type_ = value.type_;
         let symbol = self.state.define(definition.name.value.clone(), type_);
 
-        Ok(self.node(Define { symbol, value }, node.span, type_))
+        Ok(self.node(node.span, type_, Define { symbol, value }))
     }
 
     fn name(&mut self, node: &syntax::Node, name: &syntax::Name) -> Result<Node> {
@@ -251,11 +271,11 @@ impl<'hir> LowerSyntax<'hir> {
         };
 
         Ok(self.node(
+            node.span,
+            symbol.type_,
             Local {
                 symbol_id: symbol.symbol_id,
             },
-            node.span,
-            symbol.type_,
         ))
     }
 
@@ -331,13 +351,13 @@ impl<'hir> LowerSyntax<'hir> {
         };
 
         Ok(self.node(
+            node.span,
+            type_,
             Binary {
                 operator,
                 loperand,
                 roperand,
             },
-            node.span,
-            type_,
         ))
     }
 
@@ -368,12 +388,12 @@ impl<'hir> LowerSyntax<'hir> {
         };
 
         Ok(self.node(
+            node.span,
+            type_,
             Unary {
                 operator,
                 operand,
             },
-            node.span,
-            type_,
         ))
     }
 
@@ -382,7 +402,7 @@ impl<'hir> LowerSyntax<'hir> {
             return self.fail(node.span, "value is not supported as an number");
         };
 
-        Ok(self.node(Number { value }, node.span, types::NUMBER))
+        Ok(self.node(node.span, types::NUMBER, Number { value }))
     }
 
     fn integer(&mut self, node: &syntax::Node, integer: &syntax::Literal) -> Result<Node> {
@@ -396,7 +416,12 @@ impl<'hir> LowerSyntax<'hir> {
             return self.fail(node.span, "value is not supported as an integer");
         };
 
-        Ok(self.node(Integer { value }, node.span, types::INTEGER))
+        Ok(self.node(node.span, types::INTEGER, Integer { value }))
+    }
+
+    fn boolean(&mut self, node: &syntax::Node, boolean: &syntax::Boolean) -> Result<Node> {
+        let value = boolean.value;
+        Ok(self.node(node.span, types::BOOLEAN, Boolean { value }))
     }
 
     fn expect_type(&self, node: &Node, expected_type: Type) -> Result<()> {

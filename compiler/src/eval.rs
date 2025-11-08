@@ -81,6 +81,9 @@ impl VM {
                 mir::InstructionKind::Number(number) => {
                     self.values[number.target.index()] = Value::number(number.value);
                 }
+                mir::InstructionKind::Boolean(boolean) => {
+                    self.values[boolean.target.index()] = Value::boolean(boolean.value);
+                }
                 mir::InstructionKind::ToNumber(to_number) => {
                     let value = self.values[to_number.source.index()];
                     let result = Value::number(value.as_integer() as f64);
@@ -123,6 +126,8 @@ impl VM {
                         mir::Operator::Le => binary!(instruction, lhs, <=, rhs),
                         mir::Operator::Gt => binary!(instruction, lhs, >, rhs),
                         mir::Operator::Ge => binary!(instruction, lhs, >=, rhs),
+                        mir::Operator::Or => Value::boolean(lhs.as_boolean() || rhs.as_boolean()),
+                        mir::Operator::And => Value::boolean(lhs.as_boolean() && rhs.as_boolean()),
                         mir::Operator::Pow => {
                             if instruction.type_ == types::NUMBER {
                                 Value::number(lhs.as_number().powf(rhs.as_number()))

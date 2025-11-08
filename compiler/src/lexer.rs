@@ -122,6 +122,8 @@ impl<'src> Lexer<'src> {
             "and" => TokenKind::And,
             "or" => TokenKind::Or,
             "not" => TokenKind::Not,
+            "True" => TokenKind::True,
+            "False" => TokenKind::False,
             _ => {
                 if value == "_" {
                     TokenKind::Underscore

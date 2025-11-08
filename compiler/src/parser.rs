@@ -2,8 +2,8 @@ use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
 use crate::syntax::{
-    Binary, Define, Literal, Module, Name, Node, NodeKind, Operator, OperatorKind, Precedence,
-    Unary,
+    Binary, Boolean, Define, Literal, Module, Name, Node, NodeKind, Operator, OperatorKind,
+    Precedence, Unary,
 };
 use crate::token::{Token, TokenKind};
 
@@ -85,6 +85,8 @@ impl<'p> Parser<'p> {
             TokenKind::Identifier => self.ident(),
             TokenKind::Number => self.number(),
             TokenKind::Integer => self.integer(),
+            TokenKind::True => self.boolean(true),
+            TokenKind::False => self.boolean(false),
             TokenKind::LParen => self.parens(),
             _ => {
                 self.fail(match token.kind {
@@ -125,6 +127,12 @@ impl<'p> Parser<'p> {
 
     fn integer(&mut self) -> Result<Node> {
         self.literal(TokenKind::Integer, NodeKind::Integer)
+    }
+
+    fn boolean(&mut self, value: bool) -> Result<Node> {
+        let token = self.token;
+        self.bump();
+        Ok(self.node(token.span, Boolean { value }))
     }
 
     fn parens(&mut self) -> Result<Node> {

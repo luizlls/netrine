@@ -31,6 +31,8 @@ pub enum TokenKind {
     And,
     Or,
     Not,
+    True,
+    False,
 
     Plus,  // +
     Minus, // -
@@ -91,6 +93,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Dots => "..",
             TokenKind::Identifier => "identifier",
             TokenKind::Underscore => "_",
+            TokenKind::True => "true",
+            TokenKind::False => "false",
             TokenKind::Number => "number",
             TokenKind::Integer => "integer",
             TokenKind::String => "string",
