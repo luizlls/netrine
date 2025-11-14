@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use netrine::cmd;
+use compiler::Config;
 
 fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
     let file_name = path
@@ -56,17 +56,17 @@ fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
         let path = format!("e2e {test_name}");
 
         let result = {
-            let result = match pass {
-                "syntax" => cmd::dump_ast(path, &input),
-                "mir" => cmd::dump_mir(path, &input),
-                "eval" => cmd::eval(path, &input),
+            match pass {
+                // "syntax" => cmd::dump_ast(path, &input),
+                // "mir" => cmd::dump_mir(path, &input),
+                "eval" => netrine::eval(path, input, Config::new()),
                 _ => unreachable!(),
-            };
-
-            match result {
-                Ok(value) => value,
-                Err(error) => format!("{error}"),
             }
+
+            // match result {
+            //     Ok(value) => value,
+            //     Err(error) => format!("{error}"),
+            // }
         };
 
         let result = result.trim().to_string();

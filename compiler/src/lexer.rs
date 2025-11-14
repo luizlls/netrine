@@ -4,7 +4,7 @@ use crate::token::{Token, TokenKind};
 
 #[derive(Debug, Clone)]
 struct Lexer<'src> {
-    source: &'src Source<'src>,
+    source: &'src Source,
     bytes: &'src [u8],
     curr: u8,
     peek: u8,
@@ -343,8 +343,8 @@ impl<'src> Tokens<'src> {
     }
 
     #[inline]
-    pub fn prev(&self) -> Option<Token> {
-        self.prev
+    pub fn prev(&self) -> Token {
+        self.prev.unwrap_or_default()
     }
 
     #[inline]
@@ -370,7 +370,7 @@ mod tests {
     use super::*;
 
     fn tokenize<'a>(input: &'a str) -> Vec<(Token, String)> {
-        let source = Source::new("<test>".to_string(), input);
+        let source = Source::new("<test>".to_string(), input.into());
         let mut tokens = tokens(&source);
 
         let mut result = vec![];
@@ -931,7 +931,7 @@ mod tests {
 
     #[test]
     fn peek_prev() {
-        let source = Source::new("<test>".to_string(), "text 3.14 _");
+        let source = Source::new("<test>".to_string(), "text 3.14 _".into());
         let mut tokens = tokens(&source);
 
         assert_eq!(
@@ -973,12 +973,12 @@ mod tests {
         assert_eq!(tokens.value(tokens.peek()), "_");
 
         assert_eq!(
-            tokens.prev().unwrap(),
+            tokens.prev(),
             Token {
                 kind: TokenKind::Identifier,
                 span: Span::new(0, 4)
             }
         );
-        assert_eq!(tokens.value(tokens.prev().unwrap()), "text");
+        assert_eq!(tokens.value(tokens.prev()), "text");
     }
 }

@@ -260,11 +260,11 @@ struct LowerHir<'mir> {
     instructions: Vec<Instruction>,
     variable: Variable,
     variables: HashMap<SymbolId, Variable>,
-    state: &'mir State,
+    state: &'mir mut State,
 }
 
 impl<'mir> LowerHir<'mir> {
-    fn new(state: &'mir State) -> LowerHir<'mir> {
+    fn new(state: &'mir mut State) -> LowerHir<'mir> {
         LowerHir {
             instructions: Vec::new(),
             variable: Variable::new(0),
@@ -425,7 +425,7 @@ impl<'mir> LowerHir<'mir> {
     }
 }
 
-pub fn from_hir(module: &hir::Module, state: &State) -> Result<Module> {
+pub fn from_hir(module: &hir::Module, state: &mut State) -> Result<Module> {
     let mut lower = LowerHir::new(state);
 
     for node in &module.nodes {

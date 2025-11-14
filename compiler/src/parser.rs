@@ -27,8 +27,12 @@ impl<'p> Parser<'p> {
         self
     }
 
+    #[rustfmt::skip]
     fn bump(&mut self) {
         self.tokens.bump();
+        if self.tokens.token().is(TokenKind::EOL) && (self.tokens.prev().non_terminal() || self.tokens.peek().non_terminal()) {
+            self.tokens.bump();
+        }
         self.token = self.tokens.token();
     }
 
@@ -278,13 +282,8 @@ impl<'p> Parser<'p> {
     }
 
     fn unexpected(&self, expected: &[TokenKind]) -> String {
-        let expected = expected
-            .iter()
-            .map(|it| format!("`{it}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let actual = self.token.kind;
-        format!("expected {expected}, found `{actual}`")
+        let expected: Vec<_> = expected.iter().map(|it| format!("`{it}`")).collect();
+        format!("expected {}, found `{}`", expected.join(", "), self.token.kind)
     }
 }
 

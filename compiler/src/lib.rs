@@ -1,4 +1,5 @@
 mod compiler;
+mod config;
 mod error;
 mod eval;
 mod hir;
@@ -13,4 +14,6 @@ mod types;
 mod wasm;
 
 pub use compiler::Compiler;
-pub use eval::eval;
+pub use config::Config;
+pub use error::{ReportError, Result};
+pub use source::Source;
