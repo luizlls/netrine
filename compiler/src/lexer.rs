@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn identifier() {
-        let tokens = tokenize("ident test_1 True CONST _ ___");
+        let tokens = tokenize("ident test_1 CONST _ ___");
 
         assert_eq!(
             tokens,
@@ -408,28 +408,21 @@ mod tests {
                 (
                     Token {
                         kind: TokenKind::Identifier,
-                        span: Span::new(13, 17),
-                    },
-                    "True".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(18, 23),
+                        span: Span::new(13, 18),
                     },
                     "CONST".to_string()
                 ),
                 (
                     Token {
                         kind: TokenKind::Underscore,
-                        span: Span::new(24, 25),
+                        span: Span::new(19, 20),
                     },
                     "_".to_string()
                 ),
                 (
                     Token {
                         kind: TokenKind::Identifier,
-                        span: Span::new(26, 29),
+                        span: Span::new(21, 24),
                     },
                     "___".to_string()
                 ),
@@ -439,7 +432,7 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let tokens = tokenize("and or not");
+        let tokens = tokenize("and or not True False");
 
         assert_eq!(
             tokens,
@@ -464,6 +457,20 @@ mod tests {
                         span: Span::new(7, 10)
                     },
                     "not".to_string()
+                ),
+                (
+                    Token {
+                        kind: TokenKind::True,
+                        span: Span::new(11, 15),
+                    },
+                    "True".to_string()
+                ),
+                (
+                    Token {
+                        kind: TokenKind::False,
+                        span: Span::new(16, 21),
+                    },
+                    "False".to_string()
                 ),
             ]
         );

@@ -359,8 +359,16 @@ impl<'mir> LowerHir<'mir> {
         Ok(target)
     }
 
-    fn convert(&mut self, source: Variable, node_type: Type, other_type: Type) -> Variable {
-        if node_type == types::INTEGER && other_type == types::NUMBER {
+    fn convert(
+        &mut self,
+        source: Variable,
+        node_type: Type,
+        other_type: Type,
+        result_type: Type,
+    ) -> Variable {
+        if (other_type == types::NUMBER || result_type == types::NUMBER)
+            && node_type == types::INTEGER
+        {
             let target = self.variable();
             self.emit(ToNumber { source, target }, types::NUMBER);
             target
@@ -388,8 +396,10 @@ impl<'mir> LowerHir<'mir> {
     fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<Variable> {
         let loperand = self.lower(&binary.loperand)?;
         let roperand = self.lower(&binary.roperand)?;
-        let loperand = self.convert(loperand, binary.loperand.type_, binary.roperand.type_);
-        let roperand = self.convert(roperand, binary.roperand.type_, binary.loperand.type_);
+        let loperand =
+            self.convert(loperand, binary.loperand.type_, binary.roperand.type_, node.type_);
+        let roperand =
+            self.convert(roperand, binary.roperand.type_, binary.loperand.type_, node.type_);
 
         let target = self.variable();
 

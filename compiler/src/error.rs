@@ -4,22 +4,6 @@ use crate::source::{Source, Span};
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
-pub trait ReportError<T> {
-    fn unwrap_or_report(self, source: &Source) -> T;
-}
-
-impl<T> ReportError<T> for Result<T> {
-    fn unwrap_or_report(self, source: &Source) -> T {
-        match self {
-            Ok(value) => value,
-            Err(error) => {
-                eprintln!("{}", error.report(source).expect("failed to report error"));
-                std::process::exit(1);
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Error {
     error: String,

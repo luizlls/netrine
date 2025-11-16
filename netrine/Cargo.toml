@@ -5,8 +5,6 @@ edition.workspace = true
 
 [dependencies]
 compiler = { path = "../compiler" }
-anyhow = "1"
-getopts = "0.2.24"
 
 [dev-dependencies]
 wasmtime = "38.0.3"

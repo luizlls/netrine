@@ -22,13 +22,26 @@
 3.14
 
 
-// //! test: logical
-// True or not False and True
-// //! expect:
-// 1
+//! test: logical
+True or not False and True
+//! expect:
+1
 
-// TODO waiting for pow support
-// //! test: unary precedence
-// -2 ^ 3
+
+//! test: unary precedence
+-2 - 2
+//! expect:
+-4
+
+
+//! test: unary precedence
+-(2 - 2)
+//! expect:
+0
+
+
+// // TODO waiting for POW support
+// //! test: pow associativity
+// 5 * 2 ^ 3
 // //! expect:
-// -8
+// 40

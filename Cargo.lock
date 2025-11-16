@@ -427,15 +427,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "getopts"
-version = "0.2.24"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe4fbac503b8d1f88e6676011885f34b7174f46e59956bba534ba83abded4df"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -632,9 +623,7 @@ dependencies = [
 name = "netrine"
 version = "0.0.1"
 dependencies = [
- "anyhow",
  "compiler",
- "getopts",
  "wasmtime",
 ]
 

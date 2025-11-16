@@ -1,9 +1,41 @@
 use std::fs;
 use std::path::PathBuf;
 
-use compiler::Config;
+use compiler::Compiler;
+use wasmtime::{Instance, Module, Store, Val};
 
-fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
+fn eval_wasm(source: String) -> String {
+    let mut compiler = Compiler::new("test".into(), source);
+
+    let wasm = match compiler.compile() {
+        Ok(wasm) => wasm,
+        Err(error) => {
+            return format!("{error}");
+        }
+    };
+
+    let mut store = Store::<()>::default();
+    let engine = store.engine();
+    let module = Module::new(&engine, wasm).unwrap();
+
+    let main = Instance::new(&mut store, &module, &[])
+        .unwrap()
+        .get_func(&mut store, "main")
+        .unwrap();
+
+    let mut results = [Val::F64(0)];
+    main.call(&mut store, &[], &mut results).unwrap();
+
+    match results[0] {
+        Val::I32(value) => value.to_string(),
+        Val::I64(value) => value.to_string(),
+        Val::F32(value) => f32::from_bits(value).to_string(),
+        Val::F64(value) => f64::from_bits(value).to_string(),
+        _ => unreachable!(),
+    }
+}
+
+fn test_one(pass: &str, path: PathBuf) {
     let file_name = path
         .file_stem()
         .expect("Expected a valid file")
@@ -33,7 +65,7 @@ fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
             }
         }
 
-        let mut output = vec![];
+        let mut expected = vec![];
 
         while let Some(line) = lines.peek() {
             if line.starts_with("//!") && line.contains("test:") || line.starts_with("//") {
@@ -41,48 +73,30 @@ fn test_one(pass: &str, path: PathBuf) -> anyhow::Result<()> {
             }
             let line = lines.next().unwrap();
             if !line.is_empty() {
-                output.push(line);
+                expected.push(line);
             }
         }
 
-        let output = output.join("\n").trim().to_string();
+        let expected = expected.join("\n").trim().to_string();
 
-        cases.push((test_name.to_string(), input.trim().to_string(), output));
+        cases.push((test_name.to_string(), input.trim().to_string(), expected));
     }
 
-    for (test_name, input, output) in cases {
+    for (test_name, input, expected) in cases {
         println!("test e2e::{pass}::{file_name}::{test_name}");
 
-        let path = format!("e2e {test_name}");
+        let result = eval_wasm(input).trim().to_string();
 
-        let result = {
-            match pass {
-                // "syntax" => cmd::dump_ast(path, &input),
-                // "mir" => cmd::dump_mir(path, &input),
-                "eval" => netrine::eval(path, input, Config::new()),
-                _ => unreachable!(),
-            }
-
-            // match result {
-            //     Ok(value) => value,
-            //     Err(error) => format!("{error}"),
-            // }
-        };
-
-        let result = result.trim().to_string();
-
-        if result != output {
+        if result != expected {
             println!("test failed: {pass}::{file_name}::{test_name}");
-            println!("left:\n{}", output);
+            println!("left:\n{}", expected);
             println!("right:\n{}", result);
             panic!();
         }
     }
-
-    Ok(())
 }
 
-fn test(name: &str, path: &str) -> anyhow::Result<()> {
+fn test(name: &str, path: &str) {
     let paths = fs::read_dir(path).expect("Could not run tests");
 
     let mut test_paths = vec![];
@@ -93,20 +107,13 @@ fn test(name: &str, path: &str) -> anyhow::Result<()> {
     println!("\nrunning {} {} test files\n", test_paths.len(), name);
 
     for path in test_paths {
-        test_one(name, path)?;
+        test_one(name, path);
     }
 
     println!("\nall {name} tests passed!\n");
-
-    Ok(())
 }
 
 #[test]
-fn e2e() -> anyhow::Result<()> {
-    // test("syntax", "./tests/syntax")?;
-    // test("hir", "./tests/hir")?;
-    // test("mir", "./tests/mir")?;
-    test("eval", "./tests/eval")?;
-
-    Ok(())
+fn e2e() {
+    test("eval", "./tests/eval");
 }

@@ -20,3 +20,14 @@
 0xFF
 //! expect:
 255
+
+
+//! test: true
+True
+//! expect:
+1
+
+//! test: false
+False
+//! expect:
+0
