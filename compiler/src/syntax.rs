@@ -38,7 +38,6 @@ impl Display for Node {
             NodeKind::Name(name) => write!(f, "{name}"),
             NodeKind::Number(literal)
           | NodeKind::Integer(literal) => write!(f, "{literal}"),
-            NodeKind::Boolean(boolean) => write!(f, "{boolean}"),
         }
     }
 }
@@ -51,7 +50,6 @@ pub enum NodeKind {
     Name(Name),
     Number(Literal),
     Integer(Literal),
-    Boolean(Boolean),
 }
 
 #[derive(Debug, Clone)]
@@ -133,23 +131,6 @@ pub struct Literal {
 }
 
 impl Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Boolean {
-    pub(crate) value: bool,
-}
-
-impl From<Boolean> for NodeKind {
-    fn from(boolean: Boolean) -> NodeKind {
-        NodeKind::Boolean(boolean)
-    }
-}
-
-impl Display for Boolean {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
     }

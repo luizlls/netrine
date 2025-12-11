@@ -119,11 +119,10 @@ impl<'src> Lexer<'src> {
         let value = self.slice();
 
         let kind = match value {
+            "let" => TokenKind::Let,
             "and" => TokenKind::And,
             "or" => TokenKind::Or,
             "not" => TokenKind::Not,
-            "True" => TokenKind::True,
-            "False" => TokenKind::False,
             _ => {
                 if value == "_" {
                     TokenKind::Underscore
@@ -432,45 +431,38 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let tokens = tokenize("and or not True False");
+        let tokens = tokenize("let and or not");
 
         assert_eq!(
             tokens,
             vec![
                 (
                     Token {
-                        kind: TokenKind::And,
+                        kind: TokenKind::Let,
                         span: Span::new(0, 3)
+                    },
+                    "let".to_string()
+                ),
+                (
+                    Token {
+                        kind: TokenKind::And,
+                        span: Span::new(4, 7)
                     },
                     "and".to_string()
                 ),
                 (
                     Token {
                         kind: TokenKind::Or,
-                        span: Span::new(4, 6)
+                        span: Span::new(8, 10)
                     },
                     "or".to_string()
                 ),
                 (
                     Token {
                         kind: TokenKind::Not,
-                        span: Span::new(7, 10)
+                        span: Span::new(11, 14)
                     },
                     "not".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::True,
-                        span: Span::new(11, 15),
-                    },
-                    "True".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::False,
-                        span: Span::new(16, 21),
-                    },
-                    "False".to_string()
                 ),
             ]
         );

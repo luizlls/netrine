@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::{self, Display};
 
-use crate::types::Type;
+use crate::types::{self, Type};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct SymbolId(u32);
@@ -83,6 +83,10 @@ impl Symbols {
     }
 }
 
+pub const NONE: SymbolId = SymbolId(0);
+pub const TRUE: SymbolId = SymbolId(1);
+pub const FALSE: SymbolId = SymbolId(2);
+
 #[derive(Debug)]
 pub struct State {
     pub(crate) symbols: Symbols,
@@ -93,6 +97,20 @@ impl State {
         State {
             symbols: Symbols::new(),
         }
+        .init()
+    }
+
+    fn init(mut self) -> State {
+        let builtin_symbols = [
+            ("", types::NOTHING, NONE),
+            ("True", types::BOOLEAN, TRUE),
+            ("False", types::BOOLEAN, FALSE),
+        ];
+        for (name, type_, symbol_id) in builtin_symbols {
+            let result_id = self.define(name.into(), type_);
+            debug_assert_eq!(result_id, symbol_id)
+        }
+        self
     }
 
     pub fn define(&mut self, name: String, type_: Type) -> SymbolId {

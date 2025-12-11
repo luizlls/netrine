@@ -28,11 +28,10 @@ pub enum TokenKind {
     Equals, // =
     Arrow,  // =>
 
+    Let,
     And,
     Or,
     Not,
-    True,
-    False,
 
     Plus,  // +
     Minus, // -
@@ -75,6 +74,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Semi => ";",
             TokenKind::Equals => "=",
             TokenKind::Arrow => "=>",
+            TokenKind::Let => "let",
             TokenKind::And => "and",
             TokenKind::Or => "or",
             TokenKind::Not => "not",
@@ -93,8 +93,6 @@ impl fmt::Display for TokenKind {
             TokenKind::Dots => "..",
             TokenKind::Identifier => "identifier",
             TokenKind::Underscore => "_",
-            TokenKind::True => "true",
-            TokenKind::False => "false",
             TokenKind::Number => "number",
             TokenKind::Integer => "integer",
             TokenKind::String => "string",

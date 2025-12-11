@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use crate::error::{Error, Result};
 use crate::source::{Span, ToSpan};
-use crate::state::{State, SymbolId};
+use crate::state::{self, State, SymbolId};
 use crate::syntax;
 use crate::types::{self, Type};
 
@@ -253,7 +253,6 @@ impl<'hir> LowerSyntax<'hir> {
             syntax::NodeKind::Name(name) => self.name(node, name),
             syntax::NodeKind::Number(literal) => self.number(node, literal),
             syntax::NodeKind::Integer(literal) => self.integer(node, literal),
-            syntax::NodeKind::Boolean(boolean) => self.boolean(node, boolean),
         }
     }
 
@@ -270,13 +269,19 @@ impl<'hir> LowerSyntax<'hir> {
             return self.fail(node.span, format!("`{}` not defined", name.value));
         };
 
-        Ok(self.node(
-            node.span,
-            symbol.type_,
-            Local {
-                symbol_id: symbol.symbol_id,
-            },
-        ))
+        Ok(match symbol.symbol_id {
+            state::TRUE => self.node(node.span, symbol.type_, Boolean { value: true }),
+            state::FALSE => self.node(node.span, symbol.type_, Boolean { value: false }),
+            _ => {
+                self.node(
+                    node.span,
+                    symbol.type_,
+                    Local {
+                        symbol_id: symbol.symbol_id,
+                    },
+                )
+            }
+        })
     }
 
     fn binary(&mut self, node: &syntax::Node, binary: &syntax::Binary) -> Result<Node> {
@@ -417,11 +422,6 @@ impl<'hir> LowerSyntax<'hir> {
         };
 
         Ok(self.node(node.span, types::INTEGER, Integer { value }))
-    }
-
-    fn boolean(&mut self, node: &syntax::Node, boolean: &syntax::Boolean) -> Result<Node> {
-        let value = boolean.value;
-        Ok(self.node(node.span, types::BOOLEAN, Boolean { value }))
     }
 
     fn expect_type(&self, node: &Node, expected_type: Type) -> Result<()> {

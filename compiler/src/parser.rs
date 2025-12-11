@@ -2,8 +2,8 @@ use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::Span;
 use crate::syntax::{
-    Binary, Boolean, Define, Literal, Module, Name, Node, NodeKind, Operator, OperatorKind,
-    Precedence, Unary,
+    Binary, Define, Literal, Module, Name, Node, NodeKind, Operator, OperatorKind, Precedence,
+    Unary,
 };
 use crate::token::{Token, TokenKind};
 
@@ -64,7 +64,7 @@ impl<'p> Parser<'p> {
     }
 
     fn top_level(&mut self) -> Result<Node> {
-        if self.at(TokenKind::Identifier) && self.tokens.peek().is(TokenKind::Equals) {
+        if self.at(TokenKind::Let) {
             self.define()
         } else {
             self.expr()
@@ -72,6 +72,7 @@ impl<'p> Parser<'p> {
     }
 
     fn define(&mut self) -> Result<Node> {
+        self.expect(TokenKind::Let)?;
         let name = self.name()?;
         self.expect(TokenKind::Equals)?;
         let value = self.expr()?;
@@ -89,8 +90,6 @@ impl<'p> Parser<'p> {
             TokenKind::Identifier => self.ident(),
             TokenKind::Number => self.number(),
             TokenKind::Integer => self.integer(),
-            TokenKind::True => self.boolean(true),
-            TokenKind::False => self.boolean(false),
             TokenKind::LParen => self.parens(),
             _ => {
                 self.fail(match token.kind {
@@ -131,12 +130,6 @@ impl<'p> Parser<'p> {
 
     fn integer(&mut self) -> Result<Node> {
         self.literal(TokenKind::Integer, NodeKind::Integer)
-    }
-
-    fn boolean(&mut self, value: bool) -> Result<Node> {
-        let token = self.token;
-        self.bump();
-        Ok(self.node(token.span, Boolean { value }))
     }
 
     fn parens(&mut self) -> Result<Node> {
