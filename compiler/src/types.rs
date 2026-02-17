@@ -9,24 +9,13 @@ impl TypeId {
     }
 }
 
-const NOTHING_ID: TypeId = TypeId(0);
-const NUMBER_ID: TypeId = TypeId(1);
-const INTEGER_ID: TypeId = TypeId(2);
-const BOOL_ID: TypeId = TypeId(3);
+pub const UNKNOWN: TypeId = TypeId(0);
+pub const NUMBER: TypeId = TypeId(1);
+pub const INTEGER: TypeId = TypeId(2);
+pub const BOOLEAN: TypeId = TypeId(3);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Type {
-    Builtin(TypeId),
-    Unknown,
-}
-
-pub const NOTHING: Type = Type::Builtin(NOTHING_ID);
-pub const NUMBER: Type = Type::Builtin(NUMBER_ID);
-pub const INTEGER: Type = Type::Builtin(INTEGER_ID);
-pub const BOOLEAN: Type = Type::Builtin(BOOL_ID);
-
-impl Type {
-    pub fn is(self, other: Type) -> bool {
+impl TypeId {
+    pub fn is(self, other: TypeId) -> bool {
         match (self, other) {
             (INTEGER | NUMBER, NUMBER) => true,
             _ => self == other,
@@ -34,14 +23,13 @@ impl Type {
     }
 }
 
-impl Display for Type {
+impl Display for TypeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let description = match self {
-            &NOTHING => "nothing",
-            &NUMBER => "number",
-            &INTEGER => "integer",
-            &BOOLEAN => "boolean",
-            Type::Unknown => "<unknown>",
+        let description = match *self {
+            UNKNOWN => "unknwown",
+            NUMBER => "number",
+            INTEGER => "integer",
+            BOOLEAN => "boolean",
             _ => unreachable!(),
         };
 

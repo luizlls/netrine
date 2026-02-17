@@ -1,6 +1,6 @@
-use compiler::Compiler;
+use compiler::{Compiler, Source};
 
 pub fn compile(source: &str) -> Vec<u8> {
-    let mut compiler = Compiler::new("wasm".into(), source.into());
-    compiler.compile().unwrap()
+    let source = Source::new("wasm".into(), source.into());
+    Compiler::new(&source).compile().unwrap()
 }

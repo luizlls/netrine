@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::PathBuf;
 
-use compiler::Compiler;
+use compiler::{Compiler, Source};
 use wasmtime::{Instance, Module, Store, Val};
 
 fn eval_wasm(source: String) -> String {
-    let mut compiler = Compiler::new("test".into(), source);
+    let source = Source::new("test".into(), source);
+
+    let mut compiler = Compiler::new(&source);
 
     let wasm = match compiler.compile() {
         Ok(wasm) => wasm,

@@ -1,52 +1,47 @@
 use std::fs;
 
-use crate::error;
+use crate::error::Result;
 use crate::hir;
+use crate::interner::Interner;
 use crate::lexer;
 use crate::mir;
 use crate::parser;
-use crate::source;
-use crate::state;
+use crate::source::Source;
 use crate::syntax;
-use crate::wasm;
+// use crate::wasm;
 
-use error::Result;
-
-pub struct Compiler {
-    state: state::State,
-    source: source::Source,
+pub struct Compiler<'state> {
+    source: &'state Source,
+    interner: Interner,
 }
 
-impl Compiler {
-    pub fn new(path: String, source: String) -> Compiler {
+impl<'state> Compiler<'state> {
+    pub fn new(source: &'state Source) -> Compiler<'state> {
         Compiler {
-            state: state::State::new(),
-            source: source::Source::new(path, source),
+            source,
+            interner: Interner::new(),
         }
     }
 
-    pub fn source(&self) -> &source::Source {
-        &self.source
-    }
-
-    fn parse(&mut self) -> Result<syntax::Module> {
+    pub fn parse(&mut self) -> Result<syntax::Module> {
         let tokens = lexer::tokens(&self.source);
         parser::parse(tokens)
     }
 
-    fn hir(&mut self) -> Result<hir::Module> {
+    pub fn hir(&mut self) -> Result<hir::Module> {
         let ast = self.parse()?;
-        hir::from_syntax(&ast, &mut self.state)
+        hir::from_syntax(&ast, &self.source, &mut self.interner)
     }
 
-    fn mir(&mut self) -> Result<mir::Module> {
+    pub fn mir(&mut self) -> Result<mir::Module> {
         let hir = self.hir()?;
-        mir::from_hir(&hir, &mut self.state)
+        mir::from_hir(&hir, &mut self.interner)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {
         let mir = self.mir()?;
-        wasm::compile(&mir)
+        // wasm::compile(&mir)
+        Ok(vec![])
     }
 
     pub fn build(&mut self) -> Result<()> {

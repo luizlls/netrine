@@ -3,17 +3,17 @@ use crate::source::{Source, Span};
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug, Clone)]
-struct Lexer<'src> {
-    source: &'src Source,
-    bytes: &'src [u8],
+struct Lexer<'lexer> {
+    source: &'lexer Source,
+    bytes: &'lexer [u8],
     curr: u8,
     peek: u8,
     index: usize,
     start: usize,
 }
 
-impl<'src> Lexer<'src> {
-    fn new(source: &'src Source) -> Lexer<'src> {
+impl<'lexer> Lexer<'lexer> {
+    fn new(source: &'lexer Source) -> Lexer<'lexer> {
         let mut lexer = Lexer {
             source,
             bytes: source.content.as_bytes(),
@@ -49,7 +49,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn slice(&self) -> &'src str {
+    fn slice(&self) -> &'lexer str {
         &self.source.content[self.start..self.index]
     }
 
@@ -119,17 +119,12 @@ impl<'src> Lexer<'src> {
         let value = self.slice();
 
         let kind = match value {
-            "let" => TokenKind::Let,
+            "True" => TokenKind::True,
+            "False" => TokenKind::False,
             "and" => TokenKind::And,
             "or" => TokenKind::Or,
             "not" => TokenKind::Not,
-            _ => {
-                if value == "_" {
-                    TokenKind::Underscore
-                } else {
-                    TokenKind::Identifier
-                }
-            }
+            _ => TokenKind::Identifier,
         };
 
         self.token(kind)
@@ -306,15 +301,15 @@ impl<'src> Lexer<'src> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Tokens<'src> {
-    lexer: Lexer<'src>,
+pub struct Tokens<'lexer> {
+    lexer: Lexer<'lexer>,
     prev: Option<Token>,
     peek: Token,
     token: Token,
 }
 
-impl<'src> Tokens<'src> {
-    pub fn new(source: &'src Source) -> Tokens<'src> {
+impl<'tokens> Tokens<'tokens> {
+    pub fn new(source: &'tokens Source) -> Tokens<'tokens> {
         Tokens {
             lexer: Lexer::new(source),
             prev: None,
@@ -324,7 +319,7 @@ impl<'src> Tokens<'src> {
         .init()
     }
 
-    fn init(mut self) -> Tokens<'src> {
+    fn init(mut self) -> Tokens<'tokens> {
         self.bump();
         self.bump();
         self
@@ -360,7 +355,7 @@ impl<'src> Tokens<'src> {
     }
 }
 
-pub fn tokens<'s>(source: &'s Source) -> Tokens<'s> {
+pub fn tokens<'tokens>(source: &'tokens Source) -> Tokens<'tokens> {
     Tokens::new(source)
 }
 
@@ -413,7 +408,7 @@ mod tests {
                 ),
                 (
                     Token {
-                        kind: TokenKind::Underscore,
+                        kind: TokenKind::Identifier,
                         span: Span::new(19, 20),
                     },
                     "_".to_string()
@@ -431,38 +426,45 @@ mod tests {
 
     #[test]
     fn keywords() {
-        let tokens = tokenize("let and or not");
+        let tokens = tokenize("and or not True False");
 
         assert_eq!(
             tokens,
             vec![
                 (
                     Token {
-                        kind: TokenKind::Let,
-                        span: Span::new(0, 3)
-                    },
-                    "let".to_string()
-                ),
-                (
-                    Token {
                         kind: TokenKind::And,
-                        span: Span::new(4, 7)
+                        span: Span::new(0, 3)
                     },
                     "and".to_string()
                 ),
                 (
                     Token {
                         kind: TokenKind::Or,
-                        span: Span::new(8, 10)
+                        span: Span::new(4, 6)
                     },
                     "or".to_string()
                 ),
                 (
                     Token {
                         kind: TokenKind::Not,
-                        span: Span::new(11, 14)
+                        span: Span::new(7, 10)
                     },
                     "not".to_string()
+                ),
+                (
+                    Token {
+                        kind: TokenKind::True,
+                        span: Span::new(11, 15)
+                    },
+                    "True".to_string()
+                ),
+                (
+                    Token {
+                        kind: TokenKind::False,
+                        span: Span::new(16, 21)
+                    },
+                    "False".to_string()
                 ),
             ]
         );
@@ -965,7 +967,7 @@ mod tests {
         assert_eq!(
             tokens.peek(),
             Token {
-                kind: TokenKind::Underscore,
+                kind: TokenKind::Identifier,
                 span: Span::new(10, 11)
             }
         );

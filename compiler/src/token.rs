@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::source::{Span, ToSpan};
+use crate::source::Span;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 pub struct Token {
@@ -28,7 +28,8 @@ pub enum TokenKind {
     Equals, // =
     Arrow,  // =>
 
-    Let,
+    True,
+    False,
     And,
     Or,
     Not,
@@ -48,7 +49,6 @@ pub enum TokenKind {
     Dots,  // ..
 
     Identifier,
-    Underscore,
     Number,
     Integer,
     String,
@@ -61,7 +61,7 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
             TokenKind::EOF => "end of input",
-            TokenKind::EOL => "new line",
+            TokenKind::EOL => "end of line",
             TokenKind::LParen => "(",
             TokenKind::RParen => ")",
             TokenKind::LBrace => "{",
@@ -74,7 +74,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Semi => ";",
             TokenKind::Equals => "=",
             TokenKind::Arrow => "=>",
-            TokenKind::Let => "let",
+            TokenKind::True => "True",
+            TokenKind::False => "False",
             TokenKind::And => "and",
             TokenKind::Or => "or",
             TokenKind::Not => "not",
@@ -92,7 +93,6 @@ impl fmt::Display for TokenKind {
             TokenKind::GtEq => ">=",
             TokenKind::Dots => "..",
             TokenKind::Identifier => "identifier",
-            TokenKind::Underscore => "_",
             TokenKind::Number => "number",
             TokenKind::Integer => "integer",
             TokenKind::String => "string",
@@ -104,34 +104,7 @@ impl fmt::Display for TokenKind {
 }
 
 impl Token {
-    #[rustfmt::skip]
-    pub fn non_terminal(self) -> bool {
-        matches!(
-            self.kind,
-          | TokenKind::Dot
-          | TokenKind::Plus
-          | TokenKind::Minus
-          | TokenKind::Star
-          | TokenKind::Slash
-          | TokenKind::Mod
-          | TokenKind::Caret
-          | TokenKind::EqEq
-          | TokenKind::NoEq
-          | TokenKind::Lt
-          | TokenKind::LtEq
-          | TokenKind::Gt
-          | TokenKind::GtEq
-          | TokenKind::Dots
-        )
-    }
-
     pub fn is(self, kind: TokenKind) -> bool {
         self.kind == kind
-    }
-}
-
-impl ToSpan for Token {
-    fn span(&self) -> Span {
-        self.span
     }
 }

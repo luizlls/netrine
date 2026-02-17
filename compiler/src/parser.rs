@@ -1,20 +1,16 @@
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
-use crate::source::Span;
-use crate::syntax::{
-    Binary, Define, Literal, Module, Name, Node, NodeKind, Operator, OperatorKind, Precedence,
-    Unary,
-};
+use crate::syntax::{Module, Name, Node, NodeKind, Operator, OperatorKind, Precedence};
 use crate::token::{Token, TokenKind};
 
 #[derive(Debug)]
-struct Parser<'p> {
-    tokens: Tokens<'p>,
+struct Parser<'parser> {
+    tokens: Tokens<'parser>,
     token: Token,
 }
 
-impl<'p> Parser<'p> {
-    fn new(tokens: Tokens<'p>) -> Parser<'p> {
+impl<'parser> Parser<'parser> {
+    fn new(tokens: Tokens<'parser>) -> Parser<'parser> {
         Parser {
             tokens,
             token: Token::default(),
@@ -22,17 +18,13 @@ impl<'p> Parser<'p> {
         .init()
     }
 
-    fn init(mut self) -> Parser<'p> {
+    fn init(mut self) -> Parser<'parser> {
         self.token = self.tokens.token();
         self
     }
 
-    #[rustfmt::skip]
     fn bump(&mut self) {
         self.tokens.bump();
-        if self.tokens.token().is(TokenKind::EOL) && (self.tokens.prev().non_terminal() || self.tokens.peek().non_terminal()) {
-            self.tokens.bump();
-        }
         self.token = self.tokens.token();
     }
 
@@ -56,15 +48,8 @@ impl<'p> Parser<'p> {
         self.tokens.done()
     }
 
-    fn node(&mut self, span: Span, kind: impl Into<NodeKind>) -> Node {
-        Node {
-            kind: kind.into(),
-            span,
-        }
-    }
-
     fn top_level(&mut self) -> Result<Node> {
-        if self.at(TokenKind::Let) {
+        if self.at(TokenKind::Identifier) && self.tokens.peek().is(TokenKind::Equals) {
             self.define()
         } else {
             self.expr()
@@ -72,12 +57,11 @@ impl<'p> Parser<'p> {
     }
 
     fn define(&mut self) -> Result<Node> {
-        self.expect(TokenKind::Let)?;
         let name = self.name()?;
         self.expect(TokenKind::Equals)?;
         let value = self.expr()?;
 
-        Ok(self.node(Span::from(&name, &value), Define { name, value }))
+        Ok(Node::define(name, value))
     }
 
     fn expr(&mut self) -> Result<Node> {
@@ -93,35 +77,31 @@ impl<'p> Parser<'p> {
             TokenKind::LParen => self.parens(),
             _ => {
                 self.fail(match token.kind {
-                    TokenKind::UnexpectedCharacter => "unexpected character",
-                    TokenKind::UnterminatedString => "unterminated string",
-                    _ => "unexpected expression",
+                    TokenKind::UnexpectedCharacter => "unexpected character".into(),
+                    TokenKind::UnterminatedString => "unterminated string".into(),
+                    _ => format!("unexpected {}", token.kind),
                 })
             }
         }
     }
 
     fn name(&mut self) -> Result<Name> {
-        let token = self.token;
+        let span = self.token.span;
         self.expect(TokenKind::Identifier)?;
-        let span = token.span;
-        let value = self.tokens.value(token).into();
 
-        Ok(Name { value, span })
+        Ok(Name { span })
+    }
+
+    fn literal(&mut self, kind: TokenKind, node: NodeKind) -> Result<Node> {
+        let span = self.token.span;
+        self.expect(kind)?;
+        Ok(Node::new(node, span))
     }
 
     fn ident(&mut self) -> Result<Node> {
         let name = self.name()?;
-        Ok(self.node(name.span, NodeKind::Name(name)))
-    }
-
-    fn literal(&mut self, kind: TokenKind, ctor: fn(Literal) -> NodeKind) -> Result<Node> {
-        let token = self.token;
-        self.expect(kind)?;
-        let span = token.span;
-        let value = self.tokens.value(token).into();
-
-        Ok(self.node(span, ctor(Literal { value })))
+        let span = name.span;
+        Ok(Node::new(NodeKind::Name(name), span))
     }
 
     fn number(&mut self) -> Result<Node> {
@@ -147,24 +127,30 @@ impl<'p> Parser<'p> {
 
         let expr = self.unary()?;
 
-        Ok(self.node(Span::from(&operator, &expr), Unary { operator, expr }))
+        Ok(Node::unary(operator, expr))
     }
 
     fn binary(&mut self, precedence: Precedence) -> Result<Node> {
         let mut expr = self.unary()?;
 
-        while let Some(operator) = self.operator(precedence, false) {
+        loop {
+            // accept newlines before binary operators
+            let newline = self.newline();
+
+            let Some(operator) = self.operator(precedence, false) else {
+                break;
+            };
+
+            if !newline {
+                // accept newlines after binary operators
+                // but only if there wasn't a new line before the operator
+                self.newline();
+            }
+
             let lexpr = expr;
             let rexpr = self.binary(operator.next_precedence())?;
 
-            expr = self.node(
-                Span::from(&lexpr, &rexpr),
-                Binary {
-                    operator,
-                    lexpr,
-                    rexpr,
-                },
-            );
+            expr = Node::binary(operator, lexpr, rexpr);
         }
 
         Ok(expr)
@@ -207,8 +193,8 @@ impl<'p> Parser<'p> {
         }
     }
 
-    fn newline(&mut self) {
-        self.maybe(TokenKind::EOL);
+    fn newline(&mut self) -> bool {
+        self.maybe(TokenKind::EOL)
     }
 
     fn endline(&mut self) -> Result<()> {
@@ -280,7 +266,7 @@ impl<'p> Parser<'p> {
     }
 }
 
-pub fn parse<'p>(tokens: Tokens<'p>) -> Result<Module> {
+pub fn parse<'parser>(tokens: Tokens<'parser>) -> Result<Module> {
     let mut parser = Parser::new(tokens);
     let mut nodes = vec![];
 

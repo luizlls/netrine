@@ -1,36 +1,29 @@
 use std::fs;
-use std::path::PathBuf;
 
-use compiler::Compiler;
+use compiler::{Compiler, Source};
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<String>>();
     if args.is_empty() {
-        eprintln!("Usage: netrine [FILE] [-e EXPR]");
+        eprintln!("Usage: netrine [FILE]");
         return;
     }
 
-    let (path, source) = if args[0] == "-e" {
-        let path = "<eval>".into();
-        let source = args[1].clone();
-        (path, source)
-    } else {
-        let path = args[0].clone();
-        let source = file(&path);
-        (path, source)
-    };
+    let source = source(&args[0]);
 
-    let mut compiler = Compiler::new(path, source);
-    match compiler.build() {
-        Ok(value) => value,
+    let mut compiler = Compiler::new(&source);
+    match compiler.parse() {
+        Ok(syntax) => {
+            println!("{:#?}", syntax);
+        }
         Err(error) => {
-            let error = error.report(compiler.source()).unwrap();
+            let error = error.report(&source).expect("Couldn't report the error");
             eprintln!("{error}");
         }
     }
 }
 
-fn file(path: &str) -> String {
-    let path = PathBuf::from(path);
-    fs::read_to_string(&path).expect("Couldn't open the file")
+fn source(path: &str) -> Source {
+    let content = fs::read_to_string(&path).expect("Couldn't read the file");
+    Source::new(path.to_string(), content)
 }

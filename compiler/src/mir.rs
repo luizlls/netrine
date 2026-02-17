@@ -1,450 +1,360 @@
-use std::collections::HashMap;
-use std::fmt::{self, Display};
+use crate::collections::{IndexMap, IndexVec};
+use crate::error::Result;
+use crate::interner::{Interner, Name};
+use crate::macros::entity_id;
+use crate::types::TypeId;
+use crate::{hir, types};
 
-use crate::error::{Error, Result};
-use crate::hir;
-use crate::source::Span;
-use crate::state::{State, SymbolId};
-use crate::types::{self, Type};
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Module {
-    pub(crate) instructions: Vec<Instruction>,
+    globals: IndexMap<Name, GlobalId, Global>,
+    functions: IndexMap<Name, FunctionId, Function>,
 }
 
 impl Module {
-    pub fn get_type(&self, instruction_id: Variable) -> Type {
-        self.instructions[instruction_id.id() as usize].type_
-    }
-}
-
-impl Display for Module {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for instruction in &self.instructions {
-            if let Some(target) = instruction.target() {
-                write!(f, "{target} := ")?;
-            }
-            writeln!(f, "{}", instruction.kind)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct Variable(u32);
-
-impl Variable {
-    pub fn new(id: u32) -> Variable {
-        Variable(id)
-    }
-
-    #[inline(always)]
-    pub fn id(self) -> u32 {
-        self.0
-    }
-
-    #[inline(always)]
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-
-    fn next(self) -> Variable {
-        Variable(self.0 + 1)
-    }
-}
-
-impl Display for Variable {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "v{}", self.0)
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Block {
-    pub(crate) instructions: Vec<Variable>,
-}
-
-impl Block {
-    pub fn new() -> Block {
-        Block {
-            instructions: vec![],
+    pub fn new() -> Module {
+        Module {
+            globals: IndexMap::new(),
+            functions: IndexMap::new(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct BlockId(pub(crate) u32);
+entity_id!(InstructionId, u32);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Instruction {
-    pub(crate) kind: InstructionKind,
-    pub(crate) type_: Type,
+    pub kind: InstructionKind,
+    pub type_id: TypeId,
 }
 
 impl Instruction {
-    fn target(&self) -> Option<Variable> {
-        let target = match &self.kind {
-            InstructionKind::Unary(unary) => unary.target,
-            InstructionKind::Binary(binary) => binary.target,
-            InstructionKind::Integer(integer) => integer.target,
-            InstructionKind::Number(number) => number.target,
-            InstructionKind::Boolean(boolean) => boolean.target,
-            InstructionKind::ToNumber(to_number) => to_number.target,
-            InstructionKind::Return(_) => return None,
-        };
-        Some(target)
+    pub fn new(kind: InstructionKind, type_id: TypeId) -> Instruction {
+        Instruction { kind, type_id }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum InstructionKind {
-    Unary(Unary),
+    LoadGlobal(LoadGlobal),
     Binary(Binary),
+    Unary(Unary),
     Integer(Integer),
     Number(Number),
-    Boolean(Boolean),
     ToNumber(ToNumber),
-    Return(Return),
+    True,
+    False,
 }
 
-impl Display for InstructionKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            InstructionKind::Unary(unary) => write!(f, "{unary}"),
-            InstructionKind::Binary(binary) => write!(f, "{binary}"),
-            InstructionKind::Integer(integer) => write!(f, "{integer}"),
-            InstructionKind::Number(number) => write!(f, "{number}"),
-            InstructionKind::Boolean(boolean) => write!(f, "{boolean}"),
-            InstructionKind::ToNumber(to_number) => write!(f, "{to_number}"),
-            InstructionKind::Return(return_) => write!(f, "{return_}"),
+#[derive(Debug, Clone)]
+pub struct LoadGlobal {
+    pub global: GlobalId,
+}
+
+impl Instruction {
+    const fn load_global(global: GlobalId, type_id: TypeId) -> Instruction {
+        Instruction {
+            kind: InstructionKind::LoadGlobal(LoadGlobal { global }),
+            type_id,
         }
     }
 }
 
 pub type Operator = hir::Operator;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Unary {
-    pub(crate) target: Variable,
-    pub(crate) operator: Operator,
-    pub(crate) operand: Variable,
+    pub operator: Operator,
+    pub operand: InstructionId,
 }
 
-impl From<Unary> for InstructionKind {
-    fn from(unary: Unary) -> InstructionKind {
-        InstructionKind::Unary(unary)
-    }
-}
-
-impl Display for Unary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.operator, self.operand)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Binary {
-    pub(crate) target: Variable,
-    pub(crate) operator: Operator,
-    pub(crate) loperand: Variable,
-    pub(crate) roperand: Variable,
-}
-
-impl From<Binary> for InstructionKind {
-    fn from(binary: Binary) -> InstructionKind {
-        InstructionKind::Binary(binary)
-    }
-}
-
-impl Display for Binary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.operator, self.loperand, self.roperand)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Integer {
-    pub(crate) target: Variable,
-    pub(crate) value: i64,
-}
-
-impl From<Integer> for InstructionKind {
-    fn from(integer: Integer) -> InstructionKind {
-        InstructionKind::Integer(integer)
-    }
-}
-
-impl Display for Integer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "integer {}", self.value)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Number {
-    pub(crate) target: Variable,
-    pub(crate) value: f64,
-}
-
-impl From<Number> for InstructionKind {
-    fn from(number: Number) -> InstructionKind {
-        InstructionKind::Number(number)
-    }
-}
-
-impl Display for Number {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "number {}", self.value)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Boolean {
-    pub(crate) target: Variable,
-    pub(crate) value: bool,
-}
-
-impl From<Boolean> for InstructionKind {
-    fn from(boolean: Boolean) -> InstructionKind {
-        InstructionKind::Boolean(boolean)
-    }
-}
-
-impl Display for Boolean {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ToNumber {
-    pub(crate) source: Variable,
-    pub(crate) target: Variable,
-}
-
-impl From<ToNumber> for InstructionKind {
-    fn from(to_number: ToNumber) -> InstructionKind {
-        InstructionKind::ToNumber(to_number)
-    }
-}
-
-impl Display for ToNumber {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "to.number {}", self.source)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Return {
-    pub(crate) source: Option<Variable>,
-}
-
-impl From<Return> for InstructionKind {
-    fn from(return_: Return) -> InstructionKind {
-        InstructionKind::Return(return_)
-    }
-}
-
-impl Display for Return {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(source) = self.source {
-            write!(f, "return {source}")
-        } else {
-            write!(f, "return")
+impl Instruction {
+    const fn unary(operator: Operator, operand: InstructionId, type_id: TypeId) -> Instruction {
+        Instruction {
+            kind: InstructionKind::Unary(Unary {
+                operator,
+                operand,
+            }),
+            type_id,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Binary {
+    pub operator: Operator,
+    pub loperand: InstructionId,
+    pub roperand: InstructionId,
+}
+
+impl Instruction {
+    const fn binary(
+        operator: Operator,
+        loperand: InstructionId,
+        roperand: InstructionId,
+        type_id: TypeId,
+    ) -> Instruction {
+        Instruction {
+            kind: InstructionKind::Binary(Binary {
+                operator,
+                loperand,
+                roperand,
+            }),
+            type_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Integer {
+    pub value: i64,
+}
+
+impl Instruction {
+    const fn integer(value: i64) -> Instruction {
+        Instruction {
+            kind: InstructionKind::Integer(Integer { value }),
+            type_id: types::INTEGER,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Number {
+    pub value: f64,
+}
+
+impl Instruction {
+    const fn number(value: f64) -> Instruction {
+        Instruction {
+            kind: InstructionKind::Number(Number { value }),
+            type_id: types::NUMBER,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ToNumber {
+    pub source: InstructionId,
+}
+
+impl Instruction {
+    const fn to_number(source: InstructionId) -> Instruction {
+        Instruction {
+            kind: InstructionKind::ToNumber(ToNumber { source }),
+            type_id: types::NUMBER,
+        }
+    }
+}
+
+impl Instruction {
+    const fn boolean(truthy: bool) -> Instruction {
+        Instruction {
+            kind: if truthy {
+                InstructionKind::True
+            } else {
+                InstructionKind::False
+            },
+            type_id: types::BOOLEAN,
+        }
+    }
+}
+
+entity_id!(GlobalId, u32);
+
+#[derive(Debug)]
+pub struct Global {
+    pub function: FunctionId,
+    pub type_id: TypeId,
+}
+
+entity_id!(LocalId, u32);
+
+#[derive(Debug)]
+pub struct Local {
+    pub type_id: TypeId,
+}
+
+entity_id!(FunctionId, u32);
+
+#[derive(Debug)]
+pub struct Function {
+    pub instructions: IndexVec<InstructionId, Instruction>,
+}
+
+impl Function {
+    fn new() -> Function {
+        Function {
+            instructions: IndexVec::new(),
+        }
+    }
+
+    fn instruction(&mut self, instruction: Instruction) -> InstructionId {
+        self.instructions.push(instruction)
+    }
+}
+
+#[derive(Debug)]
+struct Context {
+    functions: Vec<Function>,
+}
+
+impl Context {
+    fn new() -> Context {
+        Context {
+            functions: Vec::new(),
+        }
+    }
+
+    fn push_function(&mut self, function: Function) {
+        self.functions.push(function);
+    }
+
+    fn pop_function(&mut self) -> Function {
+        self.functions.pop().expect("at least one function in the context")
+    }
+
+    fn function(&mut self) -> &mut Function {
+        self.functions.last_mut().expect("at least one function in the context")
     }
 }
 
 #[derive(Debug)]
 struct LowerHir<'mir> {
-    instructions: Vec<Instruction>,
-    variable: Variable,
-    variables: HashMap<SymbolId, Variable>,
-    state: &'mir mut State,
+    globals: IndexMap<Name, GlobalId, Global>,
+    functions: IndexMap<Name, FunctionId, Function>,
+    context: Context,
+    interner: &'mir mut Interner,
 }
 
 impl<'mir> LowerHir<'mir> {
-    fn new(state: &'mir mut State) -> LowerHir<'mir> {
+    fn new(interner: &'mir mut Interner) -> LowerHir<'mir> {
         LowerHir {
-            instructions: Vec::new(),
-            variable: Variable::new(0),
-            variables: HashMap::new(),
-            state,
+            globals: IndexMap::new(),
+            functions: IndexMap::new(),
+            context: Context::new(),
+            interner,
         }
+        .init()
     }
 
-    fn emit(&mut self, kind: impl Into<InstructionKind>, type_: Type) {
-        let kind = kind.into();
-        self.instructions.push(Instruction { kind, type_ });
+    fn init(mut self) -> LowerHir<'mir> {
+        self.context.push_function(Function::new());
+        self
     }
 
-    fn variable(&mut self) -> Variable {
-        let variable = self.variable;
-        self.variable = self.variable.next();
-        variable
+    #[inline]
+    fn instruction(&mut self, instruction: Instruction) -> InstructionId {
+        self.context.function().instruction(instruction)
     }
 
-    #[rustfmt::skip]
-    fn lower(&mut self, node: &hir::Node) -> Result<Variable> {
+    fn lower(&mut self, node: &hir::Node) -> Result<InstructionId> {
         match &node.kind {
-            hir::NodeKind::Define(define) => self.define(node, define),
-            hir::NodeKind::Local(local) => self.local(node, local),
+            hir::NodeKind::Global(global) => self.global(node, global),
             hir::NodeKind::Unary(unary) => self.unary(node, unary),
             hir::NodeKind::Binary(binary) => self.binary(node, binary),
-            hir::NodeKind::Integer(literal) => self.integer(node, literal),
-            hir::NodeKind::Number(literal) => self.number(node, literal),
-            hir::NodeKind::Boolean(boolean) => self.boolean(node, boolean),
+            hir::NodeKind::LocalRef(local) => self.local_ref(node, local),
+            hir::NodeKind::GlobalRef(global) => self.global_ref(node, global),
+            hir::NodeKind::Number(number) => self.number(node, number),
+            hir::NodeKind::Integer(integer) => self.integer(node, integer),
+            hir::NodeKind::True => self.boolean(node, true),
+            hir::NodeKind::False => self.boolean(node, false),
         }
     }
 
-    fn define(&mut self, _node: &hir::Node, define: &hir::Define) -> Result<Variable> {
-        let variable_id = self.lower(&define.value)?;
-        self.variables.insert(define.symbol, variable_id);
+    fn global(&mut self, node: &hir::Node, global: &hir::Global) -> Result<InstructionId> {
+        self.context.push_function(Function::new());
+        let value = self.lower(&global.value)?;
 
-        Ok(variable_id)
-    }
+        let initializer = self.context.pop_function();
+        let function = self.functions.insert(global.name, initializer);
 
-    fn local(&mut self, node: &hir::Node, local: &hir::Local) -> Result<Variable> {
-        let Some(&instruction_id) = self.variables.get(&local.symbol_id) else {
-            let symbol = self
-                .state
-                .symbol_by_id(local.symbol_id)
-                .expect("invalid symbol id");
-
-            return self.fail(node.span, format!("variable `{}` not defined", symbol.name));
-        };
-
-        Ok(instruction_id)
-    }
-
-    fn integer(&mut self, _node: &hir::Node, integer: &hir::Integer) -> Result<Variable> {
-        let target = self.variable();
-
-        self.emit(
-            Integer {
-                target,
-                value: integer.value,
+        self.globals.insert(
+            global.name,
+            Global {
+                function,
+                type_id: node.type_id,
             },
-            types::INTEGER,
         );
 
-        Ok(target)
+        Ok(value)
     }
 
-    fn number(&mut self, _node: &hir::Node, number: &hir::Number) -> Result<Variable> {
-        let target = self.variable();
-
-        self.emit(
-            Number {
-                target,
-                value: number.value,
-            },
-            types::NUMBER,
-        );
-
-        Ok(target)
+    fn local_ref(&mut self, node: &hir::Node, local: &hir::LocalRef) -> Result<InstructionId> {
+        todo!()
     }
 
-    fn boolean(&mut self, _node: &hir::Node, boolean: &hir::Boolean) -> Result<Variable> {
-        let target = self.variable();
+    fn global_ref(&mut self, node: &hir::Node, global: &hir::GlobalRef) -> Result<InstructionId> {
+        let id = self.globals.id(global.name).expect("malformed hir node");
 
-        self.emit(
-            Boolean {
-                target,
-                value: boolean.value,
-            },
-            types::BOOLEAN,
-        );
-
-        Ok(target)
+        Ok(self.instruction(Instruction::load_global(id, node.type_id)))
     }
 
-    fn convert(
+    fn number(&mut self, _node: &hir::Node, number: &hir::Number) -> Result<InstructionId> {
+        Ok(self.instruction(Instruction::number(number.value)))
+    }
+
+    fn integer(&mut self, _node: &hir::Node, integer: &hir::Integer) -> Result<InstructionId> {
+        Ok(self.instruction(Instruction::integer(integer.value)))
+    }
+
+    fn boolean(&mut self, _node: &hir::Node, truthy: bool) -> Result<InstructionId> {
+        Ok(self.instruction(Instruction::boolean(truthy)))
+    }
+
+    fn coerce(
         &mut self,
-        source: Variable,
-        node_type: Type,
-        other_type: Type,
-        result_type: Type,
-    ) -> Variable {
+        source: InstructionId,
+        node_type: TypeId,
+        other_type: TypeId,
+        result_type: TypeId,
+    ) -> InstructionId {
         if (other_type == types::NUMBER || result_type == types::NUMBER)
             && node_type == types::INTEGER
         {
-            let target = self.variable();
-            self.emit(ToNumber { source, target }, types::NUMBER);
-            target
+            self.instruction(Instruction::to_number(source))
         } else {
             source
         }
     }
 
-    fn unary(&mut self, node: &hir::Node, unary: &hir::Unary) -> Result<Variable> {
+    fn unary(&mut self, node: &hir::Node, unary: &hir::Unary) -> Result<InstructionId> {
         let operand = self.lower(&unary.operand)?;
-        let target = self.variable();
-
-        self.emit(
-            Unary {
-                target,
-                operator: unary.operator,
-                operand,
-            },
-            node.type_,
-        );
-
-        Ok(target)
+        Ok(self.instruction(Instruction::unary(unary.operator, operand, node.type_id)))
     }
 
-    fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<Variable> {
+    fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<InstructionId> {
         let loperand = self.lower(&binary.loperand)?;
         let roperand = self.lower(&binary.roperand)?;
         let loperand =
-            self.convert(loperand, binary.loperand.type_, binary.roperand.type_, node.type_);
+            self.coerce(loperand, binary.loperand.type_id, binary.roperand.type_id, node.type_id);
         let roperand =
-            self.convert(roperand, binary.roperand.type_, binary.loperand.type_, node.type_);
+            self.coerce(roperand, binary.roperand.type_id, binary.loperand.type_id, node.type_id);
 
-        let target = self.variable();
-
-        self.emit(
-            Binary {
-                target,
-                operator: binary.operator,
-                loperand,
-                roperand,
-            },
-            node.type_,
-        );
-
-        Ok(target)
+        Ok(self.instruction(Instruction::binary(binary.operator, loperand, roperand, node.type_id)))
     }
 
-    fn finish(&mut self) -> Result<()> {
-        if let Some(instruction) = self.instructions.last() {
-            self.emit(
-                Return {
-                    source: instruction.target(),
-                },
-                instruction.type_,
-            );
-        } else {
-            self.emit(Return { source: None }, types::NOTHING);
+    fn finish(mut self) -> Module {
+        let entrypoint_symbol = self.interner.intern("__entrypoint");
+        let entrypoint_function = self.context.pop_function();
+
+        debug_assert!(self.context.functions.is_empty(), "function context is not empty");
+
+        self.functions.insert(entrypoint_symbol, entrypoint_function);
+
+        Module {
+            globals: self.globals,
+            functions: self.functions,
         }
-        Ok(())
-    }
-
-    fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
-        Err(Error::error(span, message.into()))
     }
 }
 
-pub fn from_hir(module: &hir::Module, state: &mut State) -> Result<Module> {
-    let mut lower = LowerHir::new(state);
+pub fn from_hir(module: &hir::Module, interner: &mut Interner) -> Result<Module> {
+    let mut lower = LowerHir::new(interner);
 
     for node in &module.nodes {
         lower.lower(node)?;
     }
 
-    lower.finish()?;
-
-    Ok(Module {
-        instructions: lower.instructions,
-    })
+    Ok(lower.finish())
 }

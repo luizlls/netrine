@@ -1,183 +1,187 @@
 use std::fmt::{self, Display};
 
+use crate::collections::IndexMap;
 use crate::error::{Error, Result};
-use crate::source::{Span, ToSpan};
-use crate::state::{self, State, SymbolId};
+use crate::interner::{Interner, Name};
+use crate::macros::entity_id;
+use crate::source::{Source, Span};
 use crate::syntax;
-use crate::types::{self, Type};
+use crate::types::{self, TypeId};
 
 #[derive(Debug, Clone)]
 pub struct Module {
-    pub(crate) nodes: Vec<Node>,
-}
-
-impl Display for Module {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for node in &self.nodes {
-            writeln!(f, "{node}")?;
-        }
-        Ok(())
-    }
+    pub nodes: Vec<Node>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
-    pub(crate) kind: NodeKind,
-    pub(crate) span: Span,
-    pub(crate) type_: Type,
+    pub kind: NodeKind,
+    pub span: Span,
+    pub type_id: TypeId,
 }
 
-impl ToSpan for Node {
-    fn span(&self) -> Span {
-        self.span
-    }
-}
-
-impl Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            NodeKind::Define(define) => write!(f, "{define}"),
-            NodeKind::Unary(unary) => write!(f, "{unary}"),
-            NodeKind::Binary(binary) => write!(f, "{binary}"),
-            NodeKind::Local(local) => write!(f, "{local}"),
-            NodeKind::Integer(integer) => write!(f, "{integer}"),
-            NodeKind::Number(number) => write!(f, "{number}"),
-            NodeKind::Boolean(boolean) => write!(f, "{boolean}"),
+impl Node {
+    pub fn new(kind: NodeKind, span: Span, type_id: TypeId) -> Node {
+        Node {
+            kind,
+            span,
+            type_id,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeKind {
-    Define(Box<Define>),
+    Global(Box<Global>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
-    Local(Local),
+    LocalRef(LocalRef),
+    GlobalRef(GlobalRef),
     Integer(Integer),
     Number(Number),
-    Boolean(Boolean),
+    True,
+    False,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Define {
-    pub(crate) symbol: SymbolId,
-    pub(crate) value: Node,
+pub struct Global {
+    pub name: Name,
+    pub value: Node,
 }
 
-impl From<Define> for NodeKind {
-    fn from(define: Define) -> NodeKind {
-        NodeKind::Define(Box::new(define))
-    }
-}
-
-impl Display for Define {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(define {} {})", self.symbol, self.value)
+impl Node {
+    pub fn global(name: Name, value: Node, span: Span, type_id: TypeId) -> Node {
+        Node {
+            kind: NodeKind::Global(Global { name, value }.into()),
+            span,
+            type_id,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Local {
-    pub(crate) symbol_id: SymbolId,
+pub struct LocalRef {
+    pub name: Name,
 }
 
-impl From<Local> for NodeKind {
-    fn from(local: Local) -> NodeKind {
-        NodeKind::Local(local)
+impl Node {
+    pub fn local_ref(name: Name, span: Span, type_id: TypeId) -> Node {
+        Node {
+            kind: NodeKind::LocalRef(LocalRef { name }),
+            span,
+            type_id,
+        }
     }
 }
 
-impl Display for Local {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(local {})", self.symbol_id)
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlobalRef {
+    pub name: Name,
+}
+
+impl Node {
+    pub fn global_ref(name: Name, span: Span, type_id: TypeId) -> Node {
+        Node {
+            kind: NodeKind::GlobalRef(GlobalRef { name }),
+            span,
+            type_id,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Unary {
-    pub(crate) operator: Operator,
-    pub(crate) operand: Node,
+    pub operator: Operator,
+    pub operand: Node,
 }
 
-impl From<Unary> for NodeKind {
-    fn from(unary: Unary) -> NodeKind {
-        NodeKind::Unary(Box::new(unary))
-    }
-}
-
-impl Display for Unary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {})", self.operator, self.operand)
+impl Node {
+    pub fn unary(operator: Operator, operand: Node, span: Span, type_id: TypeId) -> Node {
+        Node {
+            kind: NodeKind::Unary(
+                Unary {
+                    operator,
+                    operand,
+                }
+                .into(),
+            ),
+            span,
+            type_id,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Binary {
-    pub(crate) operator: Operator,
-    pub(crate) loperand: Node,
-    pub(crate) roperand: Node,
+    pub operator: Operator,
+    pub loperand: Node,
+    pub roperand: Node,
 }
 
-impl From<Binary> for NodeKind {
-    fn from(binary: Binary) -> NodeKind {
-        NodeKind::Binary(Box::new(binary))
-    }
-}
-
-impl Display for Binary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({} {} {})", self.operator, self.loperand, self.roperand)
+impl Node {
+    pub fn binary(
+        operator: Operator,
+        loperand: Node,
+        roperand: Node,
+        span: Span,
+        type_id: TypeId,
+    ) -> Node {
+        Node {
+            kind: NodeKind::Binary(
+                Binary {
+                    operator,
+                    loperand,
+                    roperand,
+                }
+                .into(),
+            ),
+            span,
+            type_id,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
-    pub(crate) value: i64,
+    pub value: i64,
 }
 
-impl From<Integer> for NodeKind {
-    fn from(integer: Integer) -> NodeKind {
-        NodeKind::Integer(integer)
-    }
-}
-
-impl Display for Integer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(integer {})", self.value)
+impl Node {
+    pub fn integer(value: i64, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Integer(Integer { value }),
+            span,
+            type_id: types::INTEGER,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Number {
-    pub(crate) value: f64,
+    pub value: f64,
 }
 
-impl From<Number> for NodeKind {
-    fn from(number: Number) -> NodeKind {
-        NodeKind::Number(number)
+impl Node {
+    pub fn number(value: f64, span: Span) -> Node {
+        Node {
+            kind: NodeKind::Number(Number { value }),
+            span,
+            type_id: types::NUMBER,
+        }
     }
 }
 
-impl Display for Number {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(number {})", self.value)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Boolean {
-    pub(crate) value: bool,
-}
-
-impl From<Boolean> for NodeKind {
-    fn from(boolean: Boolean) -> NodeKind {
-        NodeKind::Boolean(boolean)
-    }
-}
-
-impl Display for Boolean {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
+impl Node {
+    pub fn bool(truthy: bool, span: Span) -> Node {
+        Node {
+            kind: if truthy {
+                NodeKind::True
+            } else {
+                NodeKind::False
+            },
+            span,
+            type_id: types::BOOLEAN,
+        }
     }
 }
 
@@ -228,21 +232,80 @@ impl Display for Operator {
     }
 }
 
+entity_id!(SymbolId, u32);
+
+#[derive(Debug, Clone)]
+pub struct Symbol {
+    pub id: SymbolId,
+    pub kind: SymbolKind,
+    pub name: Name,
+    pub span: Span,
+    pub type_id: TypeId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolKind {
+    Local,
+    Global,
+}
+
+#[derive(Debug)]
+pub struct Symbols {
+    pub symbols: IndexMap<Name, SymbolId, Symbol>,
+}
+
+impl Symbols {
+    pub fn new() -> Symbols {
+        Symbols {
+            symbols: IndexMap::new(),
+        }
+    }
+
+    pub fn define(
+        &mut self,
+        name: Name,
+        kind: SymbolKind,
+        span: Span,
+        type_id: TypeId,
+    ) -> SymbolId {
+        self.symbols.insert_with(name, |id| {
+            Symbol {
+                id,
+                name,
+                kind,
+                span,
+                type_id,
+            }
+        })
+    }
+
+    pub fn symbol(&self, id: SymbolId) -> Option<&Symbol> {
+        self.symbols.get_by_id(id)
+    }
+
+    pub fn lookup(&self, name: Name) -> Option<&Symbol> {
+        self.symbols.get(name)
+    }
+}
+
+#[derive(Debug)]
 struct LowerSyntax<'hir> {
-    state: &'hir mut State,
+    source: &'hir Source,
+    interner: &'hir mut Interner,
+    symbols: Symbols,
 }
 
 impl<'hir> LowerSyntax<'hir> {
-    fn new(state: &'hir mut State) -> LowerSyntax<'hir> {
-        LowerSyntax { state }
+    fn new(source: &'hir Source, interner: &'hir mut Interner) -> LowerSyntax<'hir> {
+        LowerSyntax {
+            source,
+            interner,
+            symbols: Symbols::new(),
+        }
     }
 
-    fn node(&mut self, span: Span, type_: Type, kind: impl Into<NodeKind>) -> Node {
-        Node {
-            kind: kind.into(),
-            span,
-            type_,
-        }
+    fn intern(&mut self, name: &syntax::Name) -> Name {
+        self.interner.intern(self.source.slice(name.span))
     }
 
     fn lower(&mut self, node: &syntax::Node) -> Result<Node> {
@@ -251,37 +314,36 @@ impl<'hir> LowerSyntax<'hir> {
             syntax::NodeKind::Unary(unary) => self.unary(node, unary),
             syntax::NodeKind::Binary(binary) => self.binary(node, binary),
             syntax::NodeKind::Name(name) => self.name(node, name),
-            syntax::NodeKind::Number(literal) => self.number(node, literal),
-            syntax::NodeKind::Integer(literal) => self.integer(node, literal),
+            syntax::NodeKind::Number => self.number(node),
+            syntax::NodeKind::Integer => self.integer(node),
+            syntax::NodeKind::True => self.bool(node, true),
+            syntax::NodeKind::False => self.bool(node, false),
         }
     }
 
-    fn define(&mut self, node: &syntax::Node, definition: &syntax::Define) -> Result<Node> {
-        let value = self.lower(&definition.value)?;
-        let type_ = value.type_;
-        let symbol = self.state.define(definition.name.value.clone(), type_);
+    fn define(&mut self, node: &syntax::Node, def: &syntax::Define) -> Result<Node> {
+        let name = self.intern(&def.name);
 
-        Ok(self.node(node.span, type_, Define { symbol, value }))
+        if self.symbols.lookup(name).is_some() {
+            return self.fail(node.span, format!("`{}` is already defined", &self.interner[name]));
+        };
+
+        let value = self.lower(&def.value)?;
+        let type_id = value.type_id;
+
+        self.symbols.define(name, SymbolKind::Global, node.span, type_id);
+
+        Ok(Node::global(name, value, node.span, type_id))
     }
 
     fn name(&mut self, node: &syntax::Node, name: &syntax::Name) -> Result<Node> {
-        let Some(symbol) = self.state.symbol(&name.value) else {
-            return self.fail(node.span, format!("`{}` not defined", name.value));
+        let name = self.intern(name);
+
+        let Some(symbol) = self.symbols.lookup(name) else {
+            return self.fail(node.span, format!("`{}` is not defined", &self.interner[name]));
         };
 
-        Ok(match symbol.symbol_id {
-            state::TRUE => self.node(node.span, symbol.type_, Boolean { value: true }),
-            state::FALSE => self.node(node.span, symbol.type_, Boolean { value: false }),
-            _ => {
-                self.node(
-                    node.span,
-                    symbol.type_,
-                    Local {
-                        symbol_id: symbol.symbol_id,
-                    },
-                )
-            }
-        })
+        Ok(Node::global_ref(name, node.span, symbol.type_id))
     }
 
     fn binary(&mut self, node: &syntax::Node, binary: &syntax::Binary) -> Result<Node> {
@@ -304,18 +366,18 @@ impl<'hir> LowerSyntax<'hir> {
             syntax::OperatorKind::And => Operator::And,
             syntax::OperatorKind::Or => Operator::Or,
             _ => {
-                return self.fail(binary.operator.span, "unsupported binary operator");
+                return self.fail(node.span, "unsupported binary operator");
             }
         };
 
-        let type_ = match operator {
+        let type_id = match operator {
             Operator::And | Operator::Or => {
                 self.expect_type(&loperand, types::BOOLEAN)?;
                 self.expect_type(&roperand, types::BOOLEAN)?;
                 types::BOOLEAN
             }
             Operator::Eq | Operator::Ne => {
-                match loperand.type_ {
+                match loperand.type_id {
                     types::BOOLEAN => self.expect_type(&roperand, types::BOOLEAN)?,
                     types::INTEGER => self.expect_type(&roperand, types::NUMBER)?,
                     types::NUMBER => self.expect_type(&roperand, types::NUMBER)?,
@@ -334,7 +396,7 @@ impl<'hir> LowerSyntax<'hir> {
                 self.expect_type(&loperand, types::NUMBER)?;
                 self.expect_type(&roperand, types::NUMBER)?;
 
-                if loperand.type_ == types::INTEGER && roperand.type_ == types::INTEGER {
+                if loperand.type_id == types::INTEGER && roperand.type_id == types::INTEGER {
                     types::INTEGER
                 } else {
                     types::NUMBER
@@ -355,15 +417,7 @@ impl<'hir> LowerSyntax<'hir> {
             }
         };
 
-        Ok(self.node(
-            node.span,
-            type_,
-            Binary {
-                operator,
-                loperand,
-                roperand,
-            },
-        ))
+        Ok(Node::binary(operator, loperand, roperand, node.span, type_id))
     }
 
     fn unary(&mut self, node: &syntax::Node, unary: &syntax::Unary) -> Result<Node> {
@@ -374,61 +428,62 @@ impl<'hir> LowerSyntax<'hir> {
             syntax::OperatorKind::Neg => Operator::Neg,
             syntax::OperatorKind::Not => Operator::Not,
             _ => {
-                return self.fail(unary.operator.span, "unsupported unary operator");
+                return self.fail(node.span, "unsupported unary operator");
             }
         };
 
-        let type_ = match operator {
+        let type_id = match operator {
             Operator::Not => {
                 self.expect_type(&operand, types::BOOLEAN)?;
                 types::BOOLEAN
             }
             Operator::Pos | Operator::Neg => {
                 self.expect_type(&operand, types::NUMBER)?;
-                operand.type_
+                operand.type_id
             }
             _ => {
                 return self.fail(node.span, "invalid unary operator");
             }
         };
 
-        Ok(self.node(
-            node.span,
-            type_,
-            Unary {
-                operator,
-                operand,
-            },
-        ))
+        Ok(Node::unary(operator, operand, node.span, type_id))
     }
 
-    fn number(&mut self, node: &syntax::Node, number: &syntax::Literal) -> Result<Node> {
-        let Ok(value) = str::parse(&number.value) else {
+    fn number(&mut self, node: &syntax::Node) -> Result<Node> {
+        let value = self.source.slice(node.span);
+
+        let Ok(value) = str::parse(&value) else {
             return self.fail(node.span, "value is not supported as an number");
         };
 
-        Ok(self.node(node.span, types::NUMBER, Number { value }))
+        Ok(Node::number(value, node.span))
     }
 
-    fn integer(&mut self, node: &syntax::Node, integer: &syntax::Literal) -> Result<Node> {
-        let value = match &integer.value.get(0..2) {
-            Some("0b") => i64::from_str_radix(&integer.value[2..], 2),
-            Some("0x") => i64::from_str_radix(&integer.value[2..], 16),
-            _ => str::parse(&integer.value),
+    fn integer(&mut self, node: &syntax::Node) -> Result<Node> {
+        let value = self.source.slice(node.span);
+
+        let value = match &value.get(0..2) {
+            Some("0b") => i64::from_str_radix(&value[2..], 2),
+            Some("0x") => i64::from_str_radix(&value[2..], 16),
+            _ => str::parse(&value),
         };
 
         let Ok(value) = value else {
             return self.fail(node.span, "value is not supported as an integer");
         };
 
-        Ok(self.node(node.span, types::INTEGER, Integer { value }))
+        Ok(Node::integer(value, node.span))
     }
 
-    fn expect_type(&self, node: &Node, expected_type: Type) -> Result<()> {
-        if node.type_.is(expected_type) {
+    fn bool(&mut self, node: &syntax::Node, truthy: bool) -> Result<Node> {
+        Ok(Node::bool(truthy, node.span))
+    }
+
+    fn expect_type(&self, node: &Node, expected_type: TypeId) -> Result<()> {
+        if node.type_id.is(expected_type) {
             Ok(())
         } else {
-            self.fail(node.span, format!("expected `{}`, found `{}`", expected_type, node.type_))
+            self.fail(node.span, format!("expected `{}`, found `{}`", expected_type, node.type_id))
         }
     }
 
@@ -437,8 +492,12 @@ impl<'hir> LowerSyntax<'hir> {
     }
 }
 
-pub fn from_syntax(module: &syntax::Module, state: &mut State) -> Result<Module> {
-    let mut lower = LowerSyntax::new(state);
+pub fn from_syntax(
+    module: &syntax::Module,
+    source: &Source,
+    interner: &mut Interner,
+) -> Result<Module> {
+    let mut lower = LowerSyntax::new(source, interner);
     let mut nodes = vec![];
 
     for node in &module.nodes {
@@ -447,6 +506,3 @@ pub fn from_syntax(module: &syntax::Module, state: &mut State) -> Result<Module>
 
     Ok(Module { nodes })
 }
-
-#[cfg(test)]
-mod tests {}

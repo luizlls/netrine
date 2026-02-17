@@ -3,13 +3,17 @@ use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct Source {
-    pub(crate) path: String,
-    pub(crate) content: String,
+    pub path: String,
+    pub content: String,
 }
 
 impl Source {
     pub fn new(path: String, content: String) -> Source {
         Source { path, content }
+    }
+
+    pub fn slice(&self, span: Span) -> &str {
+        &self.content[span.start as usize..span.end as usize]
     }
 }
 
@@ -19,10 +23,6 @@ pub struct Span {
     pub end: u32,
 }
 
-pub trait ToSpan {
-    fn span(&self) -> Span;
-}
-
 impl Span {
     pub const ZERO: Span = Span::new(0, 0);
 
@@ -30,10 +30,10 @@ impl Span {
         Span { start, end }
     }
 
-    pub fn from(from: &impl ToSpan, to: &impl ToSpan) -> Span {
+    pub const fn from(from: Span, to: Span) -> Span {
         Span {
-            start: from.span().start,
-            end: to.span().end,
+            start: from.start,
+            end: to.end,
         }
     }
 }
@@ -53,11 +53,5 @@ impl From<Span> for Range<usize> {
 impl Span {
     pub fn range(self) -> Range<usize> {
         (self.start as usize)..(self.end as usize)
-    }
-}
-
-impl ToSpan for Span {
-    fn span(&self) -> Span {
-        *self
     }
 }
