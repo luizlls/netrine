@@ -55,3 +55,24 @@ impl Span {
         (self.start as usize)..(self.end as usize)
     }
 }
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WithSpan<T> {
+    pub value: T,
+    pub span: Span,
+}
+
+impl<T> WithSpan<T> {
+    pub fn new(value: T, span: Span) -> WithSpan<T> {
+        WithSpan { value, span }
+    }
+}
+
+impl<T> Display for WithSpan<T>
+where
+    T: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.value, self.span)
+    }
+}

@@ -27,6 +27,14 @@ where
         index
     }
 
+    pub fn insert(&mut self, index: I, value: V)
+    where
+        I: Eq,
+    {
+        debug_assert!(index == I::from(self.values.len()));
+        self.values.push(value);
+    }
+
     pub fn push_with<F>(&mut self, f: F) -> I
     where
         F: FnOnce(I) -> V,
@@ -162,6 +170,10 @@ where
 
     pub fn id(&self, key: K) -> Option<I> {
         self.entries.get(&key).cloned()
+    }
+
+    pub fn values(self) -> IndexVec<I, V> {
+        self.values
     }
 }
 

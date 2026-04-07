@@ -1,7 +1,6 @@
 use std::fs;
 
 use crate::error::Result;
-use crate::hir;
 use crate::interner::Interner;
 use crate::lexer;
 use crate::mir;
@@ -23,19 +22,14 @@ impl<'state> Compiler<'state> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<syntax::Module> {
+    pub fn parse(&mut self) -> Result<syntax::Syntax> {
         let tokens = lexer::tokens(&self.source);
         parser::parse(tokens)
     }
 
-    pub fn hir(&mut self) -> Result<hir::Module> {
-        let ast = self.parse()?;
-        hir::from_syntax(&ast, &self.source, &mut self.interner)
-    }
-
     pub fn mir(&mut self) -> Result<mir::Module> {
-        let hir = self.hir()?;
-        mir::from_hir(&hir, &mut self.interner)
+        let syntax = self.parse()?;
+        mir::from_syntax(&syntax, &self.source, &mut self.interner)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {
