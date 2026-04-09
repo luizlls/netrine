@@ -41,15 +41,20 @@ impl Syntax {
         self.nodes.index()
     }
 
-    pub fn resize(&mut self, node: NodeIndex, size: u32) {
-        self.sizes[node] = size;
+    pub fn resize(&mut self, index: NodeIndex, size: u32) {
+        self.sizes[index] = size;
+    }
+
+    pub fn replace(&mut self, index: NodeIndex, kind: NodeKind) {
+        let node = self.nodes[index];
+        self.nodes[index] = Node { kind, ..node };
     }
 }
 
 entity_id!(TokenIndex, u32);
 entity_id!(NodeIndex, u32);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Node {
     pub kind: NodeKind,
     pub token: TokenIndex,
@@ -68,6 +73,7 @@ pub enum NodeKind {
     Let,
     Fn,
     Parameter,
+    Parameters,
     Group,
     Unary(Operator),
     Binary(Operator),
@@ -83,6 +89,7 @@ pub enum End {
     Let,
     Fn,
     Parameter,
+    Parameters,
     Group,
 }
 

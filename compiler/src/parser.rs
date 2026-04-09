@@ -44,8 +44,12 @@ impl<'parser> Parser<'parser> {
         }
     }
 
-    pub fn at(&self, kind: Token) -> bool {
+    fn at(&self, kind: Token) -> bool {
         self.current.value == kind
+    }
+
+    fn peek_is(&self, kind: Token) -> bool {
+        self.tokens.peek().value == kind
     }
 
     fn done(&self) -> bool {
@@ -87,11 +91,44 @@ impl<'parser> Parser<'parser> {
         let start = self.start(NodeKind::Let);
 
         self.expect(Token::Let)?;
+
+        if self.at(Token::Identifier) && self.peek_is(Token::LParen) {
+            return self.function(start);
+        }
+
         self.name()?;
         self.expect(Token::Equals)?;
         self.expr()?;
 
         self.finish(start, End::Let);
+
+        Ok(())
+    }
+
+    fn function(&mut self, start: NodeIndex) -> Result<()> {
+        self.syntax.replace(start, NodeKind::Fn);
+
+        self.name()?;
+        self.params()?;
+        self.expect(Token::Equals)?;
+        self.expr()?;
+
+        self.finish(start, End::Fn);
+
+        Ok(())
+    }
+
+    fn params(&mut self) -> Result<()> {
+        let start = self.start(NodeKind::Parameters);
+
+        self.seq(Token::LParen, Token::RParen, |parser| {
+            let start = parser.start(NodeKind::Parameter);
+            parser.name()?;
+            parser.finish(start, End::Parameter);
+            Ok(())
+        })?;
+
+        self.finish(start, End::Parameters);
 
         Ok(())
     }
@@ -170,8 +207,7 @@ impl<'parser> Parser<'parser> {
         self.unary()?;
 
         while let Some((operator, token)) = self.operator(precedence, false) {
-            // accepts newlines if the line ends with an operator
-            self.newline();
+            self.newline(); // accepts newlines if the line ends with an operator
 
             let next_precedence = if operator == Operator::Pow {
                 operator.precedence()
@@ -247,7 +283,7 @@ impl<'parser> Parser<'parser> {
         }
     }
 
-    fn seq<F>(&mut self, until: Token, mut parse: F) -> Result<usize>
+    fn seq<F>(&mut self, before: Token, after: Token, mut parse: F) -> Result<usize>
     where
         F: FnMut(&mut Self) -> Result<()>,
     {
@@ -255,7 +291,9 @@ impl<'parser> Parser<'parser> {
 
         self.newline();
 
-        while !self.at(until) {
+        self.expect(before)?;
+
+        while !self.at(after) {
             parse(self)?;
             count += 1;
 
@@ -266,10 +304,12 @@ impl<'parser> Parser<'parser> {
             self.newline();
         }
 
+        self.expect(after)?;
+
         Ok(count)
     }
 
-    fn many<F>(&mut self, until: Token, mut parse: F) -> Result<usize>
+    fn many<F>(&mut self, before: Token, after: Token, mut parse: F) -> Result<usize>
     where
         F: FnMut(&mut Self) -> Result<()>,
     {
@@ -277,11 +317,15 @@ impl<'parser> Parser<'parser> {
 
         self.newline();
 
-        while !self.at(until) {
+        self.expect(before)?;
+
+        while !self.at(after) {
             parse(self)?;
             count += 1;
             self.newline();
         }
+
+        self.expect(after)?;
 
         Ok(count)
     }

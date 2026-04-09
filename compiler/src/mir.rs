@@ -24,19 +24,7 @@ impl Module {
 entity_id!(InstructionId, u32);
 
 #[derive(Debug, Clone)]
-pub struct Instruction {
-    pub kind: InstructionKind,
-    pub type_id: TypeId,
-}
-
-impl Instruction {
-    pub fn new(kind: InstructionKind, type_id: TypeId) -> Instruction {
-        Instruction { kind, type_id }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum InstructionKind {
+pub enum Instruction {
     LoadGlobal(LoadGlobal),
     Binary(Binary),
     Unary(Unary),
@@ -52,11 +40,8 @@ pub struct LoadGlobal {
 }
 
 impl Instruction {
-    const fn load_global(global: GlobalId, type_id: TypeId) -> Instruction {
-        Instruction {
-            kind: InstructionKind::LoadGlobal(LoadGlobal { global }),
-            type_id,
-        }
+    const fn load_global(global: GlobalId) -> Instruction {
+        Instruction::LoadGlobal(LoadGlobal { global })
     }
 }
 
@@ -88,14 +73,11 @@ pub struct Unary {
 }
 
 impl Instruction {
-    const fn unary(operator: Operator, operand: InstructionId, type_id: TypeId) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Unary(Unary {
-                operator,
-                operand,
-            }),
-            type_id,
-        }
+    const fn unary(operator: Operator, operand: InstructionId) -> Instruction {
+        Instruction::Unary(Unary {
+            operator,
+            operand,
+        })
     }
 }
 
@@ -111,16 +93,12 @@ impl Instruction {
         operator: Operator,
         loperand: InstructionId,
         roperand: InstructionId,
-        type_id: TypeId,
     ) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Binary(Binary {
-                operator,
-                loperand,
-                roperand,
-            }),
-            type_id,
-        }
+        Instruction::Binary(Binary {
+            operator,
+            loperand,
+            roperand,
+        })
     }
 }
 
@@ -131,10 +109,7 @@ pub struct Integer {
 
 impl Instruction {
     const fn integer(value: i64) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Integer(Integer { value }),
-            type_id: types::INTEGER,
-        }
+        Instruction::Integer(Integer { value })
     }
 }
 
@@ -145,22 +120,16 @@ pub struct Number {
 
 impl Instruction {
     const fn number(value: f64) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Number(Number { value }),
-            type_id: types::NUMBER,
-        }
+        Instruction::Number(Number { value })
     }
 }
 
 impl Instruction {
     const fn boolean(truthy: bool) -> Instruction {
-        Instruction {
-            kind: if truthy {
-                InstructionKind::True
-            } else {
-                InstructionKind::False
-            },
-            type_id: types::BOOLEAN,
+        if truthy {
+            Instruction::True
+        } else {
+            Instruction::False
         }
     }
 }
