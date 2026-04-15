@@ -1,13 +1,13 @@
 use std::alloc::{Layout, alloc, dealloc};
 
 #[unsafe(no_mangle)]
-pub extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {
+pub unsafe extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {
     let layout = Layout::from_size_align(size, align).unwrap();
     unsafe { alloc(layout) }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn deallocate(ptr: *mut u8, size: usize, align: usize) {
+pub unsafe extern "C" fn deallocate(ptr: *mut u8, size: usize, align: usize) {
     let layout = Layout::from_size_align(size, align).unwrap();
     unsafe { dealloc(ptr, layout) }
 }
@@ -52,6 +52,6 @@ impl WasmResult {
 pub extern "C" fn deallocate_result(result: WasmResultPointer) {
     unsafe {
         let result = &*result;
-        drop(Box::from_raw(std::slice::from_raw_parts_mut(result.ptr, result.len)));
+        drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(result.ptr, result.len)));
     }
 }

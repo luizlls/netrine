@@ -1,9 +1,12 @@
 use crate::collections::{IndexMap, IndexVec};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::interner::{Interner, Name};
 use crate::macros::entity_id;
-use crate::types::TypeId;
-use crate::{hir, types};
+use crate::source::{Source, Span, WithSpan};
+use crate::syntax::{self, NodeKind, Syntax};
+use crate::types::{self, TypeId};
+
+pub const ENTRYPOINT_NAME: &str = "__entrypoint";
 
 #[derive(Debug)]
 pub struct Module {
@@ -22,65 +25,75 @@ impl Module {
 
 entity_id!(InstructionId, u32);
 
-#[derive(Debug, Clone)]
-pub struct Instruction {
-    pub kind: InstructionKind,
-    pub type_id: TypeId,
-}
-
-impl Instruction {
-    pub fn new(kind: InstructionKind, type_id: TypeId) -> Instruction {
-        Instruction { kind, type_id }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum InstructionKind {
+#[derive(Debug, Clone, Copy)]
+pub enum Instruction {
+    Argument(Argument),
     LoadGlobal(LoadGlobal),
     Binary(Binary),
     Unary(Unary),
     Integer(Integer),
     Number(Number),
-    ToNumber(ToNumber),
     True,
     False,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+pub struct Argument {}
+
+impl Instruction {
+    const fn argument() -> Instruction {
+        Instruction::Argument(Argument {})
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct LoadGlobal {
     pub global: GlobalId,
 }
 
 impl Instruction {
-    const fn load_global(global: GlobalId, type_id: TypeId) -> Instruction {
-        Instruction {
-            kind: InstructionKind::LoadGlobal(LoadGlobal { global }),
-            type_id,
-        }
+    const fn load_global(global: GlobalId) -> Instruction {
+        Instruction::LoadGlobal(LoadGlobal { global })
     }
 }
 
-pub type Operator = hir::Operator;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Operator {
+    And, // and
+    Or,  // or
+    Not, // not
+    Pos, // +
+    Neg, // -
+    Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
+    Mod, // %
+    Pow, // ^
+    Eq,  // ==
+    Ne,  // !=
+    Lt,  // <
+    Le,  // <=
+    Gt,  // >
+    Ge,  // >=
+}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Unary {
     pub operator: Operator,
     pub operand: InstructionId,
 }
 
 impl Instruction {
-    const fn unary(operator: Operator, operand: InstructionId, type_id: TypeId) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Unary(Unary {
-                operator,
-                operand,
-            }),
-            type_id,
-        }
+    const fn unary(operator: Operator, operand: InstructionId) -> Instruction {
+        Instruction::Unary(Unary {
+            operator,
+            operand,
+        })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Binary {
     pub operator: Operator,
     pub loperand: InstructionId,
@@ -92,269 +105,486 @@ impl Instruction {
         operator: Operator,
         loperand: InstructionId,
         roperand: InstructionId,
-        type_id: TypeId,
     ) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Binary(Binary {
-                operator,
-                loperand,
-                roperand,
-            }),
-            type_id,
-        }
+        Instruction::Binary(Binary {
+            operator,
+            loperand,
+            roperand,
+        })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Integer {
     pub value: i64,
 }
 
 impl Instruction {
     const fn integer(value: i64) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Integer(Integer { value }),
-            type_id: types::INTEGER,
-        }
+        Instruction::Integer(Integer { value })
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Number {
     pub value: f64,
 }
 
 impl Instruction {
     const fn number(value: f64) -> Instruction {
-        Instruction {
-            kind: InstructionKind::Number(Number { value }),
-            type_id: types::NUMBER,
-        }
+        Instruction::Number(Number { value })
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ToNumber {
-    pub source: InstructionId,
-}
+entity_id!(LocalId, u32);
 
-impl Instruction {
-    const fn to_number(source: InstructionId) -> Instruction {
-        Instruction {
-            kind: InstructionKind::ToNumber(ToNumber { source }),
-            type_id: types::NUMBER,
-        }
-    }
-}
-
-impl Instruction {
-    const fn boolean(truthy: bool) -> Instruction {
-        Instruction {
-            kind: if truthy {
-                InstructionKind::True
-            } else {
-                InstructionKind::False
-            },
-            type_id: types::BOOLEAN,
-        }
-    }
+#[derive(Debug, Clone, Copy)]
+pub struct Local {
+    value: InstructionId,
+    type_id: TypeId,
 }
 
 entity_id!(GlobalId, u32);
 
 #[derive(Debug)]
-pub struct Global {
-    pub function: FunctionId,
+pub struct GlobalSignature {
+    pub name: Name,
+    pub span: Span,
     pub type_id: TypeId,
 }
 
-entity_id!(LocalId, u32);
-
 #[derive(Debug)]
-pub struct Local {
-    pub type_id: TypeId,
+pub struct Global {
+    pub signature: GlobalSignature,
+    pub instructions: IndexVec<InstructionId, Instruction>,
+    pub types: IndexVec<InstructionId, TypeId>,
+    pub spans: IndexVec<InstructionId, Span>,
+    pub locals: IndexVec<LocalId, Local>,
 }
 
 entity_id!(FunctionId, u32);
 
 #[derive(Debug)]
-pub struct Function {
-    pub instructions: IndexVec<InstructionId, Instruction>,
+pub struct FunctionSignature {
+    pub name: Name,
+    pub span: Span,
+    pub type_id: TypeId,
 }
 
-impl Function {
-    fn new() -> Function {
-        Function {
+#[derive(Debug)]
+pub struct Function {
+    pub signature: FunctionSignature,
+    pub instructions: IndexVec<InstructionId, Instruction>,
+    pub types: IndexVec<InstructionId, TypeId>,
+    pub spans: IndexVec<InstructionId, Span>,
+    pub locals: IndexVec<LocalId, Local>,
+    pub parameters: u8,
+}
+
+#[derive(Debug)]
+pub struct Builder {
+    pub instructions: IndexVec<InstructionId, Instruction>,
+    pub types: IndexVec<InstructionId, TypeId>,
+    pub spans: IndexVec<InstructionId, Span>,
+    pub locals: IndexMap<Name, LocalId, Local>,
+    pub parameters: u8,
+}
+
+impl Builder {
+    fn new() -> Builder {
+        Builder {
             instructions: IndexVec::new(),
+            types: IndexVec::new(),
+            spans: IndexVec::new(),
+            locals: IndexMap::new(),
+            parameters: 0,
         }
     }
 
-    fn instruction(&mut self, instruction: Instruction) -> InstructionId {
-        self.instructions.push(instruction)
+    fn local(&self, name: Name) -> Option<&Local> {
+        self.locals.get_by_key(name)
+    }
+
+    fn emit(&mut self, instruction: Instruction, span: Span) -> InstructionId {
+        let id = self.instructions.push(instruction);
+        self.spans.insert(id, span);
+        self.types.insert(id, types::UNKNOWN);
+        id
+    }
+
+    fn build_function(self, signature: FunctionSignature) -> Function {
+        Function {
+            signature,
+            instructions: self.instructions,
+            types: self.types,
+            spans: self.spans,
+            locals: self.locals.values(),
+            parameters: self.parameters,
+        }
+    }
+
+    fn build_global(self, signature: GlobalSignature) -> Global {
+        Global {
+            signature,
+            instructions: self.instructions,
+            types: self.types,
+            spans: self.spans,
+            locals: self.locals.values(),
+        }
     }
 }
 
 #[derive(Debug)]
 struct Context {
-    functions: Vec<Function>,
+    values: Vec<InstructionId>,
+    names: Vec<WithSpan<Name>>,
+    current: Builder,
+    builders: Vec<Builder>,
 }
 
 impl Context {
     fn new() -> Context {
         Context {
-            functions: Vec::new(),
+            values: Vec::new(),
+            names: Vec::new(),
+            current: Builder::new(),
+            builders: Vec::new(),
         }
     }
 
-    fn push_function(&mut self, function: Function) {
-        self.functions.push(function);
+    fn at_top_level(&self) -> bool {
+        self.builders.is_empty()
     }
 
-    fn pop_function(&mut self) -> Function {
-        self.functions.pop().expect("at least one function in the context")
+    fn push_name(&mut self, name: Name, span: Span) {
+        self.names.push(WithSpan::new(name, span));
     }
 
-    fn function(&mut self) -> &mut Function {
-        self.functions.last_mut().expect("at least one function in the context")
+    fn pop_name(&mut self) -> WithSpan<Name> {
+        self.names.pop().expect("mir: missing name in the context stack")
+    }
+
+    fn push_value(&mut self, value: InstructionId) {
+        self.values.push(value);
+    }
+
+    fn pop_value(&mut self) -> InstructionId {
+        self.values.pop().expect("mir: missing value in the context stack")
+    }
+
+    fn local(&self, name: Name) -> Option<&Local> {
+        self.current.local(name)
+    }
+
+    fn insert_parameter(&mut self, name: Name, value: InstructionId) -> LocalId {
+        self.current.parameters += 1;
+        self.insert_local(
+            name,
+            Local {
+                value,
+                type_id: types::UNKNOWN,
+            },
+        )
+    }
+
+    fn insert_local(&mut self, name: Name, local: Local) -> LocalId {
+        self.current.locals.insert(name, local)
+    }
+
+    fn emit(&mut self, instruction: Instruction, span: Span) -> InstructionId {
+        let id = self.current.emit(instruction, span);
+        self.push_value(id);
+        id
+    }
+
+    fn push_builder(&mut self) {
+        let current = std::mem::replace(&mut self.current, Builder::new());
+        self.builders.push(current);
+    }
+
+    fn pop_builder(&mut self) -> Builder {
+        std::mem::replace(&mut self.current, self.builders.pop().unwrap_or_else(Builder::new))
     }
 }
 
 #[derive(Debug)]
-struct LowerHir<'mir> {
+struct LowerSyntax<'mir> {
     globals: IndexMap<Name, GlobalId, Global>,
     functions: IndexMap<Name, FunctionId, Function>,
     context: Context,
     interner: &'mir mut Interner,
+    source: &'mir Source,
+    syntax: &'mir Syntax,
 }
 
-impl<'mir> LowerHir<'mir> {
-    fn new(interner: &'mir mut Interner) -> LowerHir<'mir> {
-        LowerHir {
+impl<'mir> LowerSyntax<'mir> {
+    fn new(
+        source: &'mir Source,
+        interner: &'mir mut Interner,
+        syntax: &'mir Syntax,
+    ) -> LowerSyntax<'mir> {
+        LowerSyntax {
             globals: IndexMap::new(),
             functions: IndexMap::new(),
             context: Context::new(),
             interner,
-        }
-        .init()
-    }
-
-    fn init(mut self) -> LowerHir<'mir> {
-        self.context.push_function(Function::new());
-        self
-    }
-
-    #[inline]
-    fn instruction(&mut self, instruction: Instruction) -> InstructionId {
-        self.context.function().instruction(instruction)
-    }
-
-    fn lower(&mut self, node: &hir::Node) -> Result<InstructionId> {
-        match &node.kind {
-            hir::NodeKind::Global(global) => self.global(node, global),
-            hir::NodeKind::Unary(unary) => self.unary(node, unary),
-            hir::NodeKind::Binary(binary) => self.binary(node, binary),
-            hir::NodeKind::LocalRef(local) => self.local_ref(node, local),
-            hir::NodeKind::GlobalRef(global) => self.global_ref(node, global),
-            hir::NodeKind::Number(number) => self.number(node, number),
-            hir::NodeKind::Integer(integer) => self.integer(node, integer),
-            hir::NodeKind::True => self.boolean(node, true),
-            hir::NodeKind::False => self.boolean(node, false),
+            source,
+            syntax,
         }
     }
 
-    fn global(&mut self, node: &hir::Node, global: &hir::Global) -> Result<InstructionId> {
-        self.context.push_function(Function::new());
-        let value = self.lower(&global.value)?;
+    fn lower(&mut self) -> Result<()> {
+        for node in &self.syntax.nodes {
+            let span = self.syntax.spans[node.token];
 
-        let initializer = self.context.pop_function();
-        let function = self.functions.insert(global.name, initializer);
+            match node.kind {
+                NodeKind::LetInit => self.setup_definition()?,
+                NodeKind::LetEnd => self.finish_definition()?,
+                NodeKind::FnInit => self.setup_function()?,
+                NodeKind::FnEnd => self.finish_function()?,
+                NodeKind::ParameterInit => self.setup_parameter()?,
+                NodeKind::ParameterEnd => self.finish_parameter()?,
+                NodeKind::Identifier => self.identifier(span)?,
+                NodeKind::Name => self.name(span)?,
+                NodeKind::Unary(operator) => self.unary(span, operator)?,
+                NodeKind::Binary(operator) => self.binary(span, operator)?,
+                NodeKind::Integer => self.integer(span)?,
+                NodeKind::Number => self.number(span)?,
+                NodeKind::True => self.boolean(span, true)?,
+                NodeKind::False => self.boolean(span, false)?,
+                // group nodes do not require any explicit action, as their inner expressions will be handled automatically
+                NodeKind::GroupInit => {}
+                NodeKind::GroupEnd => {}
+            }
+        }
 
-        self.globals.insert(
-            global.name,
-            Global {
-                function,
-                type_id: node.type_id,
+        Ok(())
+    }
+
+    fn setup_definition(&mut self) -> Result<()> {
+        // there's nothing to setup for now
+        Ok(())
+    }
+
+    fn global_definition(&mut self) -> Result<()> {
+        let (name, span) = self.context.pop_name().parts();
+
+        let global = self.context.pop_builder().build_global(GlobalSignature {
+            name,
+            span,
+            type_id: types::UNKNOWN,
+        });
+
+        if self.globals.get(name).is_some() {
+            let name = &self.interner[name];
+            return self.fail(span, format!("{name} already defined"));
+        }
+
+        self.globals.insert(name, global);
+
+        Ok(())
+    }
+
+    fn local_definition(&mut self) -> Result<()> {
+        let (name, span) = self.context.pop_name().parts();
+        let value = self.context.pop_value();
+
+        let local = Local {
+            value,
+            type_id: types::UNKNOWN,
+        };
+
+        if self.context.local(name).is_some() {
+            let name = &self.interner[name];
+            return self.fail(span, format!("{name} already defined"));
+        }
+
+        self.context.insert_local(name, local);
+
+        Ok(())
+    }
+
+    fn finish_definition(&mut self) -> Result<()> {
+        if self.context.at_top_level() {
+            self.global_definition()
+        } else {
+            self.local_definition()
+        }
+    }
+
+    fn setup_function(&mut self) -> Result<()> {
+        self.context.push_builder();
+        Ok(())
+    }
+
+    fn finish_function(&mut self) -> Result<()> {
+        let (name, span) = self.context.pop_name().parts();
+
+        let function = self.context.pop_builder().build_function(FunctionSignature {
+            name,
+            span,
+            type_id: types::UNKNOWN,
+        });
+
+        if self.functions.get(name).is_some() {
+            let name = &self.interner[name];
+            return self.fail(span, format!("{name} already defined"));
+        }
+
+        self.functions.insert(name, function);
+
+        Ok(())
+    }
+
+    fn setup_parameter(&mut self) -> Result<()> {
+        // there's nothing to setup for now
+        Ok(())
+    }
+
+    fn finish_parameter(&mut self) -> Result<()> {
+        let (name, span) = self.context.pop_name().parts();
+
+        if self.context.local(name).is_some() {
+            let name = &self.interner[name];
+            return self.fail(span, format!("Parameter {name} already defined"));
+        }
+
+        let value = self.context.emit(Instruction::argument(), span);
+        self.context.insert_parameter(name, value);
+
+        Ok(())
+    }
+
+    fn intern(&mut self, span: Span) -> Name {
+        let value = self.source.slice(span);
+        let name = self.interner.intern(value);
+        name
+    }
+
+    fn name(&mut self, span: Span) -> Result<()> {
+        let name = self.intern(span);
+        self.context.push_name(name, span);
+
+        Ok(())
+    }
+
+    fn identifier(&mut self, span: Span) -> Result<()> {
+        let value = self.source.slice(span);
+        let name = self.interner.intern(value);
+
+        // no support for capturing variables for now
+        // either find it in the local function scope or look for a global value
+        if let Some(local) = self.context.local(name) {
+            self.context.push_value(local.value);
+        } else if let Some(global) = self.globals.id(name) {
+            self.context.emit(Instruction::load_global(global), span);
+        } else {
+            return self.fail(span, format!("{value} not found"));
+        };
+
+        Ok(())
+    }
+
+    fn unary(&mut self, span: Span, operator: syntax::Operator) -> Result<()> {
+        let operand = self.context.pop_value();
+
+        let operator = match operator {
+            syntax::Operator::Pos => Operator::Pos,
+            syntax::Operator::Neg => Operator::Neg,
+            syntax::Operator::Not => Operator::Not,
+            _ => {
+                return self.fail(span, "unsupported unary operator");
+            }
+        };
+
+        self.context.emit(Instruction::unary(operator, operand), span);
+
+        Ok(())
+    }
+
+    fn binary(&mut self, span: Span, operator: syntax::Operator) -> Result<()> {
+        let roperand = self.context.pop_value();
+        let loperand = self.context.pop_value();
+
+        let operator = match operator {
+            syntax::Operator::Add => Operator::Add,
+            syntax::Operator::Sub => Operator::Sub,
+            syntax::Operator::Mul => Operator::Mul,
+            syntax::Operator::Div => Operator::Div,
+            syntax::Operator::Mod => Operator::Mod,
+            syntax::Operator::Pow => Operator::Pow,
+            syntax::Operator::Eq => Operator::Eq,
+            syntax::Operator::Ne => Operator::Ne,
+            syntax::Operator::Lt => Operator::Lt,
+            syntax::Operator::Le => Operator::Le,
+            syntax::Operator::Gt => Operator::Gt,
+            syntax::Operator::Ge => Operator::Ge,
+            syntax::Operator::And => Operator::And,
+            syntax::Operator::Or => Operator::Or,
+            _ => {
+                return self.fail(span, "unsupported binary operator");
+            }
+        };
+
+        self.context.emit(Instruction::binary(operator, loperand, roperand), span);
+
+        Ok(())
+    }
+
+    fn integer(&mut self, span: Span) -> Result<()> {
+        let value = self.source.slice(span);
+
+        let value = match &value.get(0..2) {
+            Some("0b") => i64::from_str_radix(&value[2..], 2),
+            Some("0x") => i64::from_str_radix(&value[2..], 16),
+            _ => str::parse(value),
+        };
+
+        let Ok(value) = value else {
+            return self.fail(span, "value is not supported as an integer");
+        };
+
+        self.context.emit(Instruction::integer(value), span);
+
+        Ok(())
+    }
+
+    fn number(&mut self, span: Span) -> Result<()> {
+        let value = self.source.slice(span);
+
+        let Ok(value) = str::parse(value) else {
+            return self.fail(span, "value is not supported as an number");
+        };
+
+        self.context.emit(Instruction::number(value), span);
+
+        Ok(())
+    }
+
+    fn boolean(&mut self, span: Span, truthy: bool) -> Result<()> {
+        self.context.emit(
+            if truthy {
+                Instruction::True
+            } else {
+                Instruction::False
             },
+            span,
         );
 
-        Ok(value)
+        Ok(())
     }
 
-    fn local_ref(&mut self, node: &hir::Node, local: &hir::LocalRef) -> Result<InstructionId> {
-        todo!()
-    }
-
-    fn global_ref(&mut self, node: &hir::Node, global: &hir::GlobalRef) -> Result<InstructionId> {
-        let id = self.globals.id(global.name).expect("malformed hir node");
-
-        Ok(self.instruction(Instruction::load_global(id, node.type_id)))
-    }
-
-    fn number(&mut self, _node: &hir::Node, number: &hir::Number) -> Result<InstructionId> {
-        Ok(self.instruction(Instruction::number(number.value)))
-    }
-
-    fn integer(&mut self, _node: &hir::Node, integer: &hir::Integer) -> Result<InstructionId> {
-        Ok(self.instruction(Instruction::integer(integer.value)))
-    }
-
-    fn boolean(&mut self, _node: &hir::Node, truthy: bool) -> Result<InstructionId> {
-        Ok(self.instruction(Instruction::boolean(truthy)))
-    }
-
-    fn coerce(
-        &mut self,
-        source: InstructionId,
-        node_type: TypeId,
-        other_type: TypeId,
-        result_type: TypeId,
-    ) -> InstructionId {
-        if (other_type == types::NUMBER || result_type == types::NUMBER)
-            && node_type == types::INTEGER
-        {
-            self.instruction(Instruction::to_number(source))
-        } else {
-            source
-        }
-    }
-
-    fn unary(&mut self, node: &hir::Node, unary: &hir::Unary) -> Result<InstructionId> {
-        let operand = self.lower(&unary.operand)?;
-        Ok(self.instruction(Instruction::unary(unary.operator, operand, node.type_id)))
-    }
-
-    fn binary(&mut self, node: &hir::Node, binary: &hir::Binary) -> Result<InstructionId> {
-        let loperand = self.lower(&binary.loperand)?;
-        let roperand = self.lower(&binary.roperand)?;
-        let loperand =
-            self.coerce(loperand, binary.loperand.type_id, binary.roperand.type_id, node.type_id);
-        let roperand =
-            self.coerce(roperand, binary.roperand.type_id, binary.loperand.type_id, node.type_id);
-
-        Ok(self.instruction(Instruction::binary(binary.operator, loperand, roperand, node.type_id)))
-    }
-
-    fn finish(mut self) -> Module {
-        let entrypoint_symbol = self.interner.intern("__entrypoint");
-        let entrypoint_function = self.context.pop_function();
-
-        debug_assert!(self.context.functions.is_empty(), "function context is not empty");
-
-        self.functions.insert(entrypoint_symbol, entrypoint_function);
-
-        Module {
-            globals: self.globals,
-            functions: self.functions,
-        }
+    fn fail<T>(&self, span: Span, message: impl Into<String>) -> Result<T> {
+        Err(Error::error(span, message.into()))
     }
 }
 
-pub fn from_hir(module: &hir::Module, interner: &mut Interner) -> Result<Module> {
-    let mut lower = LowerHir::new(interner);
+pub fn from_syntax(syntax: &Syntax, source: &Source, interner: &mut Interner) -> Result<Module> {
+    let mut lower = LowerSyntax::new(source, interner, syntax);
+    lower.lower()?;
 
-    for node in &module.nodes {
-        lower.lower(node)?;
-    }
-
-    Ok(lower.finish())
+    Ok(Module {
+        globals: lower.globals,
+        functions: lower.functions,
+    })
 }

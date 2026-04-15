@@ -20,10 +20,8 @@ fn eval_wasm(source: String) -> String {
     let engine = store.engine();
     let module = Module::new(&engine, wasm).unwrap();
 
-    let main = Instance::new(&mut store, &module, &[])
-        .unwrap()
-        .get_func(&mut store, "main")
-        .unwrap();
+    let main =
+        Instance::new(&mut store, &module, &[]).unwrap().get_func(&mut store, "main").unwrap();
 
     let mut results = [Val::F64(0)];
     main.call(&mut store, &[], &mut results).unwrap();
@@ -38,11 +36,7 @@ fn eval_wasm(source: String) -> String {
 }
 
 fn test_one(pass: &str, path: PathBuf) {
-    let file_name = path
-        .file_stem()
-        .expect("Expected a valid file")
-        .to_str()
-        .unwrap();
+    let file_name = path.file_stem().expect("Expected a valid file").to_str().unwrap();
 
     let source = fs::read_to_string(&path).expect("Could not read file");
 

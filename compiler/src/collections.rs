@@ -14,7 +14,7 @@ impl<I, V> IndexVec<I, V>
 where
     I: From<usize> + Into<usize> + Copy,
 {
-    pub fn new() -> IndexVec<I, V> {
+    pub const fn new() -> IndexVec<I, V> {
         IndexVec {
             values: Vec::new(),
             _phantom: PhantomData,
@@ -27,6 +27,14 @@ where
         index
     }
 
+    pub fn insert(&mut self, index: I, value: V)
+    where
+        I: Eq,
+    {
+        debug_assert!(index == I::from(self.values.len()));
+        self.values.push(value);
+    }
+
     pub fn push_with<F>(&mut self, f: F) -> I
     where
         F: FnOnce(I) -> V,
@@ -36,14 +44,17 @@ where
         index
     }
 
+    #[inline]
     pub fn get(&self, index: I) -> Option<&V> {
         self.values.get(index.into())
     }
 
-    pub fn len(&self) -> usize {
+    #[inline]
+    pub const fn len(&self) -> usize {
         self.values.len()
     }
 
+    #[inline]
     pub fn index(&self) -> I {
         I::from(self.values.len())
     }
@@ -148,20 +159,29 @@ where
         }
     }
 
+    #[inline]
     pub fn get(&self, key: K) -> Option<&V> {
         self.entries.get(&key).map(|&index| &self.values[index])
     }
 
+    #[inline]
     pub fn get_by_key(&self, key: K) -> Option<&V> {
         self.get(key)
     }
 
+    #[inline]
     pub fn get_by_id(&self, index: I) -> Option<&V> {
         self.values.get(index)
     }
 
+    #[inline]
     pub fn id(&self, key: K) -> Option<I> {
         self.entries.get(&key).cloned()
+    }
+
+    #[inline]
+    pub fn values(self) -> IndexVec<I, V> {
+        self.values
     }
 }
 

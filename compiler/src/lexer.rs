@@ -1,10 +1,8 @@
-use crate::source::{Source, Span};
-
-use crate::token::{Token, TokenKind};
+use crate::source::{Source, Span, WithSpan};
+use crate::token::Token;
 
 #[derive(Debug, Clone)]
 struct Lexer<'lexer> {
-    source: &'lexer Source,
     bytes: &'lexer [u8],
     curr: u8,
     peek: u8,
@@ -15,7 +13,6 @@ struct Lexer<'lexer> {
 impl<'lexer> Lexer<'lexer> {
     fn new(source: &'lexer Source) -> Lexer<'lexer> {
         let mut lexer = Lexer {
-            source,
             bytes: source.content.as_bytes(),
             curr: 0,
             peek: 0,
@@ -49,8 +46,8 @@ impl<'lexer> Lexer<'lexer> {
         }
     }
 
-    fn slice(&self) -> &'lexer str {
-        &self.source.content[self.start..self.index]
+    fn slice(&self) -> &'lexer [u8] {
+        &self.bytes[self.start..self.index]
     }
 
     fn span(&self) -> Span {
@@ -66,14 +63,14 @@ impl<'lexer> Lexer<'lexer> {
         }
     }
 
-    fn token(&mut self, kind: TokenKind) -> Token {
-        Token {
-            kind,
+    fn token(&mut self, token: Token) -> WithSpan<Token> {
+        WithSpan::<Token> {
+            value: token,
             span: self.span(),
         }
     }
 
-    fn next(&mut self) -> Token {
+    fn next(&mut self) -> WithSpan<Token> {
         self.trivia();
         self.align();
 
@@ -93,15 +90,15 @@ impl<'lexer> Lexer<'lexer> {
             _ if self.is_symbol(self.curr) => {
                 return self.operator();
             }
-            b'(' => TokenKind::LParen,
-            b')' => TokenKind::RParen,
-            b'{' => TokenKind::LBrace,
-            b'}' => TokenKind::RBrace,
-            b'[' => TokenKind::LBracket,
-            b']' => TokenKind::RBracket,
-            b';' => TokenKind::Semi,
-            b',' => TokenKind::Comma,
-            0 => TokenKind::EOF,
+            b'(' => Token::LParen,
+            b')' => Token::RParen,
+            b'{' => Token::LBrace,
+            b'}' => Token::RBrace,
+            b'[' => Token::LBracket,
+            b']' => Token::RBracket,
+            b';' => Token::Semi,
+            b',' => Token::Comma,
+            0 => Token::EOF,
             _ => {
                 return self.unexpected_character();
             }
@@ -112,19 +109,20 @@ impl<'lexer> Lexer<'lexer> {
         self.token(kind)
     }
 
-    fn ident(&mut self) -> Token {
+    fn ident(&mut self) -> WithSpan<Token> {
         self.bump_while(|chr| matches!(chr, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'));
         self.bump_while(|chr| chr == b'\'');
 
         let value = self.slice();
 
         let kind = match value {
-            "True" => TokenKind::True,
-            "False" => TokenKind::False,
-            "and" => TokenKind::And,
-            "or" => TokenKind::Or,
-            "not" => TokenKind::Not,
-            _ => TokenKind::Identifier,
+            b"let" => Token::Let,
+            b"True" => Token::True,
+            b"False" => Token::False,
+            b"and" => Token::And,
+            b"or" => Token::Or,
+            b"not" => Token::Not,
+            _ => Token::Identifier,
         };
 
         self.token(kind)
@@ -138,43 +136,43 @@ impl<'lexer> Lexer<'lexer> {
         )
     }
 
-    fn operator(&mut self) -> Token {
+    fn operator(&mut self) -> WithSpan<Token> {
         let kind = match self.curr {
             b'.' if self.peek == b'.' => {
                 self.bump();
-                TokenKind::Dots
+                Token::Dots
             }
-            b'.' => TokenKind::Dot,
+            b'.' => Token::Dot,
             b'=' if self.peek == b'=' => {
                 self.bump();
-                TokenKind::EqEq
+                Token::EqEq
             }
             b'=' if self.peek == b'>' => {
                 self.bump();
-                TokenKind::Arrow
+                Token::Arrow
             }
-            b'=' => TokenKind::Equals,
-            b':' => TokenKind::Colon,
+            b'=' => Token::Equals,
+            b':' => Token::Colon,
             b'<' if self.peek == b'=' => {
                 self.bump();
-                TokenKind::LtEq
+                Token::LtEq
             }
-            b'<' => TokenKind::Lt,
+            b'<' => Token::Lt,
             b'>' if self.peek == b'=' => {
                 self.bump();
-                TokenKind::GtEq
+                Token::GtEq
             }
-            b'>' => TokenKind::Gt,
+            b'>' => Token::Gt,
             b'!' if self.peek == b'=' => {
                 self.bump();
-                TokenKind::NoEq
+                Token::NoEq
             }
-            b'+' => TokenKind::Plus,
-            b'-' => TokenKind::Minus,
-            b'*' => TokenKind::Star,
-            b'/' => TokenKind::Slash,
-            b'^' => TokenKind::Caret,
-            b'%' => TokenKind::Mod,
+            b'+' => Token::Plus,
+            b'-' => Token::Minus,
+            b'*' => Token::Star,
+            b'/' => Token::Slash,
+            b'^' => Token::Caret,
+            b'%' => Token::Mod,
             _ => unreachable!(),
         };
 
@@ -183,7 +181,7 @@ impl<'lexer> Lexer<'lexer> {
         self.token(kind)
     }
 
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> WithSpan<Token> {
         self.bump_while(|chr| chr.is_ascii_digit());
 
         match self.curr {
@@ -191,27 +189,27 @@ impl<'lexer> Lexer<'lexer> {
                 self.bump();
                 self.bump_while(|chr| chr.is_ascii_digit());
 
-                return self.token(TokenKind::Number);
+                return self.token(Token::Number);
             }
-            b'b' if self.slice() == "0" => {
+            b'b' if self.slice() == b"0" => {
                 self.bump();
                 self.bump_while(|chr| matches!(chr, b'0' | b'1'));
             }
-            b'x' if self.slice() == "0" => {
+            b'x' if self.slice() == b"0" => {
                 self.bump();
                 self.bump_while(|chr| chr.is_ascii_hexdigit());
             }
             _ => {}
         }
 
-        self.token(TokenKind::Integer)
+        self.token(Token::Integer)
     }
 
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> WithSpan<Token> {
         loop {
             match self.bump() {
                 b'\n' | b'\0' => {
-                    return self.token(TokenKind::UnterminatedString);
+                    return self.token(Token::UnterminatedString);
                 }
                 b'"' => {
                     self.bump();
@@ -231,14 +229,14 @@ impl<'lexer> Lexer<'lexer> {
             }
         }
 
-        self.token(TokenKind::String)
+        self.token(Token::String)
     }
 
-    fn invalid_escape_character(&mut self) -> Token {
+    fn invalid_escape_character(&mut self) -> WithSpan<Token> {
         self.align();
         self.bump_utf8_sequence();
 
-        let token = self.token(TokenKind::UnexpectedCharacter);
+        let token = self.token(Token::UnexpectedCharacter);
 
         // skip to the end of the string
         loop {
@@ -258,29 +256,21 @@ impl<'lexer> Lexer<'lexer> {
         token
     }
 
-    fn unexpected_character(&mut self) -> Token {
+    fn unexpected_character(&mut self) -> WithSpan<Token> {
         self.bump_utf8_sequence();
-        self.token(TokenKind::UnexpectedCharacter)
+        self.token(Token::UnexpectedCharacter)
     }
 
     fn bump_utf8_sequence(&mut self) {
-        let mut chars = self.source.content[self.index..].chars();
-
-        if let Some(chr) = chars.next() {
-            for _ in 0..chr.len_utf8() {
-                self.bump();
-            }
-        } else {
-            self.bump();
-        }
+        todo!()
     }
 
-    fn newline(&mut self) -> Token {
+    fn newline(&mut self) -> WithSpan<Token> {
         while self.curr == b'\n' {
             self.bump();
             self.trivia();
         }
-        self.token(TokenKind::EOL)
+        self.token(Token::EOL)
     }
 
     fn trivia(&mut self) {
@@ -294,27 +284,21 @@ impl<'lexer> Lexer<'lexer> {
             }
         }
     }
-
-    fn value(&self, span: Span) -> &str {
-        &self.source.content[span.range()]
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Tokens<'lexer> {
     lexer: Lexer<'lexer>,
-    prev: Option<Token>,
-    peek: Token,
-    token: Token,
+    peek: WithSpan<Token>,
+    current: WithSpan<Token>,
 }
 
 impl<'tokens> Tokens<'tokens> {
     pub fn new(source: &'tokens Source) -> Tokens<'tokens> {
         Tokens {
             lexer: Lexer::new(source),
-            prev: None,
-            peek: Token::default(),
-            token: Token::default(),
+            peek: Default::default(),
+            current: Default::default(),
         }
         .init()
     }
@@ -326,32 +310,22 @@ impl<'tokens> Tokens<'tokens> {
     }
 
     pub fn bump(&mut self) {
-        self.prev = Some(self.token);
-        self.token = self.peek;
+        self.current = self.peek;
         self.peek = self.lexer.next();
     }
 
     #[inline]
-    pub fn token(&self) -> Token {
-        self.token
+    pub fn token(&self) -> WithSpan<Token> {
+        self.current
     }
 
     #[inline]
-    pub fn prev(&self) -> Token {
-        self.prev.unwrap_or_default()
-    }
-
-    #[inline]
-    pub fn peek(&self) -> Token {
+    pub fn peek(&self) -> WithSpan<Token> {
         self.peek
     }
 
-    pub fn value(&self, token: Token) -> &str {
-        self.lexer.value(token.span)
-    }
-
     pub fn done(&self) -> bool {
-        self.token.kind == TokenKind::EOF
+        self.current.value == Token::EOF
     }
 }
 
@@ -363,15 +337,29 @@ pub fn tokens<'tokens>(source: &'tokens Source) -> Tokens<'tokens> {
 mod tests {
     use super::*;
 
-    fn tokenize<'a>(input: &'a str) -> Vec<(Token, String)> {
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct TestResult {
+        token: Token,
+        span: Span,
+        value: String,
+    }
+
+    fn tokenize<'a>(input: &'a str) -> Vec<TestResult> {
         let source = Source::new("<test>".to_string(), input.into());
         let mut tokens = tokens(&source);
 
         let mut result = vec![];
 
-        while tokens.token.kind != TokenKind::EOF {
-            let token = tokens.token;
-            result.push((token, tokens.value(token).to_string()));
+        while tokens.current.value != Token::EOF {
+            let token = tokens.current.value;
+            let span = tokens.current.span;
+
+            result.push(TestResult {
+                token,
+                span,
+                value: input[span.range()].to_string(),
+            });
+
             tokens.bump();
         }
 
@@ -385,41 +373,31 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(0, 5),
-                    },
-                    "ident".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(6, 12),
-                    },
-                    "test_1".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(13, 18),
-                    },
-                    "CONST".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(19, 20),
-                    },
-                    "_".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(21, 24),
-                    },
-                    "___".to_string()
-                ),
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(0, 5),
+                    value: "ident".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(6, 12),
+                    value: "test_1".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(13, 18),
+                    value: "CONST".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(19, 20),
+                    value: "_".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(21, 24),
+                    value: "___".to_string(),
+                },
             ]
         );
     }
@@ -431,41 +409,31 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::And,
-                        span: Span::new(0, 3)
-                    },
-                    "and".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Or,
-                        span: Span::new(4, 6)
-                    },
-                    "or".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Not,
-                        span: Span::new(7, 10)
-                    },
-                    "not".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::True,
-                        span: Span::new(11, 15)
-                    },
-                    "True".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::False,
-                        span: Span::new(16, 21)
-                    },
-                    "False".to_string()
-                ),
+                TestResult {
+                    token: Token::And,
+                    span: Span::new(0, 3),
+                    value: "and".to_string(),
+                },
+                TestResult {
+                    token: Token::Or,
+                    span: Span::new(4, 6),
+                    value: "or".to_string(),
+                },
+                TestResult {
+                    token: Token::Not,
+                    span: Span::new(7, 10),
+                    value: "not".to_string(),
+                },
+                TestResult {
+                    token: Token::True,
+                    span: Span::new(11, 15),
+                    value: "True".to_string(),
+                },
+                TestResult {
+                    token: Token::False,
+                    span: Span::new(16, 21),
+                    value: "False".to_string(),
+                },
             ]
         );
     }
@@ -477,69 +445,51 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::Dot,
-                        span: Span::new(0, 1)
-                    },
-                    ".".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Comma,
-                        span: Span::new(2, 3)
-                    },
-                    ",".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Semi,
-                        span: Span::new(4, 5)
-                    },
-                    ";".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::LParen,
-                        span: Span::new(6, 7)
-                    },
-                    "(".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::RParen,
-                        span: Span::new(8, 9)
-                    },
-                    ")".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::LBracket,
-                        span: Span::new(10, 11)
-                    },
-                    "[".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::RBracket,
-                        span: Span::new(12, 13)
-                    },
-                    "]".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::LBrace,
-                        span: Span::new(14, 15)
-                    },
-                    "{".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::RBrace,
-                        span: Span::new(16, 17)
-                    },
-                    "}".to_string()
-                ),
+                TestResult {
+                    token: Token::Dot,
+                    span: Span::new(0, 1),
+                    value: ".".to_string(),
+                },
+                TestResult {
+                    token: Token::Comma,
+                    span: Span::new(2, 3),
+                    value: ",".to_string(),
+                },
+                TestResult {
+                    token: Token::Semi,
+                    span: Span::new(4, 5),
+                    value: ";".to_string(),
+                },
+                TestResult {
+                    token: Token::LParen,
+                    span: Span::new(6, 7),
+                    value: "(".to_string(),
+                },
+                TestResult {
+                    token: Token::RParen,
+                    span: Span::new(8, 9),
+                    value: ")".to_string(),
+                },
+                TestResult {
+                    token: Token::LBracket,
+                    span: Span::new(10, 11),
+                    value: "[".to_string(),
+                },
+                TestResult {
+                    token: Token::RBracket,
+                    span: Span::new(12, 13),
+                    value: "]".to_string(),
+                },
+                TestResult {
+                    token: Token::LBrace,
+                    span: Span::new(14, 15),
+                    value: "{".to_string(),
+                },
+                TestResult {
+                    token: Token::RBrace,
+                    span: Span::new(16, 17),
+                    value: "}".to_string(),
+                },
             ]
         )
     }
@@ -551,125 +501,91 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::Dot,
-                        span: Span::new(0, 1)
-                    },
-                    ".".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Colon,
-                        span: Span::new(2, 3)
-                    },
-                    ":".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Arrow,
-                        span: Span::new(4, 6)
-                    },
-                    "=>".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Equals,
-                        span: Span::new(7, 8)
-                    },
-                    "=".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::EqEq,
-                        span: Span::new(9, 11)
-                    },
-                    "==".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::NoEq,
-                        span: Span::new(12, 14)
-                    },
-                    "!=".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Plus,
-                        span: Span::new(15, 16)
-                    },
-                    "+".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Minus,
-                        span: Span::new(17, 18)
-                    },
-                    "-".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Star,
-                        span: Span::new(19, 20)
-                    },
-                    "*".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Slash,
-                        span: Span::new(21, 22)
-                    },
-                    "/".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Mod,
-                        span: Span::new(23, 24)
-                    },
-                    "%".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Caret,
-                        span: Span::new(25, 26)
-                    },
-                    "^".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Gt,
-                        span: Span::new(27, 28)
-                    },
-                    ">".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::GtEq,
-                        span: Span::new(29, 31)
-                    },
-                    ">=".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Lt,
-                        span: Span::new(32, 33)
-                    },
-                    "<".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::LtEq,
-                        span: Span::new(34, 36)
-                    },
-                    "<=".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Dots,
-                        span: Span::new(37, 39)
-                    },
-                    "..".to_string()
-                ),
+                TestResult {
+                    token: Token::Dot,
+                    span: Span::new(0, 1),
+                    value: ".".to_string(),
+                },
+                TestResult {
+                    token: Token::Colon,
+                    span: Span::new(2, 3),
+                    value: ":".to_string(),
+                },
+                TestResult {
+                    token: Token::Arrow,
+                    span: Span::new(4, 6),
+                    value: "=>".to_string(),
+                },
+                TestResult {
+                    token: Token::Equals,
+                    span: Span::new(7, 8),
+                    value: "=".to_string(),
+                },
+                TestResult {
+                    token: Token::EqEq,
+                    span: Span::new(9, 11),
+                    value: "==".to_string(),
+                },
+                TestResult {
+                    token: Token::NoEq,
+                    span: Span::new(12, 14),
+                    value: "!=".to_string(),
+                },
+                TestResult {
+                    token: Token::Plus,
+                    span: Span::new(15, 16),
+                    value: "+".to_string(),
+                },
+                TestResult {
+                    token: Token::Minus,
+                    span: Span::new(17, 18),
+                    value: "-".to_string(),
+                },
+                TestResult {
+                    token: Token::Star,
+                    span: Span::new(19, 20),
+                    value: "*".to_string(),
+                },
+                TestResult {
+                    token: Token::Slash,
+                    span: Span::new(21, 22),
+                    value: "/".to_string(),
+                },
+                TestResult {
+                    token: Token::Mod,
+                    span: Span::new(23, 24),
+                    value: "%".to_string(),
+                },
+                TestResult {
+                    token: Token::Caret,
+                    span: Span::new(25, 26),
+                    value: "^".to_string(),
+                },
+                TestResult {
+                    token: Token::Gt,
+                    span: Span::new(27, 28),
+                    value: ">".to_string(),
+                },
+                TestResult {
+                    token: Token::GtEq,
+                    span: Span::new(29, 31),
+                    value: ">=".to_string(),
+                },
+                TestResult {
+                    token: Token::Lt,
+                    span: Span::new(32, 33),
+                    value: "<".to_string(),
+                },
+                TestResult {
+                    token: Token::LtEq,
+                    span: Span::new(34, 36),
+                    value: "<=".to_string(),
+                },
+                TestResult {
+                    token: Token::Dots,
+                    span: Span::new(37, 39),
+                    value: "..".to_string(),
+                },
             ]
         )
     }
@@ -681,34 +597,26 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::Integer,
-                        span: Span::new(0, 2)
-                    },
-                    "42".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Number,
-                        span: Span::new(3, 7)
-                    },
-                    "3.14".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Integer,
-                        span: Span::new(8, 16)
-                    },
-                    "0xABCDEF".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Integer,
-                        span: Span::new(17, 23)
-                    },
-                    "0b0101".to_string()
-                ),
+                TestResult {
+                    token: Token::Integer,
+                    span: Span::new(0, 2),
+                    value: "42".to_string(),
+                },
+                TestResult {
+                    token: Token::Number,
+                    span: Span::new(3, 7),
+                    value: "3.14".to_string(),
+                },
+                TestResult {
+                    token: Token::Integer,
+                    span: Span::new(8, 16),
+                    value: "0xABCDEF".to_string(),
+                },
+                TestResult {
+                    token: Token::Integer,
+                    span: Span::new(17, 23),
+                    value: "0b0101".to_string(),
+                },
             ]
         )
     }
@@ -719,13 +627,11 @@ mod tests {
 
         assert_eq!(
             tokens,
-            vec![(
-                Token {
-                    kind: TokenKind::String,
-                    span: Span::new(0, 14)
-                },
-                "\"Hello, World\"".to_string()
-            )],
+            vec![TestResult {
+                token: Token::String,
+                span: Span::new(0, 14),
+                value: "\"Hello, World\"".to_string(),
+            }],
         );
     }
 
@@ -735,13 +641,11 @@ mod tests {
 
         assert_eq!(
             tokens,
-            vec![(
-                Token {
-                    kind: TokenKind::String,
-                    span: Span::new(0, 19)
-                },
-                "\"code = \\\"n = 42\\\"\"".to_string()
-            )]
+            vec![TestResult {
+                token: Token::String,
+                span: Span::new(0, 19),
+                value: "\"code = \\\"n = 42\\\"\"".to_string(),
+            }]
         );
     }
 
@@ -751,13 +655,11 @@ mod tests {
 
         assert_eq!(
             tokens,
-            vec![(
-                Token {
-                    kind: TokenKind::EOL,
-                    span: Span::new(0, 3)
-                },
-                "\n\n\n".to_string()
-            )]
+            vec![TestResult {
+                token: Token::EOL,
+                span: Span::new(0, 3),
+                value: "\n\n\n".to_string(),
+            }]
         );
     }
 
@@ -767,13 +669,11 @@ mod tests {
 
         assert_eq!(
             tokens,
-            vec![(
-                Token {
-                    kind: TokenKind::UnterminatedString,
-                    span: Span::new(0, 6)
-                },
-                r#""Hello"#.to_string()
-            )]
+            vec![TestResult {
+                token: Token::UnterminatedString,
+                span: Span::new(0, 6),
+                value: r#""Hello"#.to_string(),
+            }]
         );
     }
 
@@ -784,20 +684,16 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::String,
-                        span: Span::new(0, 7)
-                    },
-                    r#""Hello""#.to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::UnterminatedString,
-                        span: Span::new(7, 8)
-                    },
-                    "\"".to_string()
-                )
+                TestResult {
+                    token: Token::String,
+                    span: Span::new(0, 7),
+                    value: r#""Hello""#.to_string(),
+                },
+                TestResult {
+                    token: Token::UnterminatedString,
+                    span: Span::new(7, 8),
+                    value: "\"".to_string(),
+                }
             ]
         );
     }
@@ -809,27 +705,21 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::String,
-                        span: Span::new(0, 12)
-                    },
-                    r#""escape \\a""#.to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Dot,
-                        span: Span::new(12, 13)
-                    },
-                    ".".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(13, 19)
-                    },
-                    "length".to_string()
-                ),
+                TestResult {
+                    token: Token::String,
+                    span: Span::new(0, 12),
+                    value: r#""escape \\a""#.to_string(),
+                },
+                TestResult {
+                    token: Token::Dot,
+                    span: Span::new(12, 13),
+                    value: ".".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(13, 19),
+                    value: "length".to_string(),
+                },
             ]
         );
     }
@@ -841,27 +731,21 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::UnexpectedCharacter,
-                        span: Span::new(9, 10)
-                    },
-                    "a".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Dot,
-                        span: Span::new(11, 12)
-                    },
-                    ".".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(12, 18)
-                    },
-                    "length".to_string()
-                ),
+                TestResult {
+                    token: Token::UnexpectedCharacter,
+                    span: Span::new(9, 10),
+                    value: "a".to_string(),
+                },
+                TestResult {
+                    token: Token::Dot,
+                    span: Span::new(11, 12),
+                    value: ".".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(12, 18),
+                    value: "length".to_string(),
+                },
             ]
         );
     }
@@ -873,20 +757,16 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::UnexpectedCharacter,
-                        span: Span::new(0, 1)
-                    },
-                    "@".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Identifier,
-                        span: Span::new(1, 5)
-                    },
-                    "test".to_string()
-                )
+                TestResult {
+                    token: Token::UnexpectedCharacter,
+                    span: Span::new(0, 1),
+                    value: "@".to_string(),
+                },
+                TestResult {
+                    token: Token::Identifier,
+                    span: Span::new(1, 5),
+                    value: "test".to_string(),
+                }
             ]
         );
     }
@@ -898,88 +778,27 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                (
-                    Token {
-                        kind: TokenKind::UnexpectedCharacter,
-                        span: Span::new(0, 4)
-                    },
-                    "🫵".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::Equals,
-                        span: Span::new(5, 6)
-                    },
-                    "=".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::UnexpectedCharacter,
-                        span: Span::new(7, 11)
-                    },
-                    "🎅".to_string()
-                ),
-                (
-                    Token {
-                        kind: TokenKind::UnexpectedCharacter,
-                        span: Span::new(11, 15)
-                    },
-                    "🏾".to_string()
-                )
+                TestResult {
+                    token: Token::UnexpectedCharacter,
+                    span: Span::new(0, 4),
+                    value: "🫵".to_string(),
+                },
+                TestResult {
+                    token: Token::Equals,
+                    span: Span::new(5, 6),
+                    value: "=".to_string(),
+                },
+                TestResult {
+                    token: Token::UnexpectedCharacter,
+                    span: Span::new(7, 11),
+                    value: "🎅".to_string(),
+                },
+                TestResult {
+                    token: Token::UnexpectedCharacter,
+                    span: Span::new(11, 15),
+                    value: "🏾".to_string(),
+                }
             ]
         );
-    }
-
-    #[test]
-    fn peek_prev() {
-        let source = Source::new("<test>".to_string(), "text 3.14 _".into());
-        let mut tokens = tokens(&source);
-
-        assert_eq!(
-            tokens.token(),
-            Token {
-                kind: TokenKind::Identifier,
-                span: Span::new(0, 4)
-            }
-        );
-        assert_eq!(tokens.value(tokens.token()), "text");
-
-        assert_eq!(
-            tokens.peek(),
-            Token {
-                kind: TokenKind::Number,
-                span: Span::new(5, 9)
-            }
-        );
-        assert_eq!(tokens.value(tokens.peek()), "3.14");
-
-        tokens.bump();
-
-        assert_eq!(
-            tokens.token(),
-            Token {
-                kind: TokenKind::Number,
-                span: Span::new(5, 9)
-            }
-        );
-        assert_eq!(tokens.value(tokens.token()), "3.14");
-
-        assert_eq!(
-            tokens.peek(),
-            Token {
-                kind: TokenKind::Identifier,
-                span: Span::new(10, 11)
-            }
-        );
-        assert_eq!(tokens.value(tokens.peek()), "_");
-
-        assert_eq!(
-            tokens.prev(),
-            Token {
-                kind: TokenKind::Identifier,
-                span: Span::new(0, 4)
-            }
-        );
-        assert_eq!(tokens.value(tokens.prev()), "text");
     }
 }

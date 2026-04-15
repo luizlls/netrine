@@ -1,103 +1,93 @@
+use crate::collections::IndexVec;
+use crate::macros::entity_id;
 use crate::source::Span;
+use crate::token::Token;
 
 #[derive(Debug, Clone)]
-pub struct Module {
-    pub nodes: Vec<Node>,
+pub struct Syntax {
+    pub nodes: IndexVec<NodeIndex, Node>,
+    pub sizes: IndexVec<NodeIndex, u32>,
+    pub tokens: IndexVec<TokenIndex, Token>,
+    pub spans: IndexVec<TokenIndex, Span>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Node {
-    pub kind: NodeKind,
-    pub span: Span,
-}
+impl Syntax {
+    pub fn new() -> Syntax {
+        Syntax {
+            nodes: IndexVec::new(),
+            sizes: IndexVec::new(),
+            tokens: IndexVec::new(),
+            spans: IndexVec::new(),
+        }
+    }
 
-impl Node {
-    pub fn new(kind: NodeKind, span: Span) -> Node {
-        Node { kind, span }
+    pub fn push_node(&mut self, node: Node, size: u32) -> NodeIndex {
+        let index = self.nodes.push(node);
+        self.sizes.insert(index, size);
+        index
+    }
+
+    pub fn push_token(&mut self, token: Token, span: Span) -> TokenIndex {
+        let index = self.tokens.push(token);
+        self.spans.insert(index, span);
+        index
+    }
+
+    pub fn token_index(&self) -> TokenIndex {
+        self.tokens.index()
+    }
+
+    pub fn node_index(&self) -> NodeIndex {
+        self.nodes.index()
+    }
+
+    pub fn resize(&mut self, index: NodeIndex, size: u32) {
+        self.sizes[index] = size;
+    }
+
+    pub fn replace(&mut self, index: NodeIndex, kind: NodeKind) {
+        let node = self.nodes[index];
+        self.nodes[index] = Node { kind, ..node };
     }
 }
 
-#[derive(Debug, Clone)]
+entity_id!(TokenIndex, u32);
+entity_id!(NodeIndex, u32);
+
+#[derive(Debug, Clone, Copy)]
+pub struct Node {
+    pub kind: NodeKind,
+    pub token: TokenIndex,
+}
+
+impl Node {
+    pub fn new(kind: NodeKind, token: TokenIndex) -> Node {
+        Node { kind, token }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeKind {
-    Define(Box<Define>),
-    Unary(Box<Unary>),
-    Binary(Box<Binary>),
-    Name(Name),
+    Identifier,
+    Name,
+    LetInit,
+    LetEnd,
+    FnInit,
+    FnEnd,
+    ParameterInit,
+    ParameterEnd,
+    GroupInit,
+    GroupEnd,
+    Unary(Operator),
+    Binary(Operator),
     Number,
     Integer,
     True,
     False,
 }
 
-#[derive(Debug, Clone)]
-pub struct Define {
-    pub name: Name,
-    pub value: Node,
-}
-
-impl Node {
-    pub fn define(name: Name, value: Node) -> Node {
-        let span = Span::from(name.span, value.span);
-        Node {
-            kind: NodeKind::Define(Define { name, value }.into()),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Unary {
-    pub operator: Operator,
-    pub expr: Node,
-}
-
-impl Node {
-    pub fn unary(operator: Operator, expr: Node) -> Node {
-        let span = Span::from(operator.span, expr.span);
-        Node {
-            kind: NodeKind::Unary(Unary { operator, expr }.into()),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Binary {
-    pub operator: Operator,
-    pub lexpr: Node,
-    pub rexpr: Node,
-}
-
-impl Node {
-    pub fn binary(operator: Operator, lexpr: Node, rexpr: Node) -> Node {
-        let span = Span::from(operator.span, lexpr.span);
-        Node {
-            kind: NodeKind::Binary(
-                Binary {
-                    operator,
-                    lexpr,
-                    rexpr,
-                }
-                .into(),
-            ),
-            span,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Name {
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Operator {
-    pub kind: OperatorKind,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum OperatorKind {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Operator {
     And, // and
     Or,  // or
     Not, // not
@@ -122,32 +112,24 @@ pub type Precedence = u8;
 impl Operator {
     #[rustfmt::skip]
     pub fn precedence(self) -> Precedence {
-        match self.kind {
-            OperatorKind::Pos
-          | OperatorKind::Neg
-          | OperatorKind::Not => 0,
-            OperatorKind::Pow => 7,
-            OperatorKind::Mul
-          | OperatorKind::Div => 6,
-            OperatorKind::Add
-          | OperatorKind::Sub => 5,
-            OperatorKind::Mod => 4,
-            OperatorKind::Lt
-          | OperatorKind::Le
-          | OperatorKind::Gt
-          | OperatorKind::Ge
-          | OperatorKind::Ne
-          | OperatorKind::Eq => 3,
-            OperatorKind::And => 2,
-            OperatorKind::Or => 1,
-        }
-    }
-
-    pub fn next_precedence(self) -> Precedence {
-        if self.kind == OperatorKind::Pow {
-            self.precedence()
-        } else {
-            self.precedence() + 1
+        match self {
+            Operator::Pos
+          | Operator::Neg
+          | Operator::Not => 0,
+            Operator::Pow => 7,
+            Operator::Mul
+          | Operator::Div => 6,
+            Operator::Add
+          | Operator::Sub => 5,
+            Operator::Mod => 4,
+            Operator::Lt
+          | Operator::Le
+          | Operator::Gt
+          | Operator::Ge
+          | Operator::Ne
+          | Operator::Eq => 3,
+            Operator::And => 2,
+            Operator::Or => 1,
         }
     }
 }
