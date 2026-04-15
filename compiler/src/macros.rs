@@ -4,16 +4,20 @@ macro_rules! entity_id {
         pub struct $name($size);
 
         impl $name {
-            pub fn new(id: $size) -> $name {
+            pub const fn new(id: $size) -> $name {
                 $name(id)
             }
 
-            pub fn id(self) -> $size {
+            pub const fn id(self) -> $size {
                 self.0
             }
 
-            pub fn prev(self) -> $name {
+            pub const fn prev(self) -> $name {
                 $name(self.0.saturating_sub(1))
+            }
+
+            pub const fn next(self) -> $name {
+                $name(self.0.saturating_add(1))
             }
         }
 

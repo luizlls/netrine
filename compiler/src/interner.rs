@@ -38,7 +38,7 @@ impl Hash for NameKey {
 impl PartialEq for NameKey {
     fn eq(&self, other: &Self) -> bool {
         // SAFETY: both pointers always point to a valid str
-        unsafe { &*self.0 == &*other.0 }
+        unsafe { *self.0 == *other.0 }
     }
 }
 
