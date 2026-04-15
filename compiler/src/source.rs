@@ -51,7 +51,7 @@ impl From<Span> for Range<usize> {
 }
 
 impl Span {
-    pub fn range(self) -> Range<usize> {
+    pub const fn range(self) -> Range<usize> {
         (self.start as usize)..(self.end as usize)
     }
 }
@@ -65,6 +65,10 @@ pub struct WithSpan<T> {
 impl<T> WithSpan<T> {
     pub fn new(value: T, span: Span) -> WithSpan<T> {
         WithSpan { value, span }
+    }
+
+    pub fn parts(self) -> (T, Span) {
+        (self.value, self.span)
     }
 }
 

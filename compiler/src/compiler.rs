@@ -23,24 +23,24 @@ impl<'state> Compiler<'state> {
     }
 
     pub fn parse(&mut self) -> Result<syntax::Syntax> {
-        let tokens = lexer::tokens(&self.source);
+        let tokens = lexer::tokens(self.source);
         parser::parse(tokens)
     }
 
     pub fn mir(&mut self) -> Result<mir::Module> {
         let syntax = self.parse()?;
-        mir::from_syntax(&syntax, &self.source, &mut self.interner)
+        mir::from_syntax(&syntax, self.source, &mut self.interner)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {
-        let mir = self.mir()?;
+        // let mir = self.mir()?;
         // wasm::compile(&mir)
         Ok(vec![])
     }
 
     pub fn build(&mut self) -> Result<()> {
         let wasm = self.compile()?;
-        fs::write("output.wasm".to_string(), wasm).expect("Failed to write to output file");
+        fs::write("output.wasm", wasm).expect("Failed to write to output file");
         Ok(())
     }
 }

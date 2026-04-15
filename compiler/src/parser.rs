@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::lexer::Tokens;
 use crate::source::WithSpan;
-use crate::syntax::{End, Node, NodeIndex, NodeKind, Operator, Precedence, Syntax, TokenIndex};
+use crate::syntax::{Node, NodeIndex, NodeKind, Operator, Precedence, Syntax, TokenIndex};
 use crate::token::Token;
 
 #[derive(Debug)]
@@ -65,12 +65,11 @@ impl<'parser> Parser<'parser> {
         self.node(kind, token, 0)
     }
 
-    fn finish(&mut self, start: NodeIndex, end: End) {
+    fn finish(&mut self, start: NodeIndex, end: NodeKind) {
         let token = self.syntax.token_index().prev();
         let size = self.size(start);
-        let node = NodeKind::End(end);
 
-        self.node(node, token, size);
+        self.node(end, token, size);
         self.syntax.resize(start, size);
     }
 
@@ -88,7 +87,7 @@ impl<'parser> Parser<'parser> {
     }
 
     fn define(&mut self) -> Result<()> {
-        let start = self.start(NodeKind::Let);
+        let start = self.start(NodeKind::LetInit);
 
         self.expect(Token::Let)?;
 
@@ -100,35 +99,31 @@ impl<'parser> Parser<'parser> {
         self.expect(Token::Equals)?;
         self.expr()?;
 
-        self.finish(start, End::Let);
+        self.finish(start, NodeKind::LetEnd);
 
         Ok(())
     }
 
     fn function(&mut self, start: NodeIndex) -> Result<()> {
-        self.syntax.replace(start, NodeKind::Fn);
+        self.syntax.replace(start, NodeKind::FnInit);
 
         self.name()?;
         self.params()?;
         self.expect(Token::Equals)?;
         self.expr()?;
 
-        self.finish(start, End::Fn);
+        self.finish(start, NodeKind::FnEnd);
 
         Ok(())
     }
 
     fn params(&mut self) -> Result<()> {
-        let start = self.start(NodeKind::Parameters);
-
         self.seq(Token::LParen, Token::RParen, |parser| {
-            let start = parser.start(NodeKind::Parameter);
+            let start = parser.start(NodeKind::ParameterInit);
             parser.name()?;
-            parser.finish(start, End::Parameter);
+            parser.finish(start, NodeKind::ParameterEnd);
             Ok(())
         })?;
-
-        self.finish(start, End::Parameters);
 
         Ok(())
     }
@@ -178,13 +173,13 @@ impl<'parser> Parser<'parser> {
     }
 
     fn parens(&mut self) -> Result<()> {
-        let start = self.start(NodeKind::Group);
+        let start = self.start(NodeKind::GroupInit);
 
         self.expect(Token::LParen)?;
         self.expr()?;
         self.expect(Token::RParen)?;
 
-        self.finish(start, End::Group);
+        self.finish(start, NodeKind::GroupEnd);
 
         Ok(())
     }

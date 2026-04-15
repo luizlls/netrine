@@ -68,29 +68,22 @@ impl Node {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeKind {
-    Name,
     Identifier,
-    Let,
-    Fn,
-    Parameter,
-    Parameters,
-    Group,
+    Name,
+    LetInit,
+    LetEnd,
+    FnInit,
+    FnEnd,
+    ParameterInit,
+    ParameterEnd,
+    GroupInit,
+    GroupEnd,
     Unary(Operator),
     Binary(Operator),
     Number,
     Integer,
     True,
     False,
-    End(End),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum End {
-    Let,
-    Fn,
-    Parameter,
-    Parameters,
-    Group,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

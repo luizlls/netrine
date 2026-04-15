@@ -12,9 +12,9 @@ fn main() {
     let source = source(&args[0]);
 
     let mut compiler = Compiler::new(&source);
-    match compiler.parse() {
-        Ok(syntax) => {
-            println!("{:#?}", syntax);
+    match compiler.mir() {
+        Ok(mir) => {
+            println!("{:#?}", mir);
         }
         Err(error) => {
             let error = error.report(&source).expect("Couldn't report the error");
@@ -24,6 +24,6 @@ fn main() {
 }
 
 fn source(path: &str) -> Source {
-    let content = fs::read_to_string(&path).expect("Couldn't read the file");
+    let content = fs::read_to_string(path).expect("Couldn't read the file");
     Source::new(path.to_string(), content)
 }
