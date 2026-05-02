@@ -1,7 +1,7 @@
+use super::token::Token;
 use crate::collections::IndexVec;
 use crate::macros::entity_id;
 use crate::source::Span;
-use crate::token::Token;
 
 #[derive(Debug, Clone)]
 pub struct Syntax {

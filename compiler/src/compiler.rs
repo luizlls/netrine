@@ -2,12 +2,9 @@ use std::fs;
 
 use crate::error::Result;
 use crate::interner::Interner;
-use crate::lexer;
 use crate::mir;
-use crate::parser;
 use crate::source::Source;
 use crate::syntax;
-// use crate::wasm;
 
 pub struct Compiler<'state> {
     source: &'state Source,
@@ -23,13 +20,12 @@ impl<'state> Compiler<'state> {
     }
 
     pub fn parse(&mut self) -> Result<syntax::Syntax> {
-        let tokens = lexer::tokens(self.source);
-        parser::parse(tokens)
+        syntax::parse(self.source)
     }
 
     pub fn mir(&mut self) -> Result<mir::Module> {
         let syntax = self.parse()?;
-        mir::from_syntax(&syntax, self.source, &mut self.interner)
+        mir::from_syntax(self.source, &mut self.interner, &syntax)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {

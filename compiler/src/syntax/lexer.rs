@@ -1,5 +1,5 @@
+use super::token::Token;
 use crate::source::{Source, Span, WithSpan};
-use crate::token::Token;
 
 #[derive(Debug, Clone)]
 struct Lexer<'lexer> {

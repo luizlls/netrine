@@ -97,6 +97,7 @@ mod tests {
         let foo1 = interner.intern("foo");
         assert_eq!(foo, foo1);
 
+        assert_eq!(interner.get(Name(0)), Some("foo"));
         assert_eq!(interner.get(Name(10)), None);
     }
 }

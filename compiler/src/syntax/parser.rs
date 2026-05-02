@@ -1,8 +1,8 @@
+use super::lexer::Tokens;
+use super::token::Token;
 use crate::error::{Error, Result};
-use crate::lexer::Tokens;
 use crate::source::WithSpan;
 use crate::syntax::{Node, NodeIndex, NodeKind, Operator, Precedence, Syntax, TokenIndex};
-use crate::token::Token;
 
 #[derive(Debug)]
 struct Parser<'parser> {
