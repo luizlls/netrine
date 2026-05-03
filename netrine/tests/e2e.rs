@@ -20,8 +20,7 @@ fn eval_wasm(source: String) -> String {
     let engine = store.engine();
     let module = Module::new(&engine, wasm).unwrap();
 
-    let main =
-        Instance::new(&mut store, &module, &[]).unwrap().get_func(&mut store, "main").unwrap();
+    let main = Instance::new(&mut store, &module, &[]).unwrap().get_func(&mut store, "main").unwrap();
 
     let mut results = [Val::F64(0)];
     main.call(&mut store, &[], &mut results).unwrap();

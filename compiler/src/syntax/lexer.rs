@@ -287,36 +287,36 @@ impl<'lexer> Lexer<'lexer> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Tokens<'lexer> {
+pub struct TokenBuffer<'lexer> {
     lexer: Lexer<'lexer>,
     peek: WithSpan<Token>,
-    current: WithSpan<Token>,
+    token: WithSpan<Token>,
 }
 
-impl<'tokens> Tokens<'tokens> {
-    pub fn new(source: &'tokens Source) -> Tokens<'tokens> {
-        Tokens {
+impl<'tokens> TokenBuffer<'tokens> {
+    pub fn new(source: &'tokens Source) -> TokenBuffer<'tokens> {
+        TokenBuffer {
             lexer: Lexer::new(source),
             peek: Default::default(),
-            current: Default::default(),
+            token: Default::default(),
         }
         .init()
     }
 
-    fn init(mut self) -> Tokens<'tokens> {
+    fn init(mut self) -> TokenBuffer<'tokens> {
         self.bump();
         self.bump();
         self
     }
 
     pub fn bump(&mut self) {
-        self.current = self.peek;
+        self.token = self.peek;
         self.peek = self.lexer.next();
     }
 
     #[inline]
     pub fn token(&self) -> WithSpan<Token> {
-        self.current
+        self.token
     }
 
     #[inline]
@@ -325,12 +325,12 @@ impl<'tokens> Tokens<'tokens> {
     }
 
     pub fn done(&self) -> bool {
-        self.current.value == Token::EOF
+        self.token.value == Token::EOF
     }
 }
 
-pub fn tokens<'tokens>(source: &'tokens Source) -> Tokens<'tokens> {
-    Tokens::new(source)
+pub fn tokens<'tokens>(source: &'tokens Source) -> TokenBuffer<'tokens> {
+    TokenBuffer::new(source)
 }
 
 #[cfg(test)]
@@ -350,9 +350,9 @@ mod tests {
 
         let mut result = vec![];
 
-        while tokens.current.value != Token::EOF {
-            let token = tokens.current.value;
-            let span = tokens.current.span;
+        while tokens.token.value != Token::EOF {
+            let token = tokens.token.value;
+            let span = tokens.token.span;
 
             result.push(TestResult {
                 token,

@@ -8,6 +8,7 @@ use crate::types::TypeId;
 pub struct Module {
     pub definitions: IndexMap<Name, DefinitionId, Definition>,
     pub functions: IndexMap<Name, FunctionId, Function>,
+    pub entrypoint: Function,
 }
 
 entity_id!(InstructionId, u32);
@@ -15,6 +16,7 @@ entity_id!(InstructionId, u32);
 #[derive(Debug, Clone, Copy)]
 pub enum Instruction {
     Parameter(Parameter),
+    Global(GlobalRef),
     Binary(Binary),
     Unary(Unary),
     Integer(Integer),
@@ -56,6 +58,17 @@ impl Instruction {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct GlobalRef {
+    pub definition_id: DefinitionId,
+}
+
+impl Instruction {
+    pub const fn global(definition_id: DefinitionId) -> Instruction {
+        Instruction::Global(GlobalRef { definition_id })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Unary {
     pub operator: Operator,
     pub operand: InstructionId,
@@ -78,11 +91,7 @@ pub struct Binary {
 }
 
 impl Instruction {
-    pub const fn binary(
-        operator: Operator,
-        loperand: InstructionId,
-        roperand: InstructionId,
-    ) -> Instruction {
+    pub const fn binary(operator: Operator, loperand: InstructionId, roperand: InstructionId) -> Instruction {
         Instruction::Binary(Binary {
             operator,
             loperand,

@@ -11,46 +11,6 @@ pub struct Syntax {
     pub spans: IndexVec<TokenIndex, Span>,
 }
 
-impl Syntax {
-    pub fn new() -> Syntax {
-        Syntax {
-            nodes: IndexVec::new(),
-            sizes: IndexVec::new(),
-            tokens: IndexVec::new(),
-            spans: IndexVec::new(),
-        }
-    }
-
-    pub fn push_node(&mut self, node: Node, size: u32) -> NodeIndex {
-        let index = self.nodes.push(node);
-        self.sizes.insert(index, size);
-        index
-    }
-
-    pub fn push_token(&mut self, token: Token, span: Span) -> TokenIndex {
-        let index = self.tokens.push(token);
-        self.spans.insert(index, span);
-        index
-    }
-
-    pub fn token_index(&self) -> TokenIndex {
-        self.tokens.index()
-    }
-
-    pub fn node_index(&self) -> NodeIndex {
-        self.nodes.index()
-    }
-
-    pub fn resize(&mut self, index: NodeIndex, size: u32) {
-        self.sizes[index] = size;
-    }
-
-    pub fn replace(&mut self, index: NodeIndex, kind: NodeKind) {
-        let node = self.nodes[index];
-        self.nodes[index] = Node { kind, ..node };
-    }
-}
-
 entity_id!(TokenIndex, u32);
 entity_id!(NodeIndex, u32);
 

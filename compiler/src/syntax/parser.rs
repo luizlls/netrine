@@ -1,35 +1,42 @@
-use super::lexer::Tokens;
+use super::lexer::TokenBuffer;
 use super::token::Token;
+use crate::collections::IndexVec;
 use crate::error::{Error, Result};
-use crate::source::WithSpan;
+use crate::source::{Span, WithSpan};
 use crate::syntax::{Node, NodeIndex, NodeKind, Operator, Precedence, Syntax, TokenIndex};
 
 #[derive(Debug)]
 struct Parser<'parser> {
-    tokens: Tokens<'parser>,
+    buffer: TokenBuffer<'parser>,
     current: WithSpan<Token>,
-    syntax: Syntax,
+    nodes: IndexVec<NodeIndex, Node>,
+    sizes: IndexVec<NodeIndex, u32>,
+    tokens: IndexVec<TokenIndex, Token>,
+    spans: IndexVec<TokenIndex, Span>,
 }
 
 impl<'parser> Parser<'parser> {
-    fn new(tokens: Tokens<'parser>) -> Parser<'parser> {
+    fn new(buffer: TokenBuffer<'parser>) -> Parser<'parser> {
         Parser {
-            tokens,
+            buffer,
             current: WithSpan::default(),
-            syntax: Syntax::new(),
+            nodes: IndexVec::new(),
+            sizes: IndexVec::new(),
+            tokens: IndexVec::new(),
+            spans: IndexVec::new(),
         }
         .init()
     }
 
     fn init(mut self) -> Parser<'parser> {
-        self.current = self.tokens.token();
+        self.current = self.buffer.token();
         self
     }
 
     fn bump(&mut self) {
-        self.syntax.push_token(self.current.value, self.current.span);
-        self.tokens.bump();
-        self.current = self.tokens.token();
+        self.push_token(self.current.value, self.current.span);
+        self.buffer.bump();
+        self.current = self.buffer.token();
     }
 
     fn fail<T>(&mut self, message: impl Into<String>) -> Result<T> {
@@ -39,7 +46,7 @@ impl<'parser> Parser<'parser> {
     }
 
     fn recover(&mut self) {
-        while !self.tokens.done() {
+        while !self.buffer.done() {
             self.bump();
         }
     }
@@ -49,32 +56,53 @@ impl<'parser> Parser<'parser> {
     }
 
     fn peek_is(&self, kind: Token) -> bool {
-        self.tokens.peek().value == kind
+        self.buffer.peek().value == kind
     }
 
     fn done(&self) -> bool {
-        self.tokens.done()
+        self.buffer.done()
     }
 
-    fn node(&mut self, kind: NodeKind, token: TokenIndex, size: u32) -> NodeIndex {
-        self.syntax.push_node(Node::new(kind, token), size)
+    pub fn token_index(&self) -> TokenIndex {
+        self.tokens.index()
+    }
+
+    pub fn node_index(&self) -> NodeIndex {
+        self.nodes.index()
+    }
+
+    fn push_token(&mut self, token: Token, span: Span) -> TokenIndex {
+        let index = self.tokens.push(token);
+        self.spans.insert(index, span);
+        index
+    }
+
+    fn push_node(&mut self, kind: NodeKind, token: TokenIndex, size: u32) -> NodeIndex {
+        let index = self.nodes.push(Node::new(kind, token));
+        self.sizes.insert(index, size);
+        index
+    }
+
+    fn replace_node(&mut self, index: NodeIndex, kind: NodeKind) {
+        let node = self.nodes[index];
+        self.nodes[index] = Node { kind, ..node };
     }
 
     fn start(&mut self, kind: NodeKind) -> NodeIndex {
-        let token = self.syntax.token_index();
-        self.node(kind, token, 0)
+        let token = self.token_index();
+        self.push_node(kind, token, 0)
     }
 
     fn finish(&mut self, start: NodeIndex, end: NodeKind) {
-        let token = self.syntax.token_index().prev();
+        let token = self.token_index().prev();
         let size = self.size(start);
 
-        self.node(end, token, size);
-        self.syntax.resize(start, size);
+        self.push_node(end, token, size);
+        self.sizes[start] = size;
     }
 
     fn size(&self, start: NodeIndex) -> u32 {
-        let curr = self.syntax.node_index();
+        let curr = self.node_index();
         u32::from(curr) - u32::from(start)
     }
 
@@ -105,7 +133,7 @@ impl<'parser> Parser<'parser> {
     }
 
     fn function(&mut self, start: NodeIndex) -> Result<()> {
-        self.syntax.replace(start, NodeKind::FnInit);
+        self.replace_node(start, NodeKind::FnInit);
 
         self.name()?;
         self.params()?;
@@ -150,9 +178,9 @@ impl<'parser> Parser<'parser> {
     }
 
     fn literal(&mut self, kind: Token, node: NodeKind) -> Result<()> {
-        let token = self.syntax.token_index();
+        let token = self.token_index();
         self.expect(kind)?;
-        self.node(node, token, 0);
+        self.push_node(node, token, 0);
         Ok(())
     }
 
@@ -186,9 +214,9 @@ impl<'parser> Parser<'parser> {
 
     fn unary(&mut self) -> Result<()> {
         if let Some((operator, token)) = self.operator(0 as Precedence, true) {
-            let start = self.syntax.node_index();
+            let start = self.node_index();
             self.unary()?;
-            self.node(NodeKind::Unary(operator), token, self.size(start));
+            self.push_node(NodeKind::Unary(operator), token, self.size(start));
         } else {
             self.atom()?;
         }
@@ -197,7 +225,7 @@ impl<'parser> Parser<'parser> {
     }
 
     fn binary(&mut self, precedence: Precedence) -> Result<()> {
-        let start = self.syntax.node_index();
+        let start = self.node_index();
 
         self.unary()?;
 
@@ -211,7 +239,7 @@ impl<'parser> Parser<'parser> {
             };
 
             self.binary(next_precedence)?;
-            self.node(NodeKind::Binary(operator), token, self.size(start));
+            self.push_node(NodeKind::Binary(operator), token, self.size(start));
         }
 
         Ok(())
@@ -240,7 +268,7 @@ impl<'parser> Parser<'parser> {
         };
 
         if operator.precedence() >= precedence {
-            let token = self.syntax.token_index();
+            let token = self.token_index();
             self.bump();
             Some((operator, token))
         } else {
@@ -329,10 +357,19 @@ impl<'parser> Parser<'parser> {
         let expected: Vec<_> = expected.iter().map(|it| format!("`{it}`")).collect();
         format!("expected {}, found `{}`", expected.join(", "), self.current.value)
     }
+
+    fn finalize(self) -> Syntax {
+        Syntax {
+            nodes: self.nodes,
+            sizes: self.sizes,
+            tokens: self.tokens,
+            spans: self.spans,
+        }
+    }
 }
 
-pub fn parse<'parser>(tokens: Tokens<'parser>) -> Result<Syntax> {
-    let mut parser = Parser::new(tokens);
+pub fn parse<'parser>(buffer: TokenBuffer<'parser>) -> Result<Syntax> {
+    let mut parser = Parser::new(buffer);
 
     parser.newline();
 
@@ -341,5 +378,5 @@ pub fn parse<'parser>(tokens: Tokens<'parser>) -> Result<Syntax> {
         parser.endline()?;
     }
 
-    Ok(parser.syntax)
+    Ok(parser.finalize())
 }

@@ -120,16 +120,30 @@ mod tests {
     }
 
     #[test]
-    fn test_index_map() {
+    fn insert() {
         let mut map: IndexMap<&str, Index, i32> = IndexMap::new();
-        let index1 = map.insert("foo", 1);
+
+        let id1 = map.insert("foo", 1);
         assert_eq!(map.get("foo"), Some(&1));
 
-        let _index2 = map.insert("bar", 2);
+        let _id2 = map.insert("bar", 2);
         assert_eq!(map.get("bar"), Some(&2));
 
-        let index3 = map.insert("foo", 3);
-        assert_eq!(index1, index3);
-        assert_eq!(map[index3], 3);
+        let id3 = map.insert("foo", 3);
+        assert_eq!(id1, id3);
+        assert_eq!(map[id3], 3);
+    }
+
+    #[test]
+    fn insert_with() {
+        #[derive(Debug, PartialEq)]
+        struct Value {
+            id: Index,
+        }
+
+        let mut map: IndexMap<&str, Index, Value> = IndexMap::new();
+
+        let id1 = map.insert_with("foo", |id| Value { id });
+        assert_eq!(map.get("foo"), Some(&Value { id: id1 }));
     }
 }
