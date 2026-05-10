@@ -1,15 +1,13 @@
 mod lexer;
-mod node;
 mod parser;
+mod syntax;
 mod token;
 
-pub use node::*;
+pub use syntax::*;
 
 use crate::error::Result;
 use crate::source::Source;
 
-pub fn parse(source: &Source) -> Result<Syntax> {
-    let tokens = lexer::tokens(source);
-    let syntax = parser::parse(tokens);
-    syntax
+pub fn parse(source: &Source) -> Result<Module> {
+    parser::parse(lexer::tokens(source))
 }

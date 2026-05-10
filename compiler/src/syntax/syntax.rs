@@ -4,7 +4,7 @@ use crate::macros::entity_id;
 use crate::source::Span;
 
 #[derive(Debug, Clone)]
-pub struct Syntax {
+pub struct Module {
     pub nodes: IndexVec<NodeIndex, Node>,
     pub sizes: IndexVec<NodeIndex, u32>,
     pub tokens: IndexVec<TokenIndex, Token>,

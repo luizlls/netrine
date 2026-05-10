@@ -2,26 +2,26 @@ use super::token::Token;
 use crate::source::{Source, Span, WithSpan};
 
 #[derive(Debug, Clone)]
-struct Lexer<'lexer> {
-    bytes: &'lexer [u8],
+struct Context<'ctx> {
+    bytes: &'ctx [u8],
     curr: u8,
     peek: u8,
     index: usize,
     start: usize,
 }
 
-impl<'lexer> Lexer<'lexer> {
-    fn new(source: &'lexer Source) -> Lexer<'lexer> {
-        let mut lexer = Lexer {
+impl<'ctx> Context<'ctx> {
+    fn new(source: &'ctx Source) -> Context<'ctx> {
+        let mut ctx = Context {
             bytes: source.content.as_bytes(),
             curr: 0,
             peek: 0,
             index: 0,
             start: 0,
         };
-        lexer.curr = lexer.at(0);
-        lexer.peek = lexer.at(1);
-        lexer
+        ctx.curr = ctx.at(0);
+        ctx.peek = ctx.at(1);
+        ctx
     }
 
     fn align(&mut self) {
@@ -46,7 +46,7 @@ impl<'lexer> Lexer<'lexer> {
         }
     }
 
-    fn slice(&self) -> &'lexer [u8] {
+    fn slice(&self) -> &'ctx [u8] {
         &self.bytes[self.start..self.index]
     }
 
@@ -63,214 +63,8 @@ impl<'lexer> Lexer<'lexer> {
         }
     }
 
-    fn token(&mut self, token: Token) -> WithSpan<Token> {
-        WithSpan::<Token> {
-            value: token,
-            span: self.span(),
-        }
-    }
-
-    fn next(&mut self) -> WithSpan<Token> {
-        self.trivia();
-        self.align();
-
-        let kind = match self.curr {
-            b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
-                return self.ident();
-            }
-            b'0'..=b'9' => {
-                return self.number();
-            }
-            b'"' => {
-                return self.string();
-            }
-            b'\n' => {
-                return self.newline();
-            }
-            _ if self.is_symbol(self.curr) => {
-                return self.operator();
-            }
-            b'(' => Token::LParen,
-            b')' => Token::RParen,
-            b'{' => Token::LBrace,
-            b'}' => Token::RBrace,
-            b'[' => Token::LBracket,
-            b']' => Token::RBracket,
-            b';' => Token::Semi,
-            b',' => Token::Comma,
-            0 => Token::EOF,
-            _ => {
-                return self.unexpected_character();
-            }
-        };
-
-        self.bump();
-
-        self.token(kind)
-    }
-
-    fn ident(&mut self) -> WithSpan<Token> {
-        self.bump_while(|chr| matches!(chr, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'));
-        self.bump_while(|chr| chr == b'\'');
-
-        let value = self.slice();
-
-        let kind = match value {
-            b"let" => Token::Let,
-            b"True" => Token::True,
-            b"False" => Token::False,
-            b"and" => Token::And,
-            b"or" => Token::Or,
-            b"not" => Token::Not,
-            _ => Token::Identifier,
-        };
-
-        self.token(kind)
-    }
-
-    #[rustfmt::skip]
-    fn is_symbol(&self, chr: u8) -> bool {
-        matches!(
-            chr,
-            b'=' | b':' | b'.' | b'|' | b'<' | b'>' | b'!' | b'+' | b'-' | b'*' | b'/' | b'^' | b'%'
-        )
-    }
-
-    fn operator(&mut self) -> WithSpan<Token> {
-        let kind = match self.curr {
-            b'.' if self.peek == b'.' => {
-                self.bump();
-                Token::Dots
-            }
-            b'.' => Token::Dot,
-            b'=' if self.peek == b'=' => {
-                self.bump();
-                Token::EqEq
-            }
-            b'=' if self.peek == b'>' => {
-                self.bump();
-                Token::Arrow
-            }
-            b'=' => Token::Equals,
-            b':' => Token::Colon,
-            b'<' if self.peek == b'=' => {
-                self.bump();
-                Token::LtEq
-            }
-            b'<' => Token::Lt,
-            b'>' if self.peek == b'=' => {
-                self.bump();
-                Token::GtEq
-            }
-            b'>' => Token::Gt,
-            b'!' if self.peek == b'=' => {
-                self.bump();
-                Token::NoEq
-            }
-            b'+' => Token::Plus,
-            b'-' => Token::Minus,
-            b'*' => Token::Star,
-            b'/' => Token::Slash,
-            b'^' => Token::Caret,
-            b'%' => Token::Mod,
-            _ => unreachable!(),
-        };
-
-        self.bump();
-
-        self.token(kind)
-    }
-
-    fn number(&mut self) -> WithSpan<Token> {
-        self.bump_while(|chr| chr.is_ascii_digit());
-
-        match self.curr {
-            b'.' if self.peek.is_ascii_digit() => {
-                self.bump();
-                self.bump_while(|chr| chr.is_ascii_digit());
-
-                return self.token(Token::Number);
-            }
-            b'b' if self.slice() == b"0" => {
-                self.bump();
-                self.bump_while(|chr| matches!(chr, b'0' | b'1'));
-            }
-            b'x' if self.slice() == b"0" => {
-                self.bump();
-                self.bump_while(|chr| chr.is_ascii_hexdigit());
-            }
-            _ => {}
-        }
-
-        self.token(Token::Integer)
-    }
-
-    fn string(&mut self) -> WithSpan<Token> {
-        loop {
-            match self.bump() {
-                b'\n' | b'\0' => {
-                    return self.token(Token::UnterminatedString);
-                }
-                b'"' => {
-                    self.bump();
-                    break;
-                }
-                b'\\' => {
-                    match self.bump() {
-                        b'\\' | b'n' | b'r' | b't' | b'"' | b'0' => {}
-                        b'u' => todo!("validate escaped unicode"),
-                        b'x' => todo!("validate escaped binary"),
-                        _ => {
-                            return self.invalid_escape_character();
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        self.token(Token::String)
-    }
-
-    fn invalid_escape_character(&mut self) -> WithSpan<Token> {
-        self.align();
-        self.bump_utf8_sequence();
-
-        let token = self.token(Token::UnexpectedCharacter);
-
-        // skip to the end of the string
-        loop {
-            match self.curr {
-                b'"' => {
-                    self.bump();
-                    break;
-                }
-                b'\n' | b'\0' => {
-                    break;
-                }
-                _ => {}
-            }
-            self.bump();
-        }
-
-        token
-    }
-
-    fn unexpected_character(&mut self) -> WithSpan<Token> {
-        self.bump_utf8_sequence();
-        self.token(Token::UnexpectedCharacter)
-    }
-
     fn bump_utf8_sequence(&mut self) {
         todo!()
-    }
-
-    fn newline(&mut self) -> WithSpan<Token> {
-        while self.curr == b'\n' {
-            self.bump();
-            self.trivia();
-        }
-        self.token(Token::EOL)
     }
 
     fn trivia(&mut self) {
@@ -286,24 +80,230 @@ impl<'lexer> Lexer<'lexer> {
     }
 }
 
+fn token(ctx: &mut Context, token: Token) -> WithSpan<Token> {
+    WithSpan::<Token> {
+        value: token,
+        span: ctx.span(),
+    }
+}
+
+fn next(ctx: &mut Context) -> WithSpan<Token> {
+    ctx.trivia();
+    ctx.align();
+
+    let kind = match ctx.curr {
+        b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
+            return ident(ctx);
+        }
+        b'0'..=b'9' => {
+            return number(ctx);
+        }
+        b'"' => {
+            return string(ctx);
+        }
+        b'\n' => {
+            return newline(ctx);
+        }
+        _ if is_symbol(ctx.curr) => {
+            return operator(ctx);
+        }
+        b'(' => Token::LParen,
+        b')' => Token::RParen,
+        b'{' => Token::LBrace,
+        b'}' => Token::RBrace,
+        b'[' => Token::LBracket,
+        b']' => Token::RBracket,
+        b';' => Token::Semi,
+        b',' => Token::Comma,
+        0 => Token::EOF,
+        _ => {
+            return unexpected_character(ctx);
+        }
+    };
+
+    ctx.bump();
+
+    token(ctx, kind)
+}
+
+fn ident(ctx: &mut Context) -> WithSpan<Token> {
+    ctx.bump_while(|chr| matches!(chr, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'));
+    ctx.bump_while(|chr| chr == b'\'');
+
+    let value = ctx.slice();
+
+    let kind = match value {
+        b"let" => Token::Let,
+        b"True" => Token::True,
+        b"False" => Token::False,
+        b"and" => Token::And,
+        b"or" => Token::Or,
+        b"not" => Token::Not,
+        _ => Token::Identifier,
+    };
+
+    token(ctx, kind)
+}
+
+#[rustfmt::skip]
+fn is_symbol(chr: u8) -> bool {
+    matches!(
+        chr,
+        b'=' | b':' | b'.' | b'|' | b'<' | b'>' | b'!' | b'+' | b'-' | b'*' | b'/' | b'^' | b'%'
+    )
+}
+
+fn operator(ctx: &mut Context) -> WithSpan<Token> {
+    let kind = match ctx.curr {
+        b'.' if ctx.peek == b'.' => {
+            ctx.bump();
+            Token::Dots
+        }
+        b'.' => Token::Dot,
+        b'=' if ctx.peek == b'=' => {
+            ctx.bump();
+            Token::EqEq
+        }
+        b'=' if ctx.peek == b'>' => {
+            ctx.bump();
+            Token::Arrow
+        }
+        b'=' => Token::Equals,
+        b':' => Token::Colon,
+        b'<' if ctx.peek == b'=' => {
+            ctx.bump();
+            Token::LtEq
+        }
+        b'<' => Token::Lt,
+        b'>' if ctx.peek == b'=' => {
+            ctx.bump();
+            Token::GtEq
+        }
+        b'>' => Token::Gt,
+        b'!' if ctx.peek == b'=' => {
+            ctx.bump();
+            Token::NoEq
+        }
+        b'+' => Token::Plus,
+        b'-' => Token::Minus,
+        b'*' => Token::Star,
+        b'/' => Token::Slash,
+        b'^' => Token::Caret,
+        b'%' => Token::Mod,
+        _ => unreachable!(),
+    };
+
+    ctx.bump();
+
+    token(ctx, kind)
+}
+
+fn number(ctx: &mut Context) -> WithSpan<Token> {
+    ctx.bump_while(|chr| chr.is_ascii_digit());
+
+    match ctx.curr {
+        b'.' if ctx.peek.is_ascii_digit() => {
+            ctx.bump();
+            ctx.bump_while(|chr| chr.is_ascii_digit());
+
+            return token(ctx, Token::Number);
+        }
+        b'b' if ctx.slice() == b"0" => {
+            ctx.bump();
+            ctx.bump_while(|chr| matches!(chr, b'0' | b'1'));
+        }
+        b'x' if ctx.slice() == b"0" => {
+            ctx.bump();
+            ctx.bump_while(|chr| chr.is_ascii_hexdigit());
+        }
+        _ => {}
+    }
+
+    token(ctx, Token::Integer)
+}
+
+fn string(ctx: &mut Context) -> WithSpan<Token> {
+    loop {
+        match ctx.bump() {
+            b'\n' | b'\0' => {
+                return token(ctx, Token::UnterminatedString);
+            }
+            b'"' => {
+                ctx.bump();
+                break;
+            }
+            b'\\' => {
+                match ctx.bump() {
+                    b'\\' | b'n' | b'r' | b't' | b'"' | b'0' => {}
+                    b'u' => todo!("validate escaped unicode"),
+                    b'x' => todo!("validate escaped binary"),
+                    _ => {
+                        return invalid_escape_character(ctx);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    token(ctx, Token::String)
+}
+
+fn invalid_escape_character(ctx: &mut Context) -> WithSpan<Token> {
+    ctx.align();
+    ctx.bump_utf8_sequence();
+
+    let token = token(ctx, Token::UnexpectedCharacter);
+
+    // skip to the end of the string
+    loop {
+        match ctx.curr {
+            b'"' => {
+                ctx.bump();
+                break;
+            }
+            b'\n' | b'\0' => {
+                break;
+            }
+            _ => {}
+        }
+        ctx.bump();
+    }
+
+    token
+}
+
+fn unexpected_character(ctx: &mut Context) -> WithSpan<Token> {
+    ctx.bump_utf8_sequence();
+    token(ctx, Token::UnexpectedCharacter)
+}
+
+fn newline(ctx: &mut Context) -> WithSpan<Token> {
+    while ctx.curr == b'\n' {
+        ctx.bump();
+        ctx.trivia();
+    }
+    token(ctx, Token::EOL)
+}
+
 #[derive(Debug, Clone)]
-pub struct TokenBuffer<'lexer> {
-    lexer: Lexer<'lexer>,
+pub struct TokenStream<'ctx> {
+    ctx: Context<'ctx>,
     peek: WithSpan<Token>,
     token: WithSpan<Token>,
 }
 
-impl<'tokens> TokenBuffer<'tokens> {
-    pub fn new(source: &'tokens Source) -> TokenBuffer<'tokens> {
-        TokenBuffer {
-            lexer: Lexer::new(source),
+impl<'tokens> TokenStream<'tokens> {
+    pub fn new(source: &'tokens Source) -> TokenStream<'tokens> {
+        TokenStream {
+            ctx: Context::new(source),
             peek: Default::default(),
             token: Default::default(),
         }
         .init()
     }
 
-    fn init(mut self) -> TokenBuffer<'tokens> {
+    fn init(mut self) -> TokenStream<'tokens> {
         self.bump();
         self.bump();
         self
@@ -311,7 +311,7 @@ impl<'tokens> TokenBuffer<'tokens> {
 
     pub fn bump(&mut self) {
         self.token = self.peek;
-        self.peek = self.lexer.next();
+        self.peek = next(&mut self.ctx);
     }
 
     #[inline]
@@ -329,8 +329,8 @@ impl<'tokens> TokenBuffer<'tokens> {
     }
 }
 
-pub fn tokens<'tokens>(source: &'tokens Source) -> TokenBuffer<'tokens> {
-    TokenBuffer::new(source)
+pub fn tokens<'tokens>(source: &'tokens Source) -> TokenStream<'tokens> {
+    TokenStream::new(source)
 }
 
 #[cfg(test)]

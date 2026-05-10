@@ -1,13 +1,13 @@
-use super::lexer::TokenBuffer;
+use super::lexer::TokenStream;
 use super::token::Token;
 use crate::collections::IndexVec;
 use crate::error::{Error, Result};
 use crate::source::{Span, WithSpan};
-use crate::syntax::{Node, NodeIndex, NodeKind, Operator, Precedence, Syntax, TokenIndex};
+use crate::syntax::{Module, Node, NodeIndex, NodeKind, Operator, Precedence, TokenIndex};
 
 #[derive(Debug)]
-struct Parser<'parser> {
-    buffer: TokenBuffer<'parser>,
+struct Context<'ctx> {
+    stream: TokenStream<'ctx>,
     current: WithSpan<Token>,
     nodes: IndexVec<NodeIndex, Node>,
     sizes: IndexVec<NodeIndex, u32>,
@@ -15,10 +15,10 @@ struct Parser<'parser> {
     spans: IndexVec<TokenIndex, Span>,
 }
 
-impl<'parser> Parser<'parser> {
-    fn new(buffer: TokenBuffer<'parser>) -> Parser<'parser> {
-        Parser {
-            buffer,
+impl<'ctx> Context<'ctx> {
+    fn new(stream: TokenStream<'ctx>) -> Context<'ctx> {
+        Context {
+            stream,
             current: WithSpan::default(),
             nodes: IndexVec::new(),
             sizes: IndexVec::new(),
@@ -28,27 +28,15 @@ impl<'parser> Parser<'parser> {
         .init()
     }
 
-    fn init(mut self) -> Parser<'parser> {
-        self.current = self.buffer.token();
+    fn init(mut self) -> Context<'ctx> {
+        self.current = self.stream.token();
         self
     }
 
     fn bump(&mut self) {
         self.push_token(self.current.value, self.current.span);
-        self.buffer.bump();
-        self.current = self.buffer.token();
-    }
-
-    fn fail<T>(&mut self, message: impl Into<String>) -> Result<T> {
-        let span = self.current.span;
-        self.recover();
-        Err(Error::error(span, message.into()))
-    }
-
-    fn recover(&mut self) {
-        while !self.buffer.done() {
-            self.bump();
-        }
+        self.stream.bump();
+        self.current = self.stream.token();
     }
 
     fn at(&self, kind: Token) -> bool {
@@ -56,11 +44,11 @@ impl<'parser> Parser<'parser> {
     }
 
     fn peek_is(&self, kind: Token) -> bool {
-        self.buffer.peek().value == kind
+        self.stream.peek().value == kind
     }
 
     fn done(&self) -> bool {
-        self.buffer.done()
+        self.stream.done()
     }
 
     pub fn token_index(&self) -> TokenIndex {
@@ -88,278 +76,17 @@ impl<'parser> Parser<'parser> {
         self.nodes[index] = Node { kind, ..node };
     }
 
-    fn start(&mut self, kind: NodeKind) -> NodeIndex {
-        let token = self.token_index();
-        self.push_node(kind, token, 0)
-    }
-
-    fn finish(&mut self, start: NodeIndex, end: NodeKind) {
-        let token = self.token_index().prev();
-        let size = self.size(start);
-
-        self.push_node(end, token, size);
-        self.sizes[start] = size;
-    }
-
-    fn size(&self, start: NodeIndex) -> u32 {
+    fn size(&self, node: NodeIndex) -> u32 {
         let curr = self.node_index();
-        u32::from(curr) - u32::from(start)
+        u32::from(curr) - u32::from(node)
     }
 
-    fn top_level(&mut self) -> Result<()> {
-        if self.at(Token::Let) {
-            self.define()
-        } else {
-            self.expr()
-        }
+    fn resize(&mut self, node: NodeIndex, size: u32) {
+        self.sizes[node] = size;
     }
 
-    fn define(&mut self) -> Result<()> {
-        let start = self.start(NodeKind::LetInit);
-
-        self.expect(Token::Let)?;
-
-        if self.at(Token::Identifier) && self.peek_is(Token::LParen) {
-            return self.function(start);
-        }
-
-        self.name()?;
-        self.expect(Token::Equals)?;
-        self.expr()?;
-
-        self.finish(start, NodeKind::LetEnd);
-
-        Ok(())
-    }
-
-    fn function(&mut self, start: NodeIndex) -> Result<()> {
-        self.replace_node(start, NodeKind::FnInit);
-
-        self.name()?;
-        self.params()?;
-        self.expect(Token::Equals)?;
-        self.expr()?;
-
-        self.finish(start, NodeKind::FnEnd);
-
-        Ok(())
-    }
-
-    fn params(&mut self) -> Result<()> {
-        self.seq(Token::LParen, Token::RParen, |parser| {
-            let start = parser.start(NodeKind::ParameterInit);
-            parser.name()?;
-            parser.finish(start, NodeKind::ParameterEnd);
-            Ok(())
-        })?;
-
-        Ok(())
-    }
-
-    fn expr(&mut self) -> Result<()> {
-        self.binary(0 as Precedence)
-    }
-
-    fn atom(&mut self) -> Result<()> {
-        let token = self.current;
-        match token.value {
-            Token::Identifier => self.ident(),
-            Token::Number => self.number(),
-            Token::Integer => self.integer(),
-            Token::LParen => self.parens(),
-            _ => {
-                self.fail(match token.value {
-                    Token::UnexpectedCharacter => "unexpected character".into(),
-                    Token::UnterminatedString => "unterminated string".into(),
-                    _ => format!("unexpected {}", token.value),
-                })
-            }
-        }
-    }
-
-    fn literal(&mut self, kind: Token, node: NodeKind) -> Result<()> {
-        let token = self.token_index();
-        self.expect(kind)?;
-        self.push_node(node, token, 0);
-        Ok(())
-    }
-
-    fn name(&mut self) -> Result<()> {
-        self.literal(Token::Identifier, NodeKind::Name)
-    }
-
-    fn ident(&mut self) -> Result<()> {
-        self.literal(Token::Identifier, NodeKind::Identifier)
-    }
-
-    fn number(&mut self) -> Result<()> {
-        self.literal(Token::Number, NodeKind::Number)
-    }
-
-    fn integer(&mut self) -> Result<()> {
-        self.literal(Token::Integer, NodeKind::Integer)
-    }
-
-    fn parens(&mut self) -> Result<()> {
-        let start = self.start(NodeKind::GroupInit);
-
-        self.expect(Token::LParen)?;
-        self.expr()?;
-        self.expect(Token::RParen)?;
-
-        self.finish(start, NodeKind::GroupEnd);
-
-        Ok(())
-    }
-
-    fn unary(&mut self) -> Result<()> {
-        if let Some((operator, token)) = self.operator(0 as Precedence, true) {
-            let start = self.node_index();
-            self.unary()?;
-            self.push_node(NodeKind::Unary(operator), token, self.size(start));
-        } else {
-            self.atom()?;
-        }
-
-        Ok(())
-    }
-
-    fn binary(&mut self, precedence: Precedence) -> Result<()> {
-        let start = self.node_index();
-
-        self.unary()?;
-
-        while let Some((operator, token)) = self.operator(precedence, false) {
-            self.newline(); // accepts newlines if the line ends with an operator
-
-            let next_precedence = if operator == Operator::Pow {
-                operator.precedence()
-            } else {
-                operator.precedence() + 1
-            };
-
-            self.binary(next_precedence)?;
-            self.push_node(NodeKind::Binary(operator), token, self.size(start));
-        }
-
-        Ok(())
-    }
-
-    fn operator(&mut self, precedence: Precedence, unary: bool) -> Option<(Operator, TokenIndex)> {
-        let operator = match self.current.value {
-            Token::Plus if unary => Operator::Pos,
-            Token::Minus if unary => Operator::Neg,
-            Token::Not if unary => Operator::Not,
-            Token::Plus => Operator::Add,
-            Token::Minus => Operator::Sub,
-            Token::Star => Operator::Mul,
-            Token::Slash => Operator::Div,
-            Token::Caret => Operator::Pow,
-            Token::Mod => Operator::Mod,
-            Token::And => Operator::And,
-            Token::Or => Operator::Or,
-            Token::EqEq => Operator::Eq,
-            Token::NoEq => Operator::Ne,
-            Token::Lt => Operator::Lt,
-            Token::LtEq => Operator::Le,
-            Token::Gt => Operator::Gt,
-            Token::GtEq => Operator::Ge,
-            _ => return None,
-        };
-
-        if operator.precedence() >= precedence {
-            let token = self.token_index();
-            self.bump();
-            Some((operator, token))
-        } else {
-            None
-        }
-    }
-
-    fn newline(&mut self) -> bool {
-        self.maybe(Token::EOL)
-    }
-
-    fn endline(&mut self) -> Result<()> {
-        if self.maybe(Token::EOL) || self.maybe(Token::Semi) || self.maybe(Token::EOF) {
-            Ok(())
-        } else {
-            self.fail(self.unexpected(&[Token::EOL]))
-        }
-    }
-
-    fn expect(&mut self, kind: Token) -> Result<()> {
-        if self.at(kind) {
-            self.bump();
-            Ok(())
-        } else {
-            self.fail(self.unexpected(&[kind]))
-        }
-    }
-
-    fn maybe(&mut self, kind: Token) -> bool {
-        if self.at(kind) {
-            self.bump();
-            true
-        } else {
-            false
-        }
-    }
-
-    fn seq<F>(&mut self, before: Token, after: Token, mut parse: F) -> Result<usize>
-    where
-        F: FnMut(&mut Self) -> Result<()>,
-    {
-        let mut count = 0;
-
-        self.newline();
-
-        self.expect(before)?;
-
-        while !self.at(after) {
-            parse(self)?;
-            count += 1;
-
-            self.newline();
-            if !self.maybe(Token::Comma) {
-                break;
-            }
-            self.newline();
-        }
-
-        self.expect(after)?;
-
-        Ok(count)
-    }
-
-    fn many<F>(&mut self, before: Token, after: Token, mut parse: F) -> Result<usize>
-    where
-        F: FnMut(&mut Self) -> Result<()>,
-    {
-        let mut count = 0;
-
-        self.newline();
-
-        self.expect(before)?;
-
-        while !self.at(after) {
-            parse(self)?;
-            count += 1;
-            self.newline();
-        }
-
-        self.expect(after)?;
-
-        Ok(count)
-    }
-
-    fn unexpected(&self, expected: &[Token]) -> String {
-        let expected: Vec<_> = expected.iter().map(|it| format!("`{it}`")).collect();
-        format!("expected {}, found `{}`", expected.join(", "), self.current.value)
-    }
-
-    fn finalize(self) -> Syntax {
-        Syntax {
+    fn finalize(self) -> Module {
+        Module {
             nodes: self.nodes,
             sizes: self.sizes,
             tokens: self.tokens,
@@ -368,15 +95,287 @@ impl<'parser> Parser<'parser> {
     }
 }
 
-pub fn parse<'parser>(buffer: TokenBuffer<'parser>) -> Result<Syntax> {
-    let mut parser = Parser::new(buffer);
+fn start(ctx: &mut Context, kind: NodeKind) -> NodeIndex {
+    let token = ctx.token_index();
+    ctx.push_node(kind, token, 0)
+}
 
-    parser.newline();
+fn finish(ctx: &mut Context, start: NodeIndex, end: NodeKind) {
+    let token = ctx.token_index().prev();
+    let size = ctx.size(start);
 
-    while !parser.done() {
-        parser.top_level()?;
-        parser.endline()?;
+    ctx.push_node(end, token, size);
+    ctx.resize(start, size);
+}
+
+fn top_level(ctx: &mut Context) -> Result<()> {
+    if ctx.at(Token::Let) {
+        define(ctx)
+    } else {
+        expr(ctx)
+    }
+}
+
+fn define(ctx: &mut Context) -> Result<()> {
+    let start = start(ctx, NodeKind::LetInit);
+
+    expect(ctx, Token::Let)?;
+
+    if ctx.at(Token::Identifier) && ctx.peek_is(Token::LParen) {
+        return function(ctx, start);
     }
 
-    Ok(parser.finalize())
+    name(ctx)?;
+    expect(ctx, Token::Equals)?;
+    expr(ctx)?;
+
+    finish(ctx, start, NodeKind::LetEnd);
+
+    Ok(())
+}
+
+fn function(ctx: &mut Context, start: NodeIndex) -> Result<()> {
+    ctx.replace_node(start, NodeKind::FnInit);
+
+    name(ctx)?;
+    params(ctx)?;
+    expect(ctx, Token::Equals)?;
+    expr(ctx)?;
+
+    finish(ctx, start, NodeKind::FnEnd);
+
+    Ok(())
+}
+
+fn params(ctx: &mut Context) -> Result<()> {
+    seq(ctx, Token::LParen, Token::RParen, |ctx| {
+        let start = start(ctx, NodeKind::ParameterInit);
+        name(ctx)?;
+        finish(ctx, start, NodeKind::ParameterEnd);
+        Ok(())
+    })?;
+
+    Ok(())
+}
+
+fn expr(ctx: &mut Context) -> Result<()> {
+    binary(ctx, 0 as Precedence)
+}
+
+fn atom(ctx: &mut Context) -> Result<()> {
+    let token = ctx.current;
+    match token.value {
+        Token::Identifier => ident(ctx),
+        Token::Number => number(ctx),
+        Token::Integer => integer(ctx),
+        Token::LParen => parens(ctx),
+        _ => {
+            fail(
+                token.span,
+                match token.value {
+                    Token::UnexpectedCharacter => "unexpected character".into(),
+                    Token::UnterminatedString => "unterminated string".into(),
+                    _ => format!("unexpected {}", token.value),
+                },
+            )
+        }
+    }
+}
+
+fn literal(ctx: &mut Context, kind: Token, node: NodeKind) -> Result<()> {
+    let token = ctx.token_index();
+    expect(ctx, kind)?;
+    ctx.push_node(node, token, 0);
+    Ok(())
+}
+
+fn name(ctx: &mut Context) -> Result<()> {
+    literal(ctx, Token::Identifier, NodeKind::Name)
+}
+
+fn ident(ctx: &mut Context) -> Result<()> {
+    literal(ctx, Token::Identifier, NodeKind::Identifier)
+}
+
+fn number(ctx: &mut Context) -> Result<()> {
+    literal(ctx, Token::Number, NodeKind::Number)
+}
+
+fn integer(ctx: &mut Context) -> Result<()> {
+    literal(ctx, Token::Integer, NodeKind::Integer)
+}
+
+fn parens(ctx: &mut Context) -> Result<()> {
+    let start = start(ctx, NodeKind::GroupInit);
+
+    expect(ctx, Token::LParen)?;
+    expr(ctx)?;
+    expect(ctx, Token::RParen)?;
+
+    finish(ctx, start, NodeKind::GroupEnd);
+
+    Ok(())
+}
+
+fn unary(ctx: &mut Context) -> Result<()> {
+    if let Some((operator, token)) = operator(ctx, 0 as Precedence, true) {
+        let start = ctx.node_index();
+        unary(ctx)?;
+        ctx.push_node(NodeKind::Unary(operator), token, ctx.size(start));
+    } else {
+        atom(ctx)?;
+    }
+
+    Ok(())
+}
+
+fn binary(ctx: &mut Context, precedence: Precedence) -> Result<()> {
+    let start = ctx.node_index();
+
+    unary(ctx)?;
+
+    while let Some((operator, token)) = operator(ctx, precedence, false) {
+        newline(ctx); // accepts newlines if the line ends with an operator
+
+        let next_precedence = if operator == Operator::Pow {
+            operator.precedence()
+        } else {
+            operator.precedence() + 1
+        };
+
+        binary(ctx, next_precedence)?;
+        ctx.push_node(NodeKind::Binary(operator), token, ctx.size(start));
+    }
+
+    Ok(())
+}
+
+fn operator(ctx: &mut Context, precedence: Precedence, unary: bool) -> Option<(Operator, TokenIndex)> {
+    let operator = match ctx.current.value {
+        Token::Plus if unary => Operator::Pos,
+        Token::Minus if unary => Operator::Neg,
+        Token::Not if unary => Operator::Not,
+        Token::Plus => Operator::Add,
+        Token::Minus => Operator::Sub,
+        Token::Star => Operator::Mul,
+        Token::Slash => Operator::Div,
+        Token::Caret => Operator::Pow,
+        Token::Mod => Operator::Mod,
+        Token::And => Operator::And,
+        Token::Or => Operator::Or,
+        Token::EqEq => Operator::Eq,
+        Token::NoEq => Operator::Ne,
+        Token::Lt => Operator::Lt,
+        Token::LtEq => Operator::Le,
+        Token::Gt => Operator::Gt,
+        Token::GtEq => Operator::Ge,
+        _ => return None,
+    };
+
+    if operator.precedence() >= precedence {
+        let token = ctx.token_index();
+        ctx.bump();
+        Some((operator, token))
+    } else {
+        None
+    }
+}
+
+fn newline(ctx: &mut Context) -> bool {
+    maybe(ctx, Token::EOL)
+}
+
+fn endline(ctx: &mut Context) -> Result<()> {
+    if maybe(ctx, Token::EOL) || maybe(ctx, Token::Semi) || maybe(ctx, Token::EOF) {
+        Ok(())
+    } else {
+        fail(ctx.current.span, unexpected(ctx, &[Token::EOL]))
+    }
+}
+
+fn expect(ctx: &mut Context, kind: Token) -> Result<()> {
+    if ctx.at(kind) {
+        ctx.bump();
+        Ok(())
+    } else {
+        fail(ctx.current.span, unexpected(ctx, &[kind]))
+    }
+}
+
+fn maybe(ctx: &mut Context, kind: Token) -> bool {
+    if ctx.at(kind) {
+        ctx.bump();
+        true
+    } else {
+        false
+    }
+}
+
+fn seq<F>(ctx: &mut Context, before: Token, after: Token, mut parse: F) -> Result<usize>
+where
+    F: FnMut(&mut Context) -> Result<()>,
+{
+    let mut count = 0;
+
+    newline(ctx);
+
+    expect(ctx, before)?;
+
+    while !ctx.at(after) {
+        parse(ctx)?;
+        count += 1;
+
+        newline(ctx);
+        if !maybe(ctx, Token::Comma) {
+            break;
+        }
+        newline(ctx);
+    }
+
+    expect(ctx, after)?;
+
+    Ok(count)
+}
+
+fn many<F>(ctx: &mut Context, before: Token, after: Token, mut parse: F) -> Result<usize>
+where
+    F: FnMut(&mut Context) -> Result<()>,
+{
+    let mut count = 0;
+
+    newline(ctx);
+
+    expect(ctx, before)?;
+
+    while !ctx.at(after) {
+        parse(ctx)?;
+        count += 1;
+        newline(ctx);
+    }
+
+    expect(ctx, after)?;
+
+    Ok(count)
+}
+
+fn unexpected(ctx: &Context, expected: &[Token]) -> String {
+    let expected: Vec<_> = expected.iter().map(|it| format!("`{it}`")).collect();
+    format!("expected {}, found `{}`", expected.join(", "), ctx.current.value)
+}
+
+fn fail<T>(span: Span, message: impl Into<String>) -> Result<T> {
+    Err(Error::error(span, message.into()))
+}
+
+pub fn parse<'ctx>(stream: TokenStream<'ctx>) -> Result<Module> {
+    let mut context = Context::new(stream);
+
+    newline(&mut context);
+
+    while !context.done() {
+        top_level(&mut context)?;
+        endline(&mut context)?;
+    }
+
+    Ok(context.finalize())
 }

@@ -21,7 +21,7 @@ pub struct WasmSlice<T> {
 pub type WasmSlicePointer<T> = *mut WasmSlice<T>;
 
 impl WasmSlice<u8> {
-    pub fn into_str<'a>(slice: WasmSlicePointer<u8>) -> &'a str {
+    pub unsafe fn into_str<'a>(slice: WasmSlicePointer<u8>) -> &'a str {
         unsafe {
             let slice = &*slice;
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(slice.ptr, slice.len))
@@ -38,7 +38,7 @@ pub struct WasmResult {
 pub type WasmResultPointer = *mut WasmResult;
 
 impl WasmResult {
-    pub fn from_vec(vec: Vec<u8>, target: WasmResultPointer) {
+    pub unsafe fn from_vec(vec: Vec<u8>, target: WasmResultPointer) {
         let boxed = vec.into_boxed_slice();
         unsafe {
             let target = &mut *target;
@@ -49,7 +49,7 @@ impl WasmResult {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn deallocate_result(result: WasmResultPointer) {
+pub unsafe extern "C" fn deallocate_result(result: WasmResultPointer) {
     unsafe {
         let result = &*result;
         drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(result.ptr, result.len)));
