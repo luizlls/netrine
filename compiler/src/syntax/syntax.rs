@@ -36,6 +36,8 @@ pub enum NodeKind {
     FnEnd,
     ParameterInit,
     ParameterEnd,
+    ApplyInit,
+    ApplyEnd,
     GroupInit,
     GroupEnd,
     Unary(Operator),

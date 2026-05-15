@@ -6,6 +6,11 @@ use crate::types::TypeId;
 
 #[derive(Debug)]
 pub struct Module {
+    pub instructions: IndexVec<InstructionId, Instruction>,
+    pub types: IndexVec<InstructionId, TypeId>,
+    pub spans: IndexVec<InstructionId, Span>,
+    pub instruction_lists: IndexVec<InstructionListId, InstructionList>,
+    pub blocks: IndexVec<BlockId, Block>,
     pub definitions: IndexMap<Name, DefinitionId, Definition>,
     pub functions: IndexMap<Name, FunctionId, Function>,
     pub entrypoint: Function,
@@ -16,13 +21,30 @@ entity_id!(InstructionId, u32);
 #[derive(Debug, Clone, Copy)]
 pub enum Instruction {
     Parameter(Parameter),
-    Global(GlobalRef),
+    Reference(Reference),
+    Apply(Apply),
     Binary(Binary),
     Unary(Unary),
     Integer(Integer),
     Number(Number),
     True,
     False,
+}
+
+const _: () = assert!(std::mem::size_of::<Instruction>() <= 16, "Instruction size cannot be over 16 bytes");
+
+entity_id!(InstructionListId, u32);
+
+#[derive(Debug, Clone)]
+pub struct InstructionList {
+    pub instructions: Vec<InstructionId>,
+}
+
+entity_id!(BlockId, u32);
+
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub instructions: InstructionListId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,13 +80,33 @@ impl Instruction {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GlobalRef {
-    pub definition_id: DefinitionId,
+pub enum Reference {
+    Constant(DefinitionId),
+    Function(FunctionId),
 }
 
 impl Instruction {
-    pub const fn global(definition_id: DefinitionId) -> Instruction {
-        Instruction::Global(GlobalRef { definition_id })
+    pub const fn constant_ref(definition_id: DefinitionId) -> Instruction {
+        Instruction::Reference(Reference::Constant(definition_id))
+    }
+
+    pub const fn function_ref(function_id: FunctionId) -> Instruction {
+        Instruction::Reference(Reference::Function(function_id))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Apply {
+    pub callee: InstructionId,
+    pub arguments: InstructionListId,
+}
+
+impl Instruction {
+    pub const fn apply(callee: InstructionId, arguments: InstructionListId) -> Instruction {
+        Instruction::Apply(Apply {
+            callee,
+            arguments,
+        })
     }
 }
 
@@ -126,16 +168,12 @@ entity_id!(DefinitionId, u32);
 
 #[derive(Debug)]
 pub struct Definition {
-    pub instructions: IndexVec<InstructionId, Instruction>,
-    pub types: IndexVec<InstructionId, TypeId>,
-    pub spans: IndexVec<InstructionId, Span>,
+    pub blocks: Vec<BlockId>,
 }
 
 entity_id!(FunctionId, u32);
 
 #[derive(Debug)]
 pub struct Function {
-    pub instructions: IndexVec<InstructionId, Instruction>,
-    pub types: IndexVec<InstructionId, TypeId>,
-    pub spans: IndexVec<InstructionId, Span>,
+    pub blocks: Vec<BlockId>,
 }

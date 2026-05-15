@@ -2,13 +2,13 @@ use super::lexer::TokenStream;
 use super::token::Token;
 use crate::collections::IndexVec;
 use crate::error::{Error, Result};
-use crate::source::{Span, WithSpan};
+use crate::source::Span;
 use crate::syntax::{Module, Node, NodeIndex, NodeKind, Operator, Precedence, TokenIndex};
 
 #[derive(Debug)]
 struct Context<'ctx> {
     stream: TokenStream<'ctx>,
-    current: WithSpan<Token>,
+    current: (Token, Span),
     nodes: IndexVec<NodeIndex, Node>,
     sizes: IndexVec<NodeIndex, u32>,
     tokens: IndexVec<TokenIndex, Token>,
@@ -19,7 +19,7 @@ impl<'ctx> Context<'ctx> {
     fn new(stream: TokenStream<'ctx>) -> Context<'ctx> {
         Context {
             stream,
-            current: WithSpan::default(),
+            current: Default::default(),
             nodes: IndexVec::new(),
             sizes: IndexVec::new(),
             tokens: IndexVec::new(),
@@ -34,28 +34,36 @@ impl<'ctx> Context<'ctx> {
     }
 
     fn bump(&mut self) {
-        self.push_token(self.current.value, self.current.span);
+        self.push_token(self.current.0, self.current.1);
         self.stream.bump();
         self.current = self.stream.token();
     }
 
     fn at(&self, kind: Token) -> bool {
-        self.current.value == kind
+        self.current.0 == kind
     }
 
     fn peek_is(&self, kind: Token) -> bool {
-        self.stream.peek().value == kind
+        self.stream.peek().0 == kind
+    }
+
+    fn token(&self) -> Token {
+        self.current.0
+    }
+
+    fn span(&self) -> Span {
+        self.current.1
     }
 
     fn done(&self) -> bool {
         self.stream.done()
     }
 
-    pub fn token_index(&self) -> TokenIndex {
+    fn token_index(&self) -> TokenIndex {
         self.tokens.index()
     }
 
-    pub fn node_index(&self) -> NodeIndex {
+    fn node_index(&self) -> NodeIndex {
         self.nodes.index()
     }
 
@@ -117,19 +125,19 @@ fn top_level(ctx: &mut Context) -> Result<()> {
 }
 
 fn define(ctx: &mut Context) -> Result<()> {
-    let start = start(ctx, NodeKind::LetInit);
+    let init = start(ctx, NodeKind::LetInit);
 
     expect(ctx, Token::Let)?;
 
     if ctx.at(Token::Identifier) && ctx.peek_is(Token::LParen) {
-        return function(ctx, start);
+        return function(ctx, init);
     }
 
     name(ctx)?;
     expect(ctx, Token::Equals)?;
     expr(ctx)?;
 
-    finish(ctx, start, NodeKind::LetEnd);
+    finish(ctx, init, NodeKind::LetEnd);
 
     Ok(())
 }
@@ -149,9 +157,9 @@ fn function(ctx: &mut Context, start: NodeIndex) -> Result<()> {
 
 fn params(ctx: &mut Context) -> Result<()> {
     seq(ctx, Token::LParen, Token::RParen, |ctx| {
-        let start = start(ctx, NodeKind::ParameterInit);
+        let init = start(ctx, NodeKind::ParameterInit);
         name(ctx)?;
-        finish(ctx, start, NodeKind::ParameterEnd);
+        finish(ctx, init, NodeKind::ParameterEnd);
         Ok(())
     })?;
 
@@ -163,19 +171,18 @@ fn expr(ctx: &mut Context) -> Result<()> {
 }
 
 fn atom(ctx: &mut Context) -> Result<()> {
-    let token = ctx.current;
-    match token.value {
+    match ctx.token() {
         Token::Identifier => ident(ctx),
         Token::Number => number(ctx),
         Token::Integer => integer(ctx),
         Token::LParen => parens(ctx),
         _ => {
             fail(
-                token.span,
-                match token.value {
+                ctx.span(),
+                match ctx.token() {
                     Token::UnexpectedCharacter => "unexpected character".into(),
                     Token::UnterminatedString => "unterminated string".into(),
-                    _ => format!("unexpected {}", token.value),
+                    _ => format!("unexpected {}", ctx.token()),
                 },
             )
         }
@@ -206,14 +213,24 @@ fn integer(ctx: &mut Context) -> Result<()> {
 }
 
 fn parens(ctx: &mut Context) -> Result<()> {
-    let start = start(ctx, NodeKind::GroupInit);
+    let init = start(ctx, NodeKind::GroupInit);
 
     expect(ctx, Token::LParen)?;
     expr(ctx)?;
     expect(ctx, Token::RParen)?;
 
-    finish(ctx, start, NodeKind::GroupEnd);
+    finish(ctx, init, NodeKind::GroupEnd);
 
+    Ok(())
+}
+
+fn apply(ctx: &mut Context) -> Result<()> {
+    atom(ctx)?;
+    while ctx.at(Token::LParen) {
+        let init = start(ctx, NodeKind::ApplyInit);
+        seq(ctx, Token::LParen, Token::RParen, expr)?;
+        finish(ctx, init, NodeKind::ApplyEnd);
+    }
     Ok(())
 }
 
@@ -223,7 +240,7 @@ fn unary(ctx: &mut Context) -> Result<()> {
         unary(ctx)?;
         ctx.push_node(NodeKind::Unary(operator), token, ctx.size(start));
     } else {
-        atom(ctx)?;
+        apply(ctx)?;
     }
 
     Ok(())
@@ -251,7 +268,7 @@ fn binary(ctx: &mut Context, precedence: Precedence) -> Result<()> {
 }
 
 fn operator(ctx: &mut Context, precedence: Precedence, unary: bool) -> Option<(Operator, TokenIndex)> {
-    let operator = match ctx.current.value {
+    let operator = match ctx.token() {
         Token::Plus if unary => Operator::Pos,
         Token::Minus if unary => Operator::Neg,
         Token::Not if unary => Operator::Not,
@@ -273,9 +290,9 @@ fn operator(ctx: &mut Context, precedence: Precedence, unary: bool) -> Option<(O
     };
 
     if operator.precedence() >= precedence {
-        let token = ctx.token_index();
+        let token_index = ctx.token_index();
         ctx.bump();
-        Some((operator, token))
+        Some((operator, token_index))
     } else {
         None
     }
@@ -289,7 +306,7 @@ fn endline(ctx: &mut Context) -> Result<()> {
     if maybe(ctx, Token::EOL) || maybe(ctx, Token::Semi) || maybe(ctx, Token::EOF) {
         Ok(())
     } else {
-        fail(ctx.current.span, unexpected(ctx, &[Token::EOL]))
+        fail(ctx.span(), unexpected(ctx, &[Token::EOL]))
     }
 }
 
@@ -298,7 +315,7 @@ fn expect(ctx: &mut Context, kind: Token) -> Result<()> {
         ctx.bump();
         Ok(())
     } else {
-        fail(ctx.current.span, unexpected(ctx, &[kind]))
+        fail(ctx.span(), unexpected(ctx, &[kind]))
     }
 }
 
@@ -360,7 +377,7 @@ where
 
 fn unexpected(ctx: &Context, expected: &[Token]) -> String {
     let expected: Vec<_> = expected.iter().map(|it| format!("`{it}`")).collect();
-    format!("expected {}, found `{}`", expected.join(", "), ctx.current.value)
+    format!("expected {}, found `{}`", expected.join(", "), ctx.token())
 }
 
 fn fail<T>(span: Span, message: impl Into<String>) -> Result<T> {

@@ -6,16 +6,14 @@ use super::ir::*;
 use crate::collections::{IndexMap, IndexVec};
 use crate::error::{Error, Result};
 use crate::interner::{Interner, Name};
-use crate::source::{Source, Span, WithSpan};
+use crate::source::{Source, Span};
 use crate::syntax;
 use crate::types::{self, TypeId};
 
 #[derive(Debug)]
 struct Builder {
     kind: BuilderKind,
-    instructions: IndexVec<InstructionId, Instruction>,
-    types: IndexVec<InstructionId, TypeId>,
-    spans: IndexVec<InstructionId, Span>,
+    instructions: Vec<InstructionId>,
     parameters: u8,
 }
 
@@ -23,24 +21,24 @@ struct Builder {
 enum BuilderKind {
     Let,
     Fn,
+    List,
 }
 
 impl Builder {
     const fn new(kind: BuilderKind) -> Builder {
         Builder {
             kind,
-            instructions: IndexVec::new(),
-            types: IndexVec::new(),
-            spans: IndexVec::new(),
+            instructions: Vec::new(),
             parameters: 0,
         }
     }
 
-    fn emit(&mut self, instruction: Instruction, span: Span) -> InstructionId {
-        let id = self.instructions.push(instruction);
-        self.spans.insert(id, span);
-        self.types.insert(id, types::UNKNOWN);
-        id
+    fn is(&self, kind: BuilderKind) -> bool {
+        self.kind == kind
+    }
+
+    fn push_instruction(&mut self, instruction: InstructionId) {
+        self.instructions.push(instruction);
     }
 
     fn next_parameter(&mut self) -> u8 {
@@ -48,24 +46,10 @@ impl Builder {
         self.parameters - 1
     }
 
-    fn build_function(self) -> Function {
-        Function {
+    fn build_instruction_list(self) -> InstructionList {
+        InstructionList {
             instructions: self.instructions,
-            types: self.types,
-            spans: self.spans,
         }
-    }
-
-    fn build_definition(self) -> Definition {
-        Definition {
-            instructions: self.instructions,
-            types: self.types,
-            spans: self.spans,
-        }
-    }
-
-    fn is(&self, kind: BuilderKind) -> bool {
-        self.kind == kind
     }
 }
 
@@ -86,11 +70,16 @@ impl Scope {
 struct Context<'ctx> {
     definitions: IndexMap<Name, DefinitionId, Definition>,
     functions: IndexMap<Name, FunctionId, Function>,
-    values: Vec<InstructionId>,
-    names: Vec<WithSpan<Name>>,
+    instructions: IndexVec<InstructionId, Instruction>,
+    types: IndexVec<InstructionId, TypeId>,
+    spans: IndexVec<InstructionId, Span>,
+    instruction_lists: IndexVec<InstructionListId, InstructionList>,
+    blocks: IndexVec<BlockId, Block>,
     builder: Builder,
     builders: Vec<Builder>,
     scopes: Vec<Scope>,
+    name_stack: Vec<(Name, Span)>,
+    value_stack: Vec<InstructionId>,
     interner: &'ctx mut Interner,
     source: &'ctx Source,
     syntax: &'ctx syntax::Module,
@@ -103,10 +92,15 @@ impl<'ctx> Context<'ctx> {
         syntax: &'ctx syntax::Module,
     ) -> Context<'ctx> {
         Context {
+            instructions: IndexVec::new(),
+            types: IndexVec::new(),
+            spans: IndexVec::new(),
+            instruction_lists: IndexVec::new(),
+            blocks: IndexVec::new(),
             definitions: IndexMap::new(),
             functions: IndexMap::new(),
-            values: Vec::new(),
-            names: Vec::new(),
+            value_stack: Vec::new(),
+            name_stack: Vec::new(),
             builder: Builder::new(BuilderKind::Fn),
             builders: Vec::new(),
             scopes: vec![Scope::new()],
@@ -121,19 +115,19 @@ impl<'ctx> Context<'ctx> {
     }
 
     fn push_name(&mut self, name: Name, span: Span) {
-        self.names.push(WithSpan::new(name, span));
+        self.name_stack.push((name, span));
     }
 
-    fn pop_name(&mut self) -> WithSpan<Name> {
-        self.names.pop().expect("mir: expected name in the context stack")
+    fn pop_name(&mut self) -> (Name, Span) {
+        self.name_stack.pop().expect("mir: expected name in the context stack")
     }
 
     fn push_value(&mut self, value: InstructionId) {
-        self.values.push(value);
+        self.value_stack.push(value);
     }
 
     fn pop_value(&mut self) -> InstructionId {
-        self.values.pop().expect("mir: expected value in the context stack")
+        self.value_stack.pop().expect("mir: expected value in the context stack")
     }
 
     fn lookup_name(&self, name: Name) -> Option<&InstructionId> {
@@ -146,9 +140,16 @@ impl<'ctx> Context<'ctx> {
     }
 
     fn emit(&mut self, instruction: Instruction, span: Span) -> InstructionId {
-        let instruction_id = self.builder.emit(instruction, span);
-        self.push_value(instruction_id);
+        let instruction_id = self.instructions.push(instruction);
+        self.spans.insert(instruction_id, span);
+        self.types.insert(instruction_id, types::UNKNOWN);
+        self.builder.push_instruction(instruction_id);
         instruction_id
+    }
+
+    fn emit_push(&mut self, instruction: Instruction, span: Span) {
+        let instruction_id = self.emit(instruction, span);
+        self.push_value(instruction_id);
     }
 
     fn setup_builder(&mut self, kind: BuilderKind) {
@@ -161,10 +162,35 @@ impl<'ctx> Context<'ctx> {
         mem::replace(&mut self.builder, self.builders.pop().unwrap_or_else(|| Builder::new(BuilderKind::Fn)))
     }
 
+    fn build_block(&mut self) -> BlockId {
+        let instructions = self.pop_builder().build_instruction_list();
+        let instructions = self.instruction_lists.push(instructions);
+        self.blocks.push(Block { instructions })
+    }
+
+    fn build_function(&mut self) -> Function {
+        let block = self.build_block();
+        Function {
+            blocks: vec![block],
+        }
+    }
+
+    fn build_definition(&mut self) -> Definition {
+        let block = self.build_block();
+        Definition {
+            blocks: vec![block],
+        }
+    }
+
     fn finalize(mut self) -> Module {
-        let entrypoint = self.pop_builder().build_function();
+        let entrypoint = self.build_function();
 
         Module {
+            instructions: self.instructions,
+            types: self.types,
+            spans: self.spans,
+            instruction_lists: self.instruction_lists,
+            blocks: self.blocks,
             definitions: self.definitions,
             functions: self.functions,
             entrypoint,
@@ -185,6 +211,8 @@ fn lower(ctx: &mut Context) -> Result<()> {
             syntax::NodeKind::ParameterEnd => finish_parameter(ctx)?,
             syntax::NodeKind::Identifier => identifier(ctx, span)?,
             syntax::NodeKind::Name => name(ctx, span)?,
+            syntax::NodeKind::ApplyInit => setup_apply(ctx, span)?,
+            syntax::NodeKind::ApplyEnd => finish_apply(ctx, span)?,
             syntax::NodeKind::Unary(operator) => unary(ctx, span, operator)?,
             syntax::NodeKind::Binary(operator) => binary(ctx, span, operator)?,
             syntax::NodeKind::Integer => integer(ctx, span)?,
@@ -199,6 +227,18 @@ fn lower(ctx: &mut Context) -> Result<()> {
     Ok(())
 }
 
+fn name_available(ctx: &mut Context, name: Name, span: Span) -> Result<()> {
+    let existing_def = ctx.definitions.contains(name);
+    let existing_fn = ctx.functions.contains(name);
+
+    if existing_def || existing_fn {
+        let name = &ctx.interner[name];
+        return fail(span, format!("The name `{name}` is defined multiple times"));
+    }
+
+    Ok(())
+}
+
 fn setup_definition(ctx: &mut Context) -> Result<()> {
     if ctx.top_level() {
         ctx.setup_builder(BuilderKind::Let);
@@ -207,21 +247,21 @@ fn setup_definition(ctx: &mut Context) -> Result<()> {
 }
 
 fn global_definition(ctx: &mut Context) -> Result<()> {
-    let (name, span) = ctx.pop_name().parts();
+    let (name, span) = ctx.pop_name();
 
-    if ctx.definitions.contains(name) {
-        let name = &ctx.interner[name];
-        return fail(span, format!("`{name}` is already defined"));
-    }
+    name_available(ctx, name, span)?;
 
-    let definition = ctx.pop_builder().build_definition();
-    ctx.definitions.insert(name, definition);
+    let definition = ctx.build_definition();
+    let definition_id = ctx.definitions.insert(name, definition);
+    let instruction_id = ctx.emit(Instruction::constant_ref(definition_id), span);
+
+    ctx.insert_name(name, instruction_id);
 
     Ok(())
 }
 
 fn local_definition(ctx: &mut Context) -> Result<()> {
-    let (name, _span) = ctx.pop_name().parts();
+    let (name, _span) = ctx.pop_name();
 
     let value = ctx.pop_value();
     ctx.insert_name(name, value);
@@ -243,14 +283,11 @@ fn setup_function(ctx: &mut Context) -> Result<()> {
 }
 
 fn finish_function(ctx: &mut Context) -> Result<()> {
-    let (name, span) = ctx.pop_name().parts();
+    let (name, span) = ctx.pop_name();
 
-    if ctx.functions.contains(name) {
-        let name = &ctx.interner[name];
-        return fail(span, format!("function `{name}` is already defined"));
-    }
+    name_available(ctx, name, span)?;
 
-    let function = ctx.pop_builder().build_function();
+    let function = ctx.build_function();
     ctx.functions.insert(name, function);
 
     Ok(())
@@ -262,7 +299,7 @@ fn setup_parameter(_ctx: &mut Context) -> Result<()> {
 }
 
 fn finish_parameter(ctx: &mut Context) -> Result<()> {
-    let (name, span) = ctx.pop_name().parts();
+    let (name, span) = ctx.pop_name();
 
     if ctx.lookup_name(name).is_some() {
         let name = &ctx.interner[name];
@@ -291,11 +328,23 @@ fn identifier(ctx: &mut Context, span: Span) -> Result<()> {
     if let Some(&instruction) = ctx.lookup_name(name) {
         ctx.push_value(instruction);
     } else if let Some(definition) = ctx.definitions.id(name) {
-        ctx.emit(Instruction::global(definition), span);
+        ctx.emit_push(Instruction::constant_ref(definition), span);
+    } else if let Some(function) = ctx.functions.id(name) {
+        ctx.emit_push(Instruction::function_ref(function), span);
     } else {
         return fail(span, format!("value `{value}` not found"));
     }
 
+    Ok(())
+}
+
+fn setup_apply(ctx: &mut Context, _span: Span) -> Result<()> {
+    ctx.setup_builder(BuilderKind::List);
+    Ok(())
+}
+
+fn finish_apply(ctx: &mut Context, span: Span) -> Result<()> {
+    let arguments = ctx.pop_builder().build_instruction_list();
     Ok(())
 }
 
@@ -311,7 +360,7 @@ fn unary(ctx: &mut Context, span: Span, operator: syntax::Operator) -> Result<()
         }
     };
 
-    ctx.emit(Instruction::unary(operator, operand), span);
+    ctx.emit_push(Instruction::unary(operator, operand), span);
 
     Ok(())
 }
@@ -340,7 +389,7 @@ fn binary(ctx: &mut Context, span: Span, operator: syntax::Operator) -> Result<(
         }
     };
 
-    ctx.emit(Instruction::binary(operator, loperand, roperand), span);
+    ctx.emit_push(Instruction::binary(operator, loperand, roperand), span);
 
     Ok(())
 }
@@ -358,7 +407,7 @@ fn integer(ctx: &mut Context, span: Span) -> Result<()> {
         return fail(span, "value is not supported as an integer");
     };
 
-    ctx.emit(Instruction::integer(value), span);
+    ctx.emit_push(Instruction::integer(value), span);
 
     Ok(())
 }
@@ -370,13 +419,13 @@ fn number(ctx: &mut Context, span: Span) -> Result<()> {
         return fail(span, "value is not supported as an number");
     };
 
-    ctx.emit(Instruction::number(value), span);
+    ctx.emit_push(Instruction::number(value), span);
 
     Ok(())
 }
 
 fn boolean(ctx: &mut Context, span: Span, truthy: bool) -> Result<()> {
-    ctx.emit(
+    ctx.emit_push(
         if truthy {
             Instruction::True
         } else {

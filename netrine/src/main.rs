@@ -12,9 +12,9 @@ fn main() {
     let source = source(&args[0]);
 
     let mut compiler = Compiler::new(&source);
-    match compiler.mir() {
-        Ok(mir) => {
-            println!("{:#?}", mir);
+    match compiler.parse() {
+        Ok(result) => {
+            println!("{:#?}", result);
         }
         Err(error) => {
             let error = error.report(&source).expect("Couldn't report the error");

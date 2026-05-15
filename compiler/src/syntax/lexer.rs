@@ -1,5 +1,5 @@
 use super::token::Token;
-use crate::source::{Source, Span, WithSpan};
+use crate::source::{Source, Span};
 
 #[derive(Debug, Clone)]
 struct Context<'ctx> {
@@ -64,7 +64,17 @@ impl<'ctx> Context<'ctx> {
     }
 
     fn bump_utf8_sequence(&mut self) {
-        todo!()
+        let len = match self.curr {
+            0x00..=0x7F => 1,
+            0xC0..=0xDF => 2,
+            0xE0..=0xEF => 3,
+            0xF0..=0xF7 => 4,
+            _ => 1,
+        };
+
+        for _ in 0..len {
+            self.bump();
+        }
     }
 
     fn trivia(&mut self) {
@@ -80,14 +90,11 @@ impl<'ctx> Context<'ctx> {
     }
 }
 
-fn token(ctx: &mut Context, token: Token) -> WithSpan<Token> {
-    WithSpan::<Token> {
-        value: token,
-        span: ctx.span(),
-    }
+fn token(ctx: &mut Context, token: Token) -> (Token, Span) {
+    (token, ctx.span())
 }
 
-fn next(ctx: &mut Context) -> WithSpan<Token> {
+fn next(ctx: &mut Context) -> (Token, Span) {
     ctx.trivia();
     ctx.align();
 
@@ -126,7 +133,7 @@ fn next(ctx: &mut Context) -> WithSpan<Token> {
     token(ctx, kind)
 }
 
-fn ident(ctx: &mut Context) -> WithSpan<Token> {
+fn ident(ctx: &mut Context) -> (Token, Span) {
     ctx.bump_while(|chr| matches!(chr, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'));
     ctx.bump_while(|chr| chr == b'\'');
 
@@ -153,7 +160,7 @@ fn is_symbol(chr: u8) -> bool {
     )
 }
 
-fn operator(ctx: &mut Context) -> WithSpan<Token> {
+fn operator(ctx: &mut Context) -> (Token, Span) {
     let kind = match ctx.curr {
         b'.' if ctx.peek == b'.' => {
             ctx.bump();
@@ -198,7 +205,7 @@ fn operator(ctx: &mut Context) -> WithSpan<Token> {
     token(ctx, kind)
 }
 
-fn number(ctx: &mut Context) -> WithSpan<Token> {
+fn number(ctx: &mut Context) -> (Token, Span) {
     ctx.bump_while(|chr| chr.is_ascii_digit());
 
     match ctx.curr {
@@ -222,7 +229,7 @@ fn number(ctx: &mut Context) -> WithSpan<Token> {
     token(ctx, Token::Integer)
 }
 
-fn string(ctx: &mut Context) -> WithSpan<Token> {
+fn string(ctx: &mut Context) -> (Token, Span) {
     loop {
         match ctx.bump() {
             b'\n' | b'\0' => {
@@ -249,7 +256,7 @@ fn string(ctx: &mut Context) -> WithSpan<Token> {
     token(ctx, Token::String)
 }
 
-fn invalid_escape_character(ctx: &mut Context) -> WithSpan<Token> {
+fn invalid_escape_character(ctx: &mut Context) -> (Token, Span) {
     ctx.align();
     ctx.bump_utf8_sequence();
 
@@ -273,12 +280,12 @@ fn invalid_escape_character(ctx: &mut Context) -> WithSpan<Token> {
     token
 }
 
-fn unexpected_character(ctx: &mut Context) -> WithSpan<Token> {
+fn unexpected_character(ctx: &mut Context) -> (Token, Span) {
     ctx.bump_utf8_sequence();
     token(ctx, Token::UnexpectedCharacter)
 }
 
-fn newline(ctx: &mut Context) -> WithSpan<Token> {
+fn newline(ctx: &mut Context) -> (Token, Span) {
     while ctx.curr == b'\n' {
         ctx.bump();
         ctx.trivia();
@@ -289,8 +296,8 @@ fn newline(ctx: &mut Context) -> WithSpan<Token> {
 #[derive(Debug, Clone)]
 pub struct TokenStream<'ctx> {
     ctx: Context<'ctx>,
-    peek: WithSpan<Token>,
-    token: WithSpan<Token>,
+    curr: (Token, Span),
+    peek: (Token, Span),
 }
 
 impl<'tokens> TokenStream<'tokens> {
@@ -298,7 +305,7 @@ impl<'tokens> TokenStream<'tokens> {
         TokenStream {
             ctx: Context::new(source),
             peek: Default::default(),
-            token: Default::default(),
+            curr: Default::default(),
         }
         .init()
     }
@@ -310,22 +317,22 @@ impl<'tokens> TokenStream<'tokens> {
     }
 
     pub fn bump(&mut self) {
-        self.token = self.peek;
+        self.curr = self.peek;
         self.peek = next(&mut self.ctx);
     }
 
     #[inline]
-    pub fn token(&self) -> WithSpan<Token> {
-        self.token
+    pub fn token(&self) -> (Token, Span) {
+        self.curr
     }
 
     #[inline]
-    pub fn peek(&self) -> WithSpan<Token> {
+    pub fn peek(&self) -> (Token, Span) {
         self.peek
     }
 
     pub fn done(&self) -> bool {
-        self.token.value == Token::EOF
+        self.curr.0 == Token::EOF
     }
 }
 
@@ -350,9 +357,8 @@ mod tests {
 
         let mut result = vec![];
 
-        while tokens.token.value != Token::EOF {
-            let token = tokens.token.value;
-            let span = tokens.token.span;
+        while tokens.curr.0 != Token::EOF {
+            let (token, span) = tokens.curr;
 
             result.push(TestResult {
                 token,
