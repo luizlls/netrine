@@ -1,6 +1,7 @@
 mod collections;
 mod compiler;
 mod error;
+mod hir;
 mod interner;
 mod macros;
 mod source;

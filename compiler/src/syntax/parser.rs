@@ -48,58 +48,58 @@ impl<'ctx> Context<'ctx> {
     }
 }
 
-fn top_level(ctx: &mut Context) -> Result<Node> {
+fn parse_top_level(ctx: &mut Context) -> Result<Node> {
     if ctx.at(TokenKind::Identifier) {
         match ctx.peek() {
             TokenKind::Equals | TokenKind::Colon => {
-                return define(ctx);
+                return parse_def(ctx);
             }
             TokenKind::LParen => {
-                return function(ctx);
+                return parse_fn(ctx);
             }
             _ => {}
         }
     }
 
-    expr(ctx)
+    parse_expr(ctx)
 }
 
-fn define(ctx: &mut Context) -> Result<Node> {
-    let name = name(ctx)?;
-    let type_ = optional(ctx, TokenKind::Colon, type_annotation)?;
+fn parse_def(ctx: &mut Context) -> Result<Node> {
+    let name = parse_name(ctx)?;
+    let type_ = parse_optional(ctx, TokenKind::Colon, parse_type_annotation)?;
     expect(ctx, TokenKind::Equals)?;
 
-    let value = expr(ctx)?;
+    let value = parse_expr(ctx)?;
 
     Ok(Node::define(name, value, type_))
 }
 
-fn function(ctx: &mut Context) -> Result<Node> {
-    let name = name(ctx)?;
+fn parse_fn(ctx: &mut Context) -> Result<Node> {
+    let name = parse_name(ctx)?;
     expect(ctx, TokenKind::LParen)?;
-    let parameters = seq(ctx, TokenKind::RParen, parameter_like)?;
+    let parameters = parse_seq(ctx, TokenKind::RParen, parse_parameter_like)?;
     expect(ctx, TokenKind::RParen)?;
-    let type_ = optional(ctx, TokenKind::Colon, type_annotation)?;
+    let type_ = parse_optional(ctx, TokenKind::Colon, parse_type_annotation)?;
 
     // if there's no equal sign that means it's a function call
     if !ctx.at(TokenKind::Equals) {
         if let Some(type_) = type_ {
             return Err(fail("type annotation not valid for function call arguments", type_.span));
         }
-        return function_apply(ctx, name, parameters);
+        return into_function_apply(ctx, name, parameters);
     }
 
     let parameters = into_parameters(parameters)?;
 
     expect(ctx, TokenKind::Equals)?;
-    let value = expr(ctx)?;
+    let value = parse_expr(ctx)?;
 
     Ok(Node::function(name, parameters, value, type_))
 }
 
-fn parameter_like(ctx: &mut Context) -> Result<ParameterLike> {
-    let value = expr(ctx)?;
-    let type_ = optional(ctx, TokenKind::Colon, type_annotation)?;
+fn parse_parameter_like(ctx: &mut Context) -> Result<ParameterLike> {
+    let value = parse_expr(ctx)?;
+    let type_ = parse_optional(ctx, TokenKind::Colon, parse_type_annotation)?;
 
     Ok(ParameterLike::new(value, type_))
 }
@@ -117,7 +117,7 @@ fn into_parameters(parameter_likes: Vec<ParameterLike>) -> Result<Vec<Parameter>
         .collect()
 }
 
-fn function_apply(ctx: &mut Context, name: Name, parameter_likes: Vec<ParameterLike>) -> Result<Node> {
+fn into_function_apply(ctx: &mut Context, name: Name, parameter_likes: Vec<ParameterLike>) -> Result<Node> {
     let span = ctx.span_of(name.span);
     let function = Node::name(name);
     let arguments = into_arguments(parameter_likes)?;
@@ -138,16 +138,16 @@ fn into_arguments(parameter_likes: Vec<ParameterLike>) -> Result<Vec<Node>> {
         .collect()
 }
 
-fn expr(ctx: &mut Context) -> Result<Node> {
+fn parse_expr(ctx: &mut Context) -> Result<Node> {
     binary(ctx, 0 as Precedence)
 }
 
-fn atom(ctx: &mut Context) -> Result<Node> {
+fn parse_atom(ctx: &mut Context) -> Result<Node> {
     match ctx.token.kind {
-        TokenKind::Identifier => identifier(ctx),
-        TokenKind::Number => number(ctx),
-        TokenKind::Integer => integer(ctx),
-        TokenKind::LParen => parens(ctx),
+        TokenKind::Identifier => parse_identifier(ctx),
+        TokenKind::Number => parse_number(ctx),
+        TokenKind::Integer => parse_integer(ctx),
+        TokenKind::LParen => parse_parens(ctx),
         _ => {
             Err(fail(
                 match ctx.token.kind {
@@ -161,69 +161,69 @@ fn atom(ctx: &mut Context) -> Result<Node> {
     }
 }
 
-fn name(ctx: &mut Context) -> Result<Name> {
+fn parse_name(ctx: &mut Context) -> Result<Name> {
     let span = ctx.token.span;
     expect(ctx, TokenKind::Identifier)?;
 
     Ok(Name { span })
 }
 
-fn literal(ctx: &mut Context, kind: TokenKind, node: NodeKind) -> Result<Node> {
+fn parse_literal(ctx: &mut Context, kind: TokenKind, node: NodeKind) -> Result<Node> {
     let span = ctx.token.span;
     expect(ctx, kind)?;
     Ok(Node::new(node, span))
 }
 
-fn identifier(ctx: &mut Context) -> Result<Node> {
-    let name = name(ctx)?;
+fn parse_identifier(ctx: &mut Context) -> Result<Node> {
+    let name = parse_name(ctx)?;
     let span = name.span;
     Ok(Node::new(NodeKind::Name(name), span))
 }
 
-fn number(ctx: &mut Context) -> Result<Node> {
-    literal(ctx, TokenKind::Number, NodeKind::Number)
+fn parse_number(ctx: &mut Context) -> Result<Node> {
+    parse_literal(ctx, TokenKind::Number, NodeKind::Number)
 }
 
-fn integer(ctx: &mut Context) -> Result<Node> {
-    literal(ctx, TokenKind::Integer, NodeKind::Integer)
+fn parse_integer(ctx: &mut Context) -> Result<Node> {
+    parse_literal(ctx, TokenKind::Integer, NodeKind::Integer)
 }
 
-fn parens(ctx: &mut Context) -> Result<Node> {
+fn parse_parens(ctx: &mut Context) -> Result<Node> {
     expect(ctx, TokenKind::LParen)?;
-    let expr = expr(ctx)?;
+    let expr = parse_expr(ctx)?;
     expect(ctx, TokenKind::RParen)?;
 
     Ok(expr)
 }
 
-fn apply(ctx: &mut Context) -> Result<Node> {
-    let mut value = atom(ctx)?;
+fn parse_apply(ctx: &mut Context) -> Result<Node> {
+    let mut expr = parse_atom(ctx)?;
 
     while ctx.at(TokenKind::LParen) {
         expect(ctx, TokenKind::LParen)?;
-        let arguments = seq(ctx, TokenKind::RParen, expr)?;
+        let arguments = parse_seq(ctx, TokenKind::RParen, parse_expr)?;
         expect(ctx, TokenKind::RParen)?;
 
-        let span = ctx.span_of(value.span);
+        let span = ctx.span_of(expr.span);
 
-        value = Node::apply(value, arguments, span);
+        expr = Node::apply(expr, arguments, span);
     }
 
-    Ok(value)
+    Ok(expr)
 }
 
-fn unary(ctx: &mut Context) -> Result<Node> {
+fn parse_unary(ctx: &mut Context) -> Result<Node> {
     let Some(operator) = operator(ctx, 0 as Precedence, true) else {
-        return apply(ctx);
+        return parse_apply(ctx);
     };
 
-    let expr = unary(ctx)?;
+    let expr = parse_unary(ctx)?;
 
     Ok(Node::unary(operator, expr))
 }
 
 fn binary(ctx: &mut Context, precedence: Precedence) -> Result<Node> {
-    let mut expr = unary(ctx)?;
+    let mut expr = parse_unary(ctx)?;
 
     while let Some(operator) = operator(ctx, precedence, false) {
         // accepts newlines if the line ends with an operator
@@ -282,12 +282,12 @@ fn operator(ctx: &mut Context, precedence: Precedence, unary: bool) -> Option<Op
     }
 }
 
-fn type_annotation(ctx: &mut Context) -> Result<Type> {
+fn parse_type_annotation(ctx: &mut Context) -> Result<Type> {
     expect(ctx, TokenKind::Colon)?;
 
     match ctx.token.kind {
         TokenKind::Identifier => {
-            let name = name(ctx)?;
+            let name = parse_name(ctx)?;
             Ok(Type::name(name))
         }
         _ => Err(fail(unexpected(ctx, &[TokenKind::Type]), ctx.token.span)),
@@ -324,7 +324,7 @@ fn maybe(ctx: &mut Context, kind: TokenKind) -> bool {
     }
 }
 
-fn optional<F, T>(ctx: &mut Context, token: TokenKind, mut parse: F) -> Result<Option<T>>
+fn parse_optional<F, T>(ctx: &mut Context, token: TokenKind, mut parse: F) -> Result<Option<T>>
 where
     F: FnMut(&mut Context) -> Result<T>,
 {
@@ -335,7 +335,7 @@ where
     })
 }
 
-fn seq<F, T>(ctx: &mut Context, until: TokenKind, mut parse: F) -> Result<Vec<T>>
+fn parse_seq<F, T>(ctx: &mut Context, until: TokenKind, mut parse: F) -> Result<Vec<T>>
 where
     F: FnMut(&mut Context) -> Result<T>,
 {
@@ -356,7 +356,7 @@ where
     Ok(result)
 }
 
-fn many<F, T>(ctx: &mut Context, until: TokenKind, mut parse: F) -> Result<Vec<T>>
+fn parse_many<F, T>(ctx: &mut Context, until: TokenKind, mut parse: F) -> Result<Vec<T>>
 where
     F: FnMut(&mut Context) -> Result<T>,
 {
@@ -388,7 +388,7 @@ pub fn parse<'ctx>(stream: TokenStream<'ctx>) -> Result<Module> {
     newline(&mut context);
 
     while !context.done() {
-        nodes.push(top_level(&mut context)?);
+        nodes.push(parse_top_level(&mut context)?);
         endline(&mut context)?;
     }
 

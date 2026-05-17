@@ -3,7 +3,7 @@ use std::fs;
 use crate::error::Result;
 use crate::interner::Interner;
 use crate::source::Source;
-use crate::syntax;
+use crate::{hir, syntax};
 
 pub struct Compiler<'state> {
     source: &'state Source,
@@ -22,10 +22,10 @@ impl<'state> Compiler<'state> {
         syntax::parse(&self.source)
     }
 
-    // pub fn hir(&mut self) -> Result<hir::Module> {
-    //     let ast = self.parse()?;
-    //     hir::from_syntax(&ast, &self.source, &mut self.interner)
-    // }
+    pub fn hir(&mut self) -> Result<hir::Module> {
+        let ast = self.parse()?;
+        hir::from_syntax(&ast, &self.source, &mut self.interner)
+    }
 
     // pub fn mir(&mut self) -> Result<mir::Module> {
     //     let hir = self.hir()?;
