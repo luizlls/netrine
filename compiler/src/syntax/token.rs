@@ -1,7 +1,15 @@
 use std::fmt;
 
+use crate::source::Span;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-pub enum Token {
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
+pub enum TokenKind {
     #[default]
     EOF,
     EOL,
@@ -20,12 +28,12 @@ pub enum Token {
     Equals, // =
     Arrow,  // =>
 
-    Let,
     True,
     False,
     And,
     Or,
     Not,
+    Type,
 
     Plus,  // +
     Minus, // -
@@ -50,55 +58,49 @@ pub enum Token {
     UnterminatedString,
 }
 
-impl fmt::Display for Token {
+impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let description = match self {
-            Token::EOF => "end of input",
-            Token::EOL => "end of line",
-            Token::LParen => "(",
-            Token::RParen => ")",
-            Token::LBrace => "{",
-            Token::RBrace => "}",
-            Token::LBracket => "[",
-            Token::RBracket => "]",
-            Token::Dot => ".",
-            Token::Comma => ",",
-            Token::Colon => ":",
-            Token::Semi => ";",
-            Token::Equals => "=",
-            Token::Arrow => "=>",
-            Token::Let => "let",
-            Token::True => "True",
-            Token::False => "False",
-            Token::And => "and",
-            Token::Or => "or",
-            Token::Not => "not",
-            Token::Plus => "+",
-            Token::Minus => "-",
-            Token::Star => "*",
-            Token::Slash => "/",
-            Token::Caret => "^",
-            Token::Mod => "%",
-            Token::EqEq => "==",
-            Token::NoEq => "!=",
-            Token::Lt => "<",
-            Token::LtEq => "<=",
-            Token::Gt => ">",
-            Token::GtEq => ">=",
-            Token::Dots => "..",
-            Token::Identifier => "identifier",
-            Token::Number => "number",
-            Token::Integer => "integer",
-            Token::String => "string",
-            Token::UnexpectedCharacter => "unexpected character",
-            Token::UnterminatedString => "unterminated string",
+            TokenKind::EOF => "end of input",
+            TokenKind::EOL => "end of line",
+            TokenKind::LParen => "(",
+            TokenKind::RParen => ")",
+            TokenKind::LBrace => "{",
+            TokenKind::RBrace => "}",
+            TokenKind::LBracket => "[",
+            TokenKind::RBracket => "]",
+            TokenKind::Dot => ".",
+            TokenKind::Comma => ",",
+            TokenKind::Colon => ":",
+            TokenKind::Semi => ";",
+            TokenKind::Equals => "=",
+            TokenKind::Arrow => "=>",
+            TokenKind::Type => "type",
+            TokenKind::True => "True",
+            TokenKind::False => "False",
+            TokenKind::And => "and",
+            TokenKind::Or => "or",
+            TokenKind::Not => "not",
+            TokenKind::Plus => "+",
+            TokenKind::Minus => "-",
+            TokenKind::Star => "*",
+            TokenKind::Slash => "/",
+            TokenKind::Caret => "^",
+            TokenKind::Mod => "%",
+            TokenKind::EqEq => "==",
+            TokenKind::NoEq => "!=",
+            TokenKind::Lt => "<",
+            TokenKind::LtEq => "<=",
+            TokenKind::Gt => ">",
+            TokenKind::GtEq => ">=",
+            TokenKind::Dots => "..",
+            TokenKind::Identifier => "identifier",
+            TokenKind::Number => "number",
+            TokenKind::Integer => "integer",
+            TokenKind::String => "string",
+            TokenKind::UnexpectedCharacter => "unexpected character",
+            TokenKind::UnterminatedString => "unterminated string",
         };
         write!(f, "{description}")
-    }
-}
-
-impl Token {
-    pub fn is(self, other: Token) -> bool {
-        self == other
     }
 }

@@ -3,7 +3,6 @@ mod compiler;
 mod error;
 mod interner;
 mod macros;
-mod mir;
 mod source;
 mod syntax;
 mod types;

@@ -24,7 +24,11 @@ where
 
     pub fn insert(&mut self, key: K, value: V) -> I {
         match self.entries.entry(key) {
-            Entry::Occupied(entry) => *entry.get(),
+            Entry::Occupied(entry) => {
+                let index = *entry.get();
+                self.values[index] = value;
+                index
+            }
             Entry::Vacant(entry) => {
                 let index = self.values.push(value);
                 entry.insert(index);

@@ -1,308 +1,321 @@
 use super::lexer::TokenStream;
-use super::token::Token;
-use crate::collections::IndexVec;
+use super::token::{Token, TokenKind};
 use crate::error::{Error, Result};
-use crate::source::{Span, WithSpan};
-use crate::syntax::{Module, Node, NodeIndex, NodeKind, Operator, Precedence, TokenIndex};
+use crate::source::Span;
+use crate::syntax::{
+    Module, Name, Node, NodeKind, Operator, OperatorKind, Parameter, ParameterLike, Precedence, Type,
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Context<'ctx> {
     stream: TokenStream<'ctx>,
-    current: WithSpan<Token>,
-    nodes: IndexVec<NodeIndex, Node>,
-    sizes: IndexVec<NodeIndex, u32>,
-    tokens: IndexVec<TokenIndex, Token>,
-    spans: IndexVec<TokenIndex, Span>,
+    token: Token,
 }
 
 impl<'ctx> Context<'ctx> {
     fn new(stream: TokenStream<'ctx>) -> Context<'ctx> {
         Context {
             stream,
-            current: WithSpan::default(),
-            nodes: IndexVec::new(),
-            sizes: IndexVec::new(),
-            tokens: IndexVec::new(),
-            spans: IndexVec::new(),
+            token: Token::default(),
         }
         .init()
     }
 
     fn init(mut self) -> Context<'ctx> {
-        self.current = self.stream.token();
+        self.token = self.stream.token();
         self
     }
 
     fn bump(&mut self) {
-        self.push_token(self.current.value, self.current.span);
         self.stream.bump();
-        self.current = self.stream.token();
+        self.token = self.stream.token();
     }
 
-    fn at(&self, kind: Token) -> bool {
-        self.current.value == kind
+    fn peek(&self) -> TokenKind {
+        self.stream.peek().kind
     }
 
-    fn peek_is(&self, kind: Token) -> bool {
-        self.stream.peek().value == kind
+    fn span_of(&self, start: Span) -> Span {
+        Span::from(start, self.stream.prev().span)
+    }
+
+    fn at(&self, kind: TokenKind) -> bool {
+        self.token.kind == kind
     }
 
     fn done(&self) -> bool {
         self.stream.done()
     }
+}
 
-    pub fn token_index(&self) -> TokenIndex {
-        self.tokens.index()
-    }
-
-    pub fn node_index(&self) -> NodeIndex {
-        self.nodes.index()
-    }
-
-    fn push_token(&mut self, token: Token, span: Span) -> TokenIndex {
-        let index = self.tokens.push(token);
-        self.spans.insert(index, span);
-        index
-    }
-
-    fn push_node(&mut self, kind: NodeKind, token: TokenIndex, size: u32) -> NodeIndex {
-        let index = self.nodes.push(Node::new(kind, token));
-        self.sizes.insert(index, size);
-        index
-    }
-
-    fn replace_node(&mut self, index: NodeIndex, kind: NodeKind) {
-        let node = self.nodes[index];
-        self.nodes[index] = Node { kind, ..node };
-    }
-
-    fn size(&self, node: NodeIndex) -> u32 {
-        let curr = self.node_index();
-        u32::from(curr) - u32::from(node)
-    }
-
-    fn resize(&mut self, node: NodeIndex, size: u32) {
-        self.sizes[node] = size;
-    }
-
-    fn finalize(self) -> Module {
-        Module {
-            nodes: self.nodes,
-            sizes: self.sizes,
-            tokens: self.tokens,
-            spans: self.spans,
+fn top_level(ctx: &mut Context) -> Result<Node> {
+    if ctx.at(TokenKind::Identifier) {
+        match ctx.peek() {
+            TokenKind::Equals | TokenKind::Colon => {
+                return define(ctx);
+            }
+            TokenKind::LParen => {
+                return function(ctx);
+            }
+            _ => {}
         }
     }
+
+    expr(ctx)
 }
 
-fn start(ctx: &mut Context, kind: NodeKind) -> NodeIndex {
-    let token = ctx.token_index();
-    ctx.push_node(kind, token, 0)
+fn define(ctx: &mut Context) -> Result<Node> {
+    let name = name(ctx)?;
+    let type_ = optional(ctx, TokenKind::Colon, type_annotation)?;
+    expect(ctx, TokenKind::Equals)?;
+
+    let value = expr(ctx)?;
+
+    Ok(Node::define(name, value, type_))
 }
 
-fn finish(ctx: &mut Context, start: NodeIndex, end: NodeKind) {
-    let token = ctx.token_index().prev();
-    let size = ctx.size(start);
+fn function(ctx: &mut Context) -> Result<Node> {
+    let name = name(ctx)?;
+    expect(ctx, TokenKind::LParen)?;
+    let parameters = seq(ctx, TokenKind::RParen, parameter_like)?;
+    expect(ctx, TokenKind::RParen)?;
+    let type_ = optional(ctx, TokenKind::Colon, type_annotation)?;
 
-    ctx.push_node(end, token, size);
-    ctx.resize(start, size);
-}
-
-fn top_level(ctx: &mut Context) -> Result<()> {
-    if ctx.at(Token::Let) {
-        define(ctx)
-    } else {
-        expr(ctx)
-    }
-}
-
-fn define(ctx: &mut Context) -> Result<()> {
-    let start = start(ctx, NodeKind::LetInit);
-
-    expect(ctx, Token::Let)?;
-
-    if ctx.at(Token::Identifier) && ctx.peek_is(Token::LParen) {
-        return function(ctx, start);
+    // if there's no equal sign that means it's a function call
+    if !ctx.at(TokenKind::Equals) {
+        if let Some(type_) = type_ {
+            return Err(fail("type annotation not valid for function call arguments", type_.span));
+        }
+        return function_apply(ctx, name, parameters);
     }
 
-    name(ctx)?;
-    expect(ctx, Token::Equals)?;
-    expr(ctx)?;
+    let parameters = into_parameters(parameters)?;
 
-    finish(ctx, start, NodeKind::LetEnd);
+    expect(ctx, TokenKind::Equals)?;
+    let value = expr(ctx)?;
 
-    Ok(())
+    Ok(Node::function(name, parameters, value, type_))
 }
 
-fn function(ctx: &mut Context, start: NodeIndex) -> Result<()> {
-    ctx.replace_node(start, NodeKind::FnInit);
+fn parameter_like(ctx: &mut Context) -> Result<ParameterLike> {
+    let value = expr(ctx)?;
+    let type_ = optional(ctx, TokenKind::Colon, type_annotation)?;
 
-    name(ctx)?;
-    params(ctx)?;
-    expect(ctx, Token::Equals)?;
-    expr(ctx)?;
-
-    finish(ctx, start, NodeKind::FnEnd);
-
-    Ok(())
+    Ok(ParameterLike::new(value, type_))
 }
 
-fn params(ctx: &mut Context) -> Result<()> {
-    seq(ctx, Token::LParen, Token::RParen, |ctx| {
-        let start = start(ctx, NodeKind::ParameterInit);
-        name(ctx)?;
-        finish(ctx, start, NodeKind::ParameterEnd);
-        Ok(())
-    })?;
-
-    Ok(())
+fn into_parameters(parameter_likes: Vec<ParameterLike>) -> Result<Vec<Parameter>> {
+    parameter_likes
+        .into_iter()
+        .map(|parameter| {
+            if let NodeKind::Name(name) = parameter.value.kind {
+                Ok(Parameter::new(name, parameter.type_))
+            } else {
+                Err(fail("not a valid pattern for function a parameter", parameter.span))
+            }
+        })
+        .collect()
 }
 
-fn expr(ctx: &mut Context) -> Result<()> {
+fn function_apply(ctx: &mut Context, name: Name, parameter_likes: Vec<ParameterLike>) -> Result<Node> {
+    let span = ctx.span_of(name.span);
+    let function = Node::name(name);
+    let arguments = into_arguments(parameter_likes)?;
+
+    Ok(Node::apply(function, arguments, span))
+}
+
+fn into_arguments(parameter_likes: Vec<ParameterLike>) -> Result<Vec<Node>> {
+    parameter_likes
+        .into_iter()
+        .map(|parameter| {
+            if let Some(type_) = parameter.type_ {
+                Err(fail("type annotation not valid for function call arguments", type_.span))
+            } else {
+                Ok(parameter.value)
+            }
+        })
+        .collect()
+}
+
+fn expr(ctx: &mut Context) -> Result<Node> {
     binary(ctx, 0 as Precedence)
 }
 
-fn atom(ctx: &mut Context) -> Result<()> {
-    let token = ctx.current;
-    match token.value {
-        Token::Identifier => ident(ctx),
-        Token::Number => number(ctx),
-        Token::Integer => integer(ctx),
-        Token::LParen => parens(ctx),
+fn atom(ctx: &mut Context) -> Result<Node> {
+    match ctx.token.kind {
+        TokenKind::Identifier => identifier(ctx),
+        TokenKind::Number => number(ctx),
+        TokenKind::Integer => integer(ctx),
+        TokenKind::LParen => parens(ctx),
         _ => {
-            fail(
-                token.span,
-                match token.value {
-                    Token::UnexpectedCharacter => "unexpected character".into(),
-                    Token::UnterminatedString => "unterminated string".into(),
-                    _ => format!("unexpected {}", token.value),
+            Err(fail(
+                match ctx.token.kind {
+                    TokenKind::UnexpectedCharacter => "unexpected character".into(),
+                    TokenKind::UnterminatedString => "unterminated string".into(),
+                    _ => format!("unexpected {}", ctx.token.kind),
                 },
-            )
+                ctx.token.span,
+            ))
         }
     }
 }
 
-fn literal(ctx: &mut Context, kind: Token, node: NodeKind) -> Result<()> {
-    let token = ctx.token_index();
+fn name(ctx: &mut Context) -> Result<Name> {
+    let span = ctx.token.span;
+    expect(ctx, TokenKind::Identifier)?;
+
+    Ok(Name { span })
+}
+
+fn literal(ctx: &mut Context, kind: TokenKind, node: NodeKind) -> Result<Node> {
+    let span = ctx.token.span;
     expect(ctx, kind)?;
-    ctx.push_node(node, token, 0);
-    Ok(())
+    Ok(Node::new(node, span))
 }
 
-fn name(ctx: &mut Context) -> Result<()> {
-    literal(ctx, Token::Identifier, NodeKind::Name)
+fn identifier(ctx: &mut Context) -> Result<Node> {
+    let name = name(ctx)?;
+    let span = name.span;
+    Ok(Node::new(NodeKind::Name(name), span))
 }
 
-fn ident(ctx: &mut Context) -> Result<()> {
-    literal(ctx, Token::Identifier, NodeKind::Identifier)
+fn number(ctx: &mut Context) -> Result<Node> {
+    literal(ctx, TokenKind::Number, NodeKind::Number)
 }
 
-fn number(ctx: &mut Context) -> Result<()> {
-    literal(ctx, Token::Number, NodeKind::Number)
+fn integer(ctx: &mut Context) -> Result<Node> {
+    literal(ctx, TokenKind::Integer, NodeKind::Integer)
 }
 
-fn integer(ctx: &mut Context) -> Result<()> {
-    literal(ctx, Token::Integer, NodeKind::Integer)
+fn parens(ctx: &mut Context) -> Result<Node> {
+    expect(ctx, TokenKind::LParen)?;
+    let expr = expr(ctx)?;
+    expect(ctx, TokenKind::RParen)?;
+
+    Ok(expr)
 }
 
-fn parens(ctx: &mut Context) -> Result<()> {
-    let start = start(ctx, NodeKind::GroupInit);
+fn apply(ctx: &mut Context) -> Result<Node> {
+    let mut value = atom(ctx)?;
 
-    expect(ctx, Token::LParen)?;
-    expr(ctx)?;
-    expect(ctx, Token::RParen)?;
+    while ctx.at(TokenKind::LParen) {
+        expect(ctx, TokenKind::LParen)?;
+        let arguments = seq(ctx, TokenKind::RParen, expr)?;
+        expect(ctx, TokenKind::RParen)?;
 
-    finish(ctx, start, NodeKind::GroupEnd);
+        let span = ctx.span_of(value.span);
 
-    Ok(())
-}
-
-fn unary(ctx: &mut Context) -> Result<()> {
-    if let Some((operator, token)) = operator(ctx, 0 as Precedence, true) {
-        let start = ctx.node_index();
-        unary(ctx)?;
-        ctx.push_node(NodeKind::Unary(operator), token, ctx.size(start));
-    } else {
-        atom(ctx)?;
+        value = Node::apply(value, arguments, span);
     }
 
-    Ok(())
+    Ok(value)
 }
 
-fn binary(ctx: &mut Context, precedence: Precedence) -> Result<()> {
-    let start = ctx.node_index();
+fn unary(ctx: &mut Context) -> Result<Node> {
+    let Some(operator) = operator(ctx, 0 as Precedence, true) else {
+        return apply(ctx);
+    };
 
-    unary(ctx)?;
+    let expr = unary(ctx)?;
 
-    while let Some((operator, token)) = operator(ctx, precedence, false) {
-        newline(ctx); // accepts newlines if the line ends with an operator
+    Ok(Node::unary(operator, expr))
+}
 
-        let next_precedence = if operator == Operator::Pow {
+fn binary(ctx: &mut Context, precedence: Precedence) -> Result<Node> {
+    let mut expr = unary(ctx)?;
+
+    while let Some(operator) = operator(ctx, precedence, false) {
+        // accepts newlines if the line ends with an operator
+        newline(ctx);
+
+        // right associative operators do not increase the precedence level
+        let next_precedence = if operator.kind == OperatorKind::Pow {
             operator.precedence()
         } else {
             operator.precedence() + 1
         };
 
-        binary(ctx, next_precedence)?;
-        ctx.push_node(NodeKind::Binary(operator), token, ctx.size(start));
+        let rexpr = binary(ctx, next_precedence)?;
+        let lexpr = expr;
+
+        expr = Node::binary(operator, lexpr, rexpr);
     }
 
-    Ok(())
+    Ok(expr)
 }
 
-fn operator(ctx: &mut Context, precedence: Precedence, unary: bool) -> Option<(Operator, TokenIndex)> {
-    let operator = match ctx.current.value {
-        Token::Plus if unary => Operator::Pos,
-        Token::Minus if unary => Operator::Neg,
-        Token::Not if unary => Operator::Not,
-        Token::Plus => Operator::Add,
-        Token::Minus => Operator::Sub,
-        Token::Star => Operator::Mul,
-        Token::Slash => Operator::Div,
-        Token::Caret => Operator::Pow,
-        Token::Mod => Operator::Mod,
-        Token::And => Operator::And,
-        Token::Or => Operator::Or,
-        Token::EqEq => Operator::Eq,
-        Token::NoEq => Operator::Ne,
-        Token::Lt => Operator::Lt,
-        Token::LtEq => Operator::Le,
-        Token::Gt => Operator::Gt,
-        Token::GtEq => Operator::Ge,
+fn operator(ctx: &mut Context, precedence: Precedence, unary: bool) -> Option<Operator> {
+    let token = ctx.token;
+
+    let kind = match token.kind {
+        TokenKind::Plus if unary => OperatorKind::Pos,
+        TokenKind::Minus if unary => OperatorKind::Neg,
+        TokenKind::Not if unary => OperatorKind::Not,
+        TokenKind::Plus => OperatorKind::Add,
+        TokenKind::Minus => OperatorKind::Sub,
+        TokenKind::Star => OperatorKind::Mul,
+        TokenKind::Slash => OperatorKind::Div,
+        TokenKind::Caret => OperatorKind::Pow,
+        TokenKind::Mod => OperatorKind::Mod,
+        TokenKind::And => OperatorKind::And,
+        TokenKind::Or => OperatorKind::Or,
+        TokenKind::EqEq => OperatorKind::Eq,
+        TokenKind::NoEq => OperatorKind::Ne,
+        TokenKind::Lt => OperatorKind::Lt,
+        TokenKind::LtEq => OperatorKind::Le,
+        TokenKind::Gt => OperatorKind::Gt,
+        TokenKind::GtEq => OperatorKind::Ge,
         _ => return None,
     };
 
+    let operator = Operator {
+        kind,
+        span: token.span,
+    };
+
     if operator.precedence() >= precedence {
-        let token = ctx.token_index();
         ctx.bump();
-        Some((operator, token))
+        Some(operator)
     } else {
         None
     }
 }
 
-fn newline(ctx: &mut Context) -> bool {
-    maybe(ctx, Token::EOL)
-}
+fn type_annotation(ctx: &mut Context) -> Result<Type> {
+    expect(ctx, TokenKind::Colon)?;
 
-fn endline(ctx: &mut Context) -> Result<()> {
-    if maybe(ctx, Token::EOL) || maybe(ctx, Token::Semi) || maybe(ctx, Token::EOF) {
-        Ok(())
-    } else {
-        fail(ctx.current.span, unexpected(ctx, &[Token::EOL]))
+    match ctx.token.kind {
+        TokenKind::Identifier => {
+            let name = name(ctx)?;
+            Ok(Type::name(name))
+        }
+        _ => Err(fail(unexpected(ctx, &[TokenKind::Type]), ctx.token.span)),
     }
 }
 
-fn expect(ctx: &mut Context, kind: Token) -> Result<()> {
+fn newline(ctx: &mut Context) -> bool {
+    maybe(ctx, TokenKind::EOL)
+}
+
+fn endline(ctx: &mut Context) -> Result<()> {
+    if maybe(ctx, TokenKind::EOL) || maybe(ctx, TokenKind::Semi) || maybe(ctx, TokenKind::EOF) {
+        Ok(())
+    } else {
+        Err(fail(unexpected(ctx, &[TokenKind::EOL, TokenKind::Semi]), ctx.token.span))
+    }
+}
+
+fn expect(ctx: &mut Context, kind: TokenKind) -> Result<()> {
     if ctx.at(kind) {
         ctx.bump();
         Ok(())
     } else {
-        fail(ctx.current.span, unexpected(ctx, &[kind]))
+        Err(fail(unexpected(ctx, &[kind]), ctx.token.span))
     }
 }
 
-fn maybe(ctx: &mut Context, kind: Token) -> bool {
+fn maybe(ctx: &mut Context, kind: TokenKind) -> bool {
     if ctx.at(kind) {
         ctx.bump();
         true
@@ -311,71 +324,73 @@ fn maybe(ctx: &mut Context, kind: Token) -> bool {
     }
 }
 
-fn seq<F>(ctx: &mut Context, before: Token, after: Token, mut parse: F) -> Result<usize>
+fn optional<F, T>(ctx: &mut Context, token: TokenKind, mut parse: F) -> Result<Option<T>>
 where
-    F: FnMut(&mut Context) -> Result<()>,
+    F: FnMut(&mut Context) -> Result<T>,
 {
-    let mut count = 0;
+    Ok(if ctx.at(token) {
+        Some(parse(ctx)?)
+    } else {
+        None
+    })
+}
+
+fn seq<F, T>(ctx: &mut Context, until: TokenKind, mut parse: F) -> Result<Vec<T>>
+where
+    F: FnMut(&mut Context) -> Result<T>,
+{
+    let mut result = vec![];
 
     newline(ctx);
 
-    expect(ctx, before)?;
-
-    while !ctx.at(after) {
-        parse(ctx)?;
-        count += 1;
+    while !ctx.at(until) {
+        result.push(parse(ctx)?);
 
         newline(ctx);
-        if !maybe(ctx, Token::Comma) {
+        if !maybe(ctx, TokenKind::Comma) {
             break;
         }
         newline(ctx);
     }
 
-    expect(ctx, after)?;
-
-    Ok(count)
+    Ok(result)
 }
 
-fn many<F>(ctx: &mut Context, before: Token, after: Token, mut parse: F) -> Result<usize>
+fn many<F, T>(ctx: &mut Context, until: TokenKind, mut parse: F) -> Result<Vec<T>>
 where
-    F: FnMut(&mut Context) -> Result<()>,
+    F: FnMut(&mut Context) -> Result<T>,
 {
-    let mut count = 0;
+    let mut result = vec![];
 
     newline(ctx);
 
-    expect(ctx, before)?;
-
-    while !ctx.at(after) {
-        parse(ctx)?;
-        count += 1;
-        newline(ctx);
+    while !ctx.at(until) {
+        result.push(parse(ctx)?);
+        endline(ctx)?;
     }
 
-    expect(ctx, after)?;
-
-    Ok(count)
+    Ok(result)
 }
 
-fn unexpected(ctx: &Context, expected: &[Token]) -> String {
-    let expected: Vec<_> = expected.iter().map(|it| format!("`{it}`")).collect();
-    format!("expected {}, found `{}`", expected.join(", "), ctx.current.value)
+fn unexpected(ctx: &Context, expected: &[TokenKind]) -> String {
+    let expected: Vec<_> = expected.iter().map(|it| it.to_string()).collect();
+    format!("expected {}, found {}", expected.join(", "), ctx.token.kind)
 }
 
-fn fail<T>(span: Span, message: impl Into<String>) -> Result<T> {
-    Err(Error::error(span, message.into()))
+fn fail(message: impl Into<String>, span: Span) -> Error {
+    Error::error(span, message.into())
 }
 
 pub fn parse<'ctx>(stream: TokenStream<'ctx>) -> Result<Module> {
     let mut context = Context::new(stream);
+    let mut nodes = vec![];
 
     newline(&mut context);
 
     while !context.done() {
-        top_level(&mut context)?;
+        nodes.push(top_level(&mut context)?);
         endline(&mut context)?;
     }
 
-    Ok(context.finalize())
+    Ok(Module { nodes })
 }
