@@ -1,5 +1,7 @@
-use super::token::{Token, TokenKind};
-use crate::source::{Source, Span};
+use super::token::Token;
+use super::token::TokenKind;
+use crate::source::Source;
+use crate::source::Span;
 
 #[derive(Debug, Clone)]
 struct Context<'ctx> {

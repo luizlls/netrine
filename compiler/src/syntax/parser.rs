@@ -1,10 +1,9 @@
-use super::lexer::TokenStream;
-use super::token::{Token, TokenKind};
-use crate::error::{Error, Result};
+use super::lexer::*;
+use super::token::*;
+use crate::error::Error;
+use crate::error::Result;
 use crate::source::Span;
-use crate::syntax::{
-    Module, Name, Node, NodeKind, Operator, OperatorKind, Parameter, ParameterLike, Precedence, Type,
-};
+use crate::syntax::*;
 
 #[derive(Debug, Clone)]
 struct Context<'ctx> {

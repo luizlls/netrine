@@ -1,8 +1,10 @@
-use crate::collections::{IndexMap, IndexVec};
+use crate::collections::IndexMap;
+use crate::collections::IndexVec;
 use crate::hir;
 use crate::interner::Name;
 use crate::macros::entity_id;
-use crate::types::{self, TypeId};
+use crate::types;
+use crate::types::TypeId;
 
 #[derive(Debug)]
 pub struct Module {

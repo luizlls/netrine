@@ -3,11 +3,14 @@ use std::mem;
 use hashbrown::HashMap;
 
 use super::ir::*;
-use crate::collections::{IndexMap, IndexVec};
+use crate::collections::IndexMap;
+use crate::collections::IndexVec;
 use crate::error::Result;
 use crate::hir;
-use crate::interner::{Interner, Name};
-use crate::types::{self, TypeId};
+use crate::interner::Interner;
+use crate::interner::Name;
+use crate::types;
+use crate::types::TypeId;
 
 #[derive(Debug)]
 struct Builder {

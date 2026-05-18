@@ -2,10 +2,13 @@ use hashbrown::HashMap;
 
 use super::ir::*;
 use crate::collections::IndexVec;
-use crate::error::{Error, Result};
-use crate::interner::{Interner, Name};
+use crate::error::Error;
+use crate::error::Result;
+use crate::interner::Interner;
+use crate::interner::Name;
 use crate::macros::entity_id;
-use crate::source::{Source, Span};
+use crate::source::Source;
+use crate::source::Span;
 use crate::syntax;
 use crate::types;
 

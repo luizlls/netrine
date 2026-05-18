@@ -1,6 +1,9 @@
-use std::fmt::{self, Display, Write};
+use std::fmt;
+use std::fmt::Display;
+use std::fmt::Write;
 
-use crate::source::{Source, Span};
+use crate::source::Source;
+use crate::source::Span;
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 

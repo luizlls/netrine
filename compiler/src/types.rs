@@ -1,4 +1,5 @@
-use std::fmt::{self, Display};
+use std::fmt;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypeId(u32);

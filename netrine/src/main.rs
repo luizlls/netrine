@@ -1,6 +1,7 @@
 use std::fs;
 
-use compiler::{Compiler, Source};
+use compiler::Compiler;
+use compiler::Source;
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<String>>();

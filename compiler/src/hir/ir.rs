@@ -1,8 +1,10 @@
-use std::fmt::{self, Display};
+use std::fmt;
+use std::fmt::Display;
 
 use crate::interner::Name;
 use crate::source::Span;
-use crate::types::{self, TypeId};
+use crate::types;
+use crate::types::TypeId;
 
 #[derive(Debug, Clone)]
 pub struct Module {

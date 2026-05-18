@@ -1,8 +1,10 @@
-use super::index_vec::IndexVec;
-use hashbrown::HashMap;
-use hashbrown::hash_map::Entry;
 use std::hash::Hash;
 use std::ops;
+
+use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
+
+use super::index_vec::IndexVec;
 
 #[derive(Debug, Default)]
 pub struct IndexMap<K, I, V> {

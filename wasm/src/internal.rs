@@ -1,4 +1,5 @@
-use compiler::{Compiler, Source};
+use compiler::Compiler;
+use compiler::Source;
 
 pub fn compile(source: &str) -> Vec<u8> {
     let source = Source::new("wasm".into(), source.into());
