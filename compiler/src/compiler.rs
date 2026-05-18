@@ -1,9 +1,11 @@
 use std::fs;
 
 use crate::error::Result;
+use crate::hir;
 use crate::interner::Interner;
+use crate::mir;
 use crate::source::Source;
-use crate::{hir, syntax};
+use crate::syntax;
 
 pub struct Compiler<'state> {
     source: &'state Source,
@@ -27,10 +29,10 @@ impl<'state> Compiler<'state> {
         hir::from_syntax(&ast, &self.source, &mut self.interner)
     }
 
-    // pub fn mir(&mut self) -> Result<mir::Module> {
-    //     let hir = self.hir()?;
-    //     mir::from_hir(&hir, &mut self.interner)
-    // }
+    pub fn mir(&mut self) -> Result<mir::Module> {
+        let hir = self.hir()?;
+        mir::from_hir(&hir, &self.interner)
+    }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {
         // let mir = self.mir()?;

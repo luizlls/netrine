@@ -75,10 +75,16 @@ impl<'ctx> Context<'ctx> {
     fn new(source: &'ctx Source, interner: &'ctx mut Interner) -> Context<'ctx> {
         Context {
             symbols: Symbols::new(),
-            scopes: vec![Scope::new()],
+            scopes: Vec::new(),
             source,
             interner,
         }
+        .init()
+    }
+
+    fn init(mut self) -> Context<'ctx> {
+        self.scopes.push(Scope::new());
+        self
     }
 
     fn slice(&self, span: Span) -> &str {
@@ -191,7 +197,7 @@ fn lower_define(ctx: &mut Context, node: &syntax::Node, define: &syntax::Define)
 
     let value = lower(ctx, &define.value)?;
 
-    Ok(Node::global(name, value, node.span, types::UNKNOWN))
+    Ok(Node::definition(name, value, node.span, types::UNKNOWN))
 }
 
 fn lower_name(ctx: &mut Context, node: &syntax::Node, name: &syntax::Name) -> Result<Node> {

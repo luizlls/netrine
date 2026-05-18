@@ -29,7 +29,7 @@ impl Node {
 #[derive(Debug, Clone)]
 pub enum NodeKind {
     Function(Box<Function>),
-    Global(Box<Global>),
+    Definition(Box<Definition>),
     Unary(Box<Unary>),
     Binary(Box<Binary>),
     Apply(Box<Apply>),
@@ -83,15 +83,15 @@ impl Parameter {
 }
 
 #[derive(Debug, Clone)]
-pub struct Global {
+pub struct Definition {
     pub name: Name,
     pub value: Node,
 }
 
 impl Node {
-    pub fn global(name: Name, value: Node, span: Span, type_id: TypeId) -> Node {
+    pub fn definition(name: Name, value: Node, span: Span, type_id: TypeId) -> Node {
         Node {
-            kind: NodeKind::Global(Global { name, value }.into()),
+            kind: NodeKind::Definition(Definition { name, value }.into()),
             span,
             type_id,
         }

@@ -12,7 +12,7 @@ fn main() {
     let source = source(&args[0]);
 
     let mut compiler = Compiler::new(&source);
-    match compiler.hir() {
+    match compiler.mir() {
         Ok(module) => {
             println!("{:#?}", module);
         }
