@@ -1,6 +1,12 @@
 mod ir;
 mod lower;
-mod type_checker;
 
 pub use ir::*;
-pub use lower::lower_syntax;
+
+use crate::error::Result;
+use crate::hir;
+use crate::interner::Interner;
+
+pub fn from_hir(hir: &hir::Module, interner: &Interner) -> Result<Module> {
+    lower::lower_hir(hir, interner)
+}

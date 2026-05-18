@@ -1,6 +1,7 @@
 use std::fs;
 
-use compiler::{Compiler, Source};
+use compiler::Compiler;
+use compiler::Source;
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<String>>();
@@ -13,8 +14,8 @@ fn main() {
 
     let mut compiler = Compiler::new(&source);
     match compiler.mir() {
-        Ok(mir) => {
-            println!("{:#?}", mir);
+        Ok(module) => {
+            println!("{:#?}", module);
         }
         Err(error) => {
             let error = error.report(&source).expect("Couldn't report the error");

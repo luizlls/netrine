@@ -1,5 +1,7 @@
 use super::token::Token;
-use crate::source::{Source, Span, WithSpan};
+use super::token::TokenKind;
+use crate::source::Source;
+use crate::source::Span;
 
 #[derive(Debug, Clone)]
 struct Context<'ctx> {
@@ -64,7 +66,17 @@ impl<'ctx> Context<'ctx> {
     }
 
     fn bump_utf8_sequence(&mut self) {
-        todo!()
+        let len = match self.curr {
+            0x00..=0x7F => 1,
+            0xC0..=0xDF => 2,
+            0xE0..=0xEF => 3,
+            0xF0..=0xF7 => 4,
+            _ => 1,
+        };
+
+        for _ in 0..len {
+            self.bump();
+        }
     }
 
     fn trivia(&mut self) {
@@ -80,14 +92,14 @@ impl<'ctx> Context<'ctx> {
     }
 }
 
-fn token(ctx: &mut Context, token: Token) -> WithSpan<Token> {
-    WithSpan::<Token> {
-        value: token,
+fn token(ctx: &Context, kind: TokenKind) -> Token {
+    Token {
+        kind,
         span: ctx.span(),
     }
 }
 
-fn next(ctx: &mut Context) -> WithSpan<Token> {
+fn next(ctx: &mut Context) -> Token {
     ctx.trivia();
     ctx.align();
 
@@ -107,15 +119,15 @@ fn next(ctx: &mut Context) -> WithSpan<Token> {
         _ if is_symbol(ctx.curr) => {
             return operator(ctx);
         }
-        b'(' => Token::LParen,
-        b')' => Token::RParen,
-        b'{' => Token::LBrace,
-        b'}' => Token::RBrace,
-        b'[' => Token::LBracket,
-        b']' => Token::RBracket,
-        b';' => Token::Semi,
-        b',' => Token::Comma,
-        0 => Token::EOF,
+        b'(' => TokenKind::LParen,
+        b')' => TokenKind::RParen,
+        b'{' => TokenKind::LBrace,
+        b'}' => TokenKind::RBrace,
+        b'[' => TokenKind::LBracket,
+        b']' => TokenKind::RBracket,
+        b';' => TokenKind::Semi,
+        b',' => TokenKind::Comma,
+        0 => TokenKind::EOF,
         _ => {
             return unexpected_character(ctx);
         }
@@ -126,20 +138,19 @@ fn next(ctx: &mut Context) -> WithSpan<Token> {
     token(ctx, kind)
 }
 
-fn ident(ctx: &mut Context) -> WithSpan<Token> {
+fn ident(ctx: &mut Context) -> Token {
     ctx.bump_while(|chr| matches!(chr, b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_'));
     ctx.bump_while(|chr| chr == b'\'');
 
     let value = ctx.slice();
 
     let kind = match value {
-        b"let" => Token::Let,
-        b"True" => Token::True,
-        b"False" => Token::False,
-        b"and" => Token::And,
-        b"or" => Token::Or,
-        b"not" => Token::Not,
-        _ => Token::Identifier,
+        b"True" => TokenKind::True,
+        b"False" => TokenKind::False,
+        b"and" => TokenKind::And,
+        b"or" => TokenKind::Or,
+        b"not" => TokenKind::Not,
+        _ => TokenKind::Identifier,
     };
 
     token(ctx, kind)
@@ -153,43 +164,43 @@ fn is_symbol(chr: u8) -> bool {
     )
 }
 
-fn operator(ctx: &mut Context) -> WithSpan<Token> {
+fn operator(ctx: &mut Context) -> Token {
     let kind = match ctx.curr {
         b'.' if ctx.peek == b'.' => {
             ctx.bump();
-            Token::Dots
+            TokenKind::Dots
         }
-        b'.' => Token::Dot,
+        b'.' => TokenKind::Dot,
         b'=' if ctx.peek == b'=' => {
             ctx.bump();
-            Token::EqEq
+            TokenKind::EqEq
         }
         b'=' if ctx.peek == b'>' => {
             ctx.bump();
-            Token::Arrow
+            TokenKind::Arrow
         }
-        b'=' => Token::Equals,
-        b':' => Token::Colon,
+        b'=' => TokenKind::Equals,
+        b':' => TokenKind::Colon,
         b'<' if ctx.peek == b'=' => {
             ctx.bump();
-            Token::LtEq
+            TokenKind::LtEq
         }
-        b'<' => Token::Lt,
+        b'<' => TokenKind::Lt,
         b'>' if ctx.peek == b'=' => {
             ctx.bump();
-            Token::GtEq
+            TokenKind::GtEq
         }
-        b'>' => Token::Gt,
+        b'>' => TokenKind::Gt,
         b'!' if ctx.peek == b'=' => {
             ctx.bump();
-            Token::NoEq
+            TokenKind::NoEq
         }
-        b'+' => Token::Plus,
-        b'-' => Token::Minus,
-        b'*' => Token::Star,
-        b'/' => Token::Slash,
-        b'^' => Token::Caret,
-        b'%' => Token::Mod,
+        b'+' => TokenKind::Plus,
+        b'-' => TokenKind::Minus,
+        b'*' => TokenKind::Star,
+        b'/' => TokenKind::Slash,
+        b'^' => TokenKind::Caret,
+        b'%' => TokenKind::Mod,
         _ => unreachable!(),
     };
 
@@ -198,7 +209,7 @@ fn operator(ctx: &mut Context) -> WithSpan<Token> {
     token(ctx, kind)
 }
 
-fn number(ctx: &mut Context) -> WithSpan<Token> {
+fn number(ctx: &mut Context) -> Token {
     ctx.bump_while(|chr| chr.is_ascii_digit());
 
     match ctx.curr {
@@ -206,7 +217,7 @@ fn number(ctx: &mut Context) -> WithSpan<Token> {
             ctx.bump();
             ctx.bump_while(|chr| chr.is_ascii_digit());
 
-            return token(ctx, Token::Number);
+            return token(ctx, TokenKind::Number);
         }
         b'b' if ctx.slice() == b"0" => {
             ctx.bump();
@@ -219,14 +230,14 @@ fn number(ctx: &mut Context) -> WithSpan<Token> {
         _ => {}
     }
 
-    token(ctx, Token::Integer)
+    token(ctx, TokenKind::Integer)
 }
 
-fn string(ctx: &mut Context) -> WithSpan<Token> {
+fn string(ctx: &mut Context) -> Token {
     loop {
         match ctx.bump() {
             b'\n' | b'\0' => {
-                return token(ctx, Token::UnterminatedString);
+                return token(ctx, TokenKind::UnterminatedString);
             }
             b'"' => {
                 ctx.bump();
@@ -246,14 +257,14 @@ fn string(ctx: &mut Context) -> WithSpan<Token> {
         }
     }
 
-    token(ctx, Token::String)
+    token(ctx, TokenKind::String)
 }
 
-fn invalid_escape_character(ctx: &mut Context) -> WithSpan<Token> {
+fn invalid_escape_character(ctx: &mut Context) -> Token {
     ctx.align();
     ctx.bump_utf8_sequence();
 
-    let token = token(ctx, Token::UnexpectedCharacter);
+    let token = token(ctx, TokenKind::UnexpectedCharacter);
 
     // skip to the end of the string
     loop {
@@ -273,32 +284,34 @@ fn invalid_escape_character(ctx: &mut Context) -> WithSpan<Token> {
     token
 }
 
-fn unexpected_character(ctx: &mut Context) -> WithSpan<Token> {
+fn unexpected_character(ctx: &mut Context) -> Token {
     ctx.bump_utf8_sequence();
-    token(ctx, Token::UnexpectedCharacter)
+    token(ctx, TokenKind::UnexpectedCharacter)
 }
 
-fn newline(ctx: &mut Context) -> WithSpan<Token> {
+fn newline(ctx: &mut Context) -> Token {
     while ctx.curr == b'\n' {
         ctx.bump();
         ctx.trivia();
     }
-    token(ctx, Token::EOL)
+    token(ctx, TokenKind::EOL)
 }
 
 #[derive(Debug, Clone)]
 pub struct TokenStream<'ctx> {
     ctx: Context<'ctx>,
-    peek: WithSpan<Token>,
-    token: WithSpan<Token>,
+    prev: Token,
+    curr: Token,
+    peek: Token,
 }
 
 impl<'tokens> TokenStream<'tokens> {
     pub fn new(source: &'tokens Source) -> TokenStream<'tokens> {
         TokenStream {
             ctx: Context::new(source),
-            peek: Default::default(),
-            token: Default::default(),
+            prev: Token::default(),
+            peek: Token::default(),
+            curr: Token::default(),
         }
         .init()
     }
@@ -310,22 +323,25 @@ impl<'tokens> TokenStream<'tokens> {
     }
 
     pub fn bump(&mut self) {
-        self.token = self.peek;
+        self.prev = self.curr;
+        self.curr = self.peek;
         self.peek = next(&mut self.ctx);
     }
 
-    #[inline]
-    pub fn token(&self) -> WithSpan<Token> {
-        self.token
+    pub fn token(&self) -> Token {
+        self.curr
     }
 
-    #[inline]
-    pub fn peek(&self) -> WithSpan<Token> {
+    pub fn prev(&self) -> Token {
+        self.prev
+    }
+
+    pub fn peek(&self) -> Token {
         self.peek
     }
 
     pub fn done(&self) -> bool {
-        self.token.value == Token::EOF
+        self.curr.kind == TokenKind::EOF
     }
 }
 
@@ -339,7 +355,7 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct TestResult {
-        token: Token,
+        token: TokenKind,
         span: Span,
         value: String,
     }
@@ -350,14 +366,11 @@ mod tests {
 
         let mut result = vec![];
 
-        while tokens.token.value != Token::EOF {
-            let token = tokens.token.value;
-            let span = tokens.token.span;
-
+        while tokens.curr.kind != TokenKind::EOF {
             result.push(TestResult {
-                token,
-                span,
-                value: input[span.range()].to_string(),
+                token: tokens.curr.kind,
+                span: tokens.curr.span,
+                value: input[tokens.curr.span.range()].to_string(),
             });
 
             tokens.bump();
@@ -374,27 +387,27 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(0, 5),
                     value: "ident".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(6, 12),
                     value: "test_1".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(13, 18),
                     value: "CONST".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(19, 20),
                     value: "_".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(21, 24),
                     value: "___".to_string(),
                 },
@@ -410,27 +423,27 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::And,
+                    token: TokenKind::And,
                     span: Span::new(0, 3),
                     value: "and".to_string(),
                 },
                 TestResult {
-                    token: Token::Or,
+                    token: TokenKind::Or,
                     span: Span::new(4, 6),
                     value: "or".to_string(),
                 },
                 TestResult {
-                    token: Token::Not,
+                    token: TokenKind::Not,
                     span: Span::new(7, 10),
                     value: "not".to_string(),
                 },
                 TestResult {
-                    token: Token::True,
+                    token: TokenKind::True,
                     span: Span::new(11, 15),
                     value: "True".to_string(),
                 },
                 TestResult {
-                    token: Token::False,
+                    token: TokenKind::False,
                     span: Span::new(16, 21),
                     value: "False".to_string(),
                 },
@@ -446,47 +459,47 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::Dot,
+                    token: TokenKind::Dot,
                     span: Span::new(0, 1),
                     value: ".".to_string(),
                 },
                 TestResult {
-                    token: Token::Comma,
+                    token: TokenKind::Comma,
                     span: Span::new(2, 3),
                     value: ",".to_string(),
                 },
                 TestResult {
-                    token: Token::Semi,
+                    token: TokenKind::Semi,
                     span: Span::new(4, 5),
                     value: ";".to_string(),
                 },
                 TestResult {
-                    token: Token::LParen,
+                    token: TokenKind::LParen,
                     span: Span::new(6, 7),
                     value: "(".to_string(),
                 },
                 TestResult {
-                    token: Token::RParen,
+                    token: TokenKind::RParen,
                     span: Span::new(8, 9),
                     value: ")".to_string(),
                 },
                 TestResult {
-                    token: Token::LBracket,
+                    token: TokenKind::LBracket,
                     span: Span::new(10, 11),
                     value: "[".to_string(),
                 },
                 TestResult {
-                    token: Token::RBracket,
+                    token: TokenKind::RBracket,
                     span: Span::new(12, 13),
                     value: "]".to_string(),
                 },
                 TestResult {
-                    token: Token::LBrace,
+                    token: TokenKind::LBrace,
                     span: Span::new(14, 15),
                     value: "{".to_string(),
                 },
                 TestResult {
-                    token: Token::RBrace,
+                    token: TokenKind::RBrace,
                     span: Span::new(16, 17),
                     value: "}".to_string(),
                 },
@@ -502,87 +515,87 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::Dot,
+                    token: TokenKind::Dot,
                     span: Span::new(0, 1),
                     value: ".".to_string(),
                 },
                 TestResult {
-                    token: Token::Colon,
+                    token: TokenKind::Colon,
                     span: Span::new(2, 3),
                     value: ":".to_string(),
                 },
                 TestResult {
-                    token: Token::Arrow,
+                    token: TokenKind::Arrow,
                     span: Span::new(4, 6),
                     value: "=>".to_string(),
                 },
                 TestResult {
-                    token: Token::Equals,
+                    token: TokenKind::Equals,
                     span: Span::new(7, 8),
                     value: "=".to_string(),
                 },
                 TestResult {
-                    token: Token::EqEq,
+                    token: TokenKind::EqEq,
                     span: Span::new(9, 11),
                     value: "==".to_string(),
                 },
                 TestResult {
-                    token: Token::NoEq,
+                    token: TokenKind::NoEq,
                     span: Span::new(12, 14),
                     value: "!=".to_string(),
                 },
                 TestResult {
-                    token: Token::Plus,
+                    token: TokenKind::Plus,
                     span: Span::new(15, 16),
                     value: "+".to_string(),
                 },
                 TestResult {
-                    token: Token::Minus,
+                    token: TokenKind::Minus,
                     span: Span::new(17, 18),
                     value: "-".to_string(),
                 },
                 TestResult {
-                    token: Token::Star,
+                    token: TokenKind::Star,
                     span: Span::new(19, 20),
                     value: "*".to_string(),
                 },
                 TestResult {
-                    token: Token::Slash,
+                    token: TokenKind::Slash,
                     span: Span::new(21, 22),
                     value: "/".to_string(),
                 },
                 TestResult {
-                    token: Token::Mod,
+                    token: TokenKind::Mod,
                     span: Span::new(23, 24),
                     value: "%".to_string(),
                 },
                 TestResult {
-                    token: Token::Caret,
+                    token: TokenKind::Caret,
                     span: Span::new(25, 26),
                     value: "^".to_string(),
                 },
                 TestResult {
-                    token: Token::Gt,
+                    token: TokenKind::Gt,
                     span: Span::new(27, 28),
                     value: ">".to_string(),
                 },
                 TestResult {
-                    token: Token::GtEq,
+                    token: TokenKind::GtEq,
                     span: Span::new(29, 31),
                     value: ">=".to_string(),
                 },
                 TestResult {
-                    token: Token::Lt,
+                    token: TokenKind::Lt,
                     span: Span::new(32, 33),
                     value: "<".to_string(),
                 },
                 TestResult {
-                    token: Token::LtEq,
+                    token: TokenKind::LtEq,
                     span: Span::new(34, 36),
                     value: "<=".to_string(),
                 },
                 TestResult {
-                    token: Token::Dots,
+                    token: TokenKind::Dots,
                     span: Span::new(37, 39),
                     value: "..".to_string(),
                 },
@@ -598,22 +611,22 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::Integer,
+                    token: TokenKind::Integer,
                     span: Span::new(0, 2),
                     value: "42".to_string(),
                 },
                 TestResult {
-                    token: Token::Number,
+                    token: TokenKind::Number,
                     span: Span::new(3, 7),
                     value: "3.14".to_string(),
                 },
                 TestResult {
-                    token: Token::Integer,
+                    token: TokenKind::Integer,
                     span: Span::new(8, 16),
                     value: "0xABCDEF".to_string(),
                 },
                 TestResult {
-                    token: Token::Integer,
+                    token: TokenKind::Integer,
                     span: Span::new(17, 23),
                     value: "0b0101".to_string(),
                 },
@@ -628,7 +641,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![TestResult {
-                token: Token::String,
+                token: TokenKind::String,
                 span: Span::new(0, 14),
                 value: "\"Hello, World\"".to_string(),
             }],
@@ -642,7 +655,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![TestResult {
-                token: Token::String,
+                token: TokenKind::String,
                 span: Span::new(0, 19),
                 value: "\"code = \\\"n = 42\\\"\"".to_string(),
             }]
@@ -656,7 +669,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![TestResult {
-                token: Token::EOL,
+                token: TokenKind::EOL,
                 span: Span::new(0, 3),
                 value: "\n\n\n".to_string(),
             }]
@@ -670,7 +683,7 @@ mod tests {
         assert_eq!(
             tokens,
             vec![TestResult {
-                token: Token::UnterminatedString,
+                token: TokenKind::UnterminatedString,
                 span: Span::new(0, 6),
                 value: r#""Hello"#.to_string(),
             }]
@@ -685,12 +698,12 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::String,
+                    token: TokenKind::String,
                     span: Span::new(0, 7),
                     value: r#""Hello""#.to_string(),
                 },
                 TestResult {
-                    token: Token::UnterminatedString,
+                    token: TokenKind::UnterminatedString,
                     span: Span::new(7, 8),
                     value: "\"".to_string(),
                 }
@@ -706,17 +719,17 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::String,
+                    token: TokenKind::String,
                     span: Span::new(0, 12),
                     value: r#""escape \\a""#.to_string(),
                 },
                 TestResult {
-                    token: Token::Dot,
+                    token: TokenKind::Dot,
                     span: Span::new(12, 13),
                     value: ".".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(13, 19),
                     value: "length".to_string(),
                 },
@@ -732,17 +745,17 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::UnexpectedCharacter,
+                    token: TokenKind::UnexpectedCharacter,
                     span: Span::new(9, 10),
                     value: "a".to_string(),
                 },
                 TestResult {
-                    token: Token::Dot,
+                    token: TokenKind::Dot,
                     span: Span::new(11, 12),
                     value: ".".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(12, 18),
                     value: "length".to_string(),
                 },
@@ -758,12 +771,12 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::UnexpectedCharacter,
+                    token: TokenKind::UnexpectedCharacter,
                     span: Span::new(0, 1),
                     value: "@".to_string(),
                 },
                 TestResult {
-                    token: Token::Identifier,
+                    token: TokenKind::Identifier,
                     span: Span::new(1, 5),
                     value: "test".to_string(),
                 }
@@ -779,22 +792,22 @@ mod tests {
             tokens,
             vec![
                 TestResult {
-                    token: Token::UnexpectedCharacter,
+                    token: TokenKind::UnexpectedCharacter,
                     span: Span::new(0, 4),
                     value: "🫵".to_string(),
                 },
                 TestResult {
-                    token: Token::Equals,
+                    token: TokenKind::Equals,
                     span: Span::new(5, 6),
                     value: "=".to_string(),
                 },
                 TestResult {
-                    token: Token::UnexpectedCharacter,
+                    token: TokenKind::UnexpectedCharacter,
                     span: Span::new(7, 11),
                     value: "🎅".to_string(),
                 },
                 TestResult {
-                    token: Token::UnexpectedCharacter,
+                    token: TokenKind::UnexpectedCharacter,
                     span: Span::new(11, 15),
                     value: "🏾".to_string(),
                 }

@@ -1,8 +1,10 @@
-use super::index_vec::IndexVec;
-use hashbrown::HashMap;
-use hashbrown::hash_map::Entry;
 use std::hash::Hash;
 use std::ops;
+
+use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
+
+use super::index_vec::IndexVec;
 
 #[derive(Debug, Default)]
 pub struct IndexMap<K, I, V> {
@@ -24,7 +26,11 @@ where
 
     pub fn insert(&mut self, key: K, value: V) -> I {
         match self.entries.entry(key) {
-            Entry::Occupied(entry) => *entry.get(),
+            Entry::Occupied(entry) => {
+                let index = *entry.get();
+                self.values[index] = value;
+                index
+            }
             Entry::Vacant(entry) => {
                 let index = self.values.push(value);
                 entry.insert(index);

@@ -1,8 +1,12 @@
 use std::fs;
 use std::path::PathBuf;
 
-use compiler::{Compiler, Source};
-use wasmtime::{Instance, Module, Store, Val};
+use compiler::Compiler;
+use compiler::Source;
+use wasmtime::Instance;
+use wasmtime::Module;
+use wasmtime::Store;
+use wasmtime::Val;
 
 fn eval_wasm(source: String) -> String {
     let source = Source::new("test".into(), source);

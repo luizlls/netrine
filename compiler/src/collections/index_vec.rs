@@ -168,6 +168,6 @@ mod tests {
         assert_eq!(vec.get(id1), Some(&1));
 
         vec.insert(Index(1), 2);
-        assert_eq!(vec.get(Index(1)), Some(&1));
+        assert_eq!(vec.get(Index(1)), Some(&2));
     }
 }

@@ -1,9 +1,11 @@
 use std::fs;
 
 use crate::error::Result;
+use crate::hir;
 use crate::interner::Interner;
+use crate::mir;
 use crate::source::Source;
-use crate::{mir, syntax};
+use crate::syntax;
 
 pub struct Compiler<'state> {
     source: &'state Source,
@@ -19,12 +21,17 @@ impl<'state> Compiler<'state> {
     }
 
     pub fn parse(&mut self) -> Result<syntax::Module> {
-        syntax::parse(self.source)
+        syntax::parse(&self.source)
+    }
+
+    pub fn hir(&mut self) -> Result<hir::Module> {
+        let ast = self.parse()?;
+        hir::from_syntax(&ast, &self.source, &mut self.interner)
     }
 
     pub fn mir(&mut self) -> Result<mir::Module> {
-        let syntax = self.parse()?;
-        mir::lower_syntax(self.source, &mut self.interner, &syntax)
+        let hir = self.hir()?;
+        mir::from_hir(&hir, &self.interner)
     }
 
     pub fn compile(&mut self) -> Result<Vec<u8>> {

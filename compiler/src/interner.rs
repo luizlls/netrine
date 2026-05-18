@@ -1,6 +1,8 @@
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use hashbrown::HashMap;
 use hashbrown::hash_map::RawEntryMut;
-use std::hash::{Hash, Hasher};
 
 use crate::collections::IndexVec;
 
